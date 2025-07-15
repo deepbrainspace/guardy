@@ -210,6 +210,7 @@ fn test_config_validation() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_gitignore_patterns_loading() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let gitignore_path = temp_dir.path().join(".gitignore");
@@ -251,6 +252,7 @@ node_modules/
 }
 
 #[test]
+#[serial_test::serial]
 fn test_effective_exclude_patterns() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let gitignore_path = temp_dir.path().join(".gitignore");
@@ -281,6 +283,7 @@ fn test_effective_exclude_patterns() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_effective_exclude_patterns_disabled() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let guardyignore_path = temp_dir.path().join(".guardyignore");
@@ -314,6 +317,7 @@ fn test_effective_exclude_patterns_disabled() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_guardyignore_patterns_loading() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let guardyignore_path = temp_dir.path().join(".guardyignore");
@@ -353,6 +357,7 @@ docs/
 }
 
 #[test]
+#[serial_test::serial]
 fn test_effective_exclude_patterns_with_guardyignore() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let guardyignore_path = temp_dir.path().join(".guardyignore");
