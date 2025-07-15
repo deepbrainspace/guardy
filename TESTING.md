@@ -112,7 +112,7 @@ cargo test test_severity_parsing
 #### Test 2: Secret Detection
 ```bash
 # Create test file with secrets
-echo 'let key = "sk_test_1234567890abcdef1234567890";' > test_secrets.rs
+echo 'let key = "sk_test_FAKE_KEY_FOR_TESTING";' > test_secrets.rs
 
 # Run scanner tests
 cargo test test_secret_scanner_scan_file
@@ -186,7 +186,7 @@ cd test_gitignore
 echo "*.log" > .gitignore
 echo "target/" >> .gitignore
 echo 'secret in log file' > debug.log
-echo 'let key = "sk_test_PLACEHOLDER_FOR_TESTING";' > main.rs
+echo 'let key = "sk_test_FAKE_KEY_FOR_TESTING_ONLY";' > main.rs
 
 # Initialize guardy config with gitignore enabled
 cat > .guardy.yml << EOF
@@ -275,10 +275,10 @@ mkdir pattern_test
 cd pattern_test
 
 # Create test files with various secret types
-echo 'openai_key = "sk_test_1234567890abcdef1234567890"' > openai.py
-echo 'github_pat = "ghp_1234567890abcdef1234567890abcdef12"' > github.js
-echo 'aws_key = "AKIA1234567890123456"' > aws.yml
-echo 'jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"' > jwt.json
+echo 'openai_key = "sk_test_FAKE_OPENAI_KEY_FOR_TESTING"' > openai.py
+echo 'github_pat = "ghp_FAKE_GITHUB_PAT_FOR_TESTING"' > github.js
+echo 'aws_key = "AKIA_FAKE_AWS_KEY_FOR_TESTING"' > aws.yml
+echo 'jwt = "eyJ_FAKE_JWT_TOKEN_FOR_TESTING"' > jwt.json
 
 # Copy template config
 cp ../templates/guardy.yml.template .guardy.yml

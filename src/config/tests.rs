@@ -282,6 +282,15 @@ fn test_effective_exclude_patterns() {
 
 #[test]
 fn test_effective_exclude_patterns_disabled() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let guardyignore_path = temp_dir.path().join(".guardyignore");
+
+    // Create test .guardyignore
+    fs::write(&guardyignore_path, "TESTING.md\n*.test.rs\n").expect("Failed to write guardyignore");
+
+    let original_dir = std::env::current_dir().expect("Failed to get current dir");
+    std::env::set_current_dir(temp_dir.path()).expect("Failed to change dir");
+
     let mut config = GuardyConfig::default();
     config
         .security
@@ -291,12 +300,17 @@ fn test_effective_exclude_patterns_disabled() {
 
     let effective_patterns = config.get_effective_exclude_patterns();
 
-    // Should only contain config patterns, not gitignore
+    std::env::set_current_dir(original_dir).expect("Failed to restore dir");
+
+    // Should contain config patterns and guardyignore patterns (but not gitignore)
     assert!(effective_patterns.contains(&"*.custom".to_string()));
     assert!(effective_patterns.contains(&"*.tmp".to_string())); // from default
     assert!(effective_patterns.contains(&"*.temp".to_string())); // from default
-    // Should not contain patterns from gitignore
-    assert_eq!(effective_patterns.len(), 3); // *.custom + *.tmp + *.temp
+    // guardyignore patterns are always loaded
+    assert!(effective_patterns.contains(&"TESTING.md".to_string())); // from guardyignore
+    assert!(effective_patterns.contains(&"*.test.rs".to_string())); // from guardyignore
+    // Should not contain patterns from gitignore (since it's disabled)
+    assert!(effective_patterns.len() >= 5); // *.custom + *.tmp + *.temp + TESTING.md + *.test.rs
 }
 
 #[test]
