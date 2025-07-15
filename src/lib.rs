@@ -24,6 +24,9 @@
 //! guardy mcp start
 //! ```
 
+// TODO: Remove these dead_code allows once features are implemented
+#![allow(dead_code)]
+
 pub mod cli;
 pub mod config;
 pub mod git;

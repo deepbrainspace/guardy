@@ -12,6 +12,7 @@ mod tests;
 
 /// Tool manager for handling formatters and linters
 pub struct ToolManager {
+    #[allow(dead_code)]
     config: ToolsConfig,
     auto_install: bool,
 }

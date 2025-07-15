@@ -125,7 +125,7 @@ pub fn has_extension<P: AsRef<Path>>(path: P, extension: &str) -> bool {
     path.as_ref()
         .extension()
         .and_then(|ext| ext.to_str())
-        .map_or(false, |ext| ext.eq_ignore_ascii_case(extension))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
 }
 
 /// Get file modification time

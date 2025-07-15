@@ -5,7 +5,6 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use std::path::Path;
 
 pub mod patterns;
 pub mod scanner;
