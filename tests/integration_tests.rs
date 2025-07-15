@@ -204,7 +204,7 @@ fn test_hook_installation_dry_run() {
 
     // Initialize a git repository
     std::process::Command::new("git")
-        .args(&["init"])
+        .args(["init"])
         .current_dir(temp_dir.path())
         .output()
         .unwrap();

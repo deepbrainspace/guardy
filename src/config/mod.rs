@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Main configuration structure for Guardy
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GuardyConfig {
     /// Security configuration
     pub security: SecurityConfig,
@@ -193,16 +193,6 @@ pub struct InstallConfig {
     pub manual: String,
 }
 
-impl Default for GuardyConfig {
-    fn default() -> Self {
-        Self {
-            security: SecurityConfig::default(),
-            hooks: HooksConfig::default(),
-            mcp: McpConfig::default(),
-            tools: ToolsConfig::default(),
-        }
-    }
-}
 
 impl Default for SecurityConfig {
     fn default() -> Self {
@@ -258,6 +248,7 @@ impl Default for ToolsConfig {
     }
 }
 
+#[allow(dead_code)]
 impl GuardyConfig {
     /// Load configuration from file
     pub fn load_from_file(path: &PathBuf) -> Result<Self> {

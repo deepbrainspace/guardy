@@ -18,7 +18,7 @@ pub async fn execute(context: HookContext) -> Result<()> {
     let git = GitOperations::discover()?;
 
     // Check if we're on a protected branch
-    if context.config.security.protected_branches.len() > 0 {
+    if !context.config.security.protected_branches.is_empty() {
         check_branch_protection(&git, &context.config.security.protected_branches)?;
     }
 

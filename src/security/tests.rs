@@ -76,7 +76,7 @@ fn test_patterns_from_config() {
 #[test]
 fn test_secret_scanner_from_config() {
     let config = GuardyConfig::default();
-    let scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
+    let _scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
 
     // Scanner should be created successfully
     // Note: Default config has no patterns, so scanner will have empty patterns list

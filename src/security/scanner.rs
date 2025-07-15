@@ -3,7 +3,7 @@
 //! This module provides the core secret scanning functionality.
 
 use super::patterns::patterns_from_config;
-use super::{SecurityMatch, SecurityPattern, Severity};
+use super::{SecurityMatch, SecurityPattern};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;

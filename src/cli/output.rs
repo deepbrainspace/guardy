@@ -3,15 +3,17 @@
 //! Provides consistent, beautiful output formatting similar to lint-staged and other
 //! modern CLI tools. Includes progress bars, styled messages, and professional symbols.
 
-use console::{Emoji, Style, style};
+use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Write};
 
 /// Output handler for consistent CLI formatting
 pub struct Output {
+    #[allow(dead_code)]
     debug: bool,
 }
 
+#[allow(dead_code)]
 impl Output {
     /// Create a new output handler
     pub fn new(debug: bool) -> Self {
