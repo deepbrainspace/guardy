@@ -1,5 +1,5 @@
 //! Integration tests for Guardy CLI
-//! 
+//!
 //! TODO: These tests are currently ignored during development phase
 //! Remove the ignore attributes once CLI commands are implemented
 
