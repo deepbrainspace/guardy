@@ -181,7 +181,10 @@ impl ToolManager {
             }
             eprintln!("   Manual: {}", config.manual);
         } else {
-            eprintln!("📖 Please install {} manually (no installation instructions available)", tool_name);
+            eprintln!(
+                "📖 Please install {} manually (no installation instructions available)",
+                tool_name
+            );
         }
 
         anyhow::bail!("Required tool not available")
@@ -240,7 +243,11 @@ pub fn create_example_tools_config() -> ToolsConfig {
             FormatterConfig {
                 name: "prettier".to_string(),
                 command: "npx prettier --write".to_string(),
-                patterns: vec!["**/*.js".to_string(), "**/*.ts".to_string(), "**/*.json".to_string()],
+                patterns: vec![
+                    "**/*.js".to_string(),
+                    "**/*.ts".to_string(),
+                    "**/*.json".to_string(),
+                ],
                 check_command: Some("npx prettier --version".to_string()),
                 install: Some(InstallConfig {
                     cargo: None,

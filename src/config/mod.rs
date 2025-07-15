@@ -251,7 +251,7 @@ impl Default for ToolsConfig {
     fn default() -> Self {
         Self {
             auto_detect: true,
-            auto_install: false,  // Conservative default - require explicit opt-in
+            auto_install: false, // Conservative default - require explicit opt-in
             formatters: vec![],
             linters: vec![],
         }
@@ -336,7 +336,10 @@ impl GuardyConfig {
 
             if guardyignore_path.exists() {
                 let content = std::fs::read_to_string(&guardyignore_path).with_context(|| {
-                    format!("Failed to read .guardyignore: {}", guardyignore_path.display())
+                    format!(
+                        "Failed to read .guardyignore: {}",
+                        guardyignore_path.display()
+                    )
                 })?;
 
                 for line in content.lines() {
