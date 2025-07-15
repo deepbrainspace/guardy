@@ -193,7 +193,6 @@ pub struct InstallConfig {
     pub manual: String,
 }
 
-
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
