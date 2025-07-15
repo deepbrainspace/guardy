@@ -1,0 +1,70 @@
+# Guardy Configuration for Guardy Project
+# This project uses Guardy to manage its own Git workflows
+
+security:
+  secret_detection: true
+  use_gitignore: true
+  exclude_patterns:
+    - "templates/**"  # Don't scan template files
+    - "*.example"     # Don't scan example files
+  
+  protected_branches:
+    - "main"
+    - "develop"
+  
+  git_crypt: false
+  
+  patterns:
+    - name: "OpenAI API Key"
+      regex: "sk-[a-zA-Z0-9]{20,}"
+    
+    - name: "GitHub PAT"
+      regex: "ghp_[a-zA-Z0-9]{36}"
+    
+    - name: "GitHub OAuth"
+      regex: "gho_[a-zA-Z0-9]{36}"
+    
+    - name: "AWS Access Key"
+      regex: "AKIA[0-9A-Z]{16}"
+    
+    - name: "Slack Token"
+      regex: "xox[baprs]-[a-zA-Z0-9-]+"
+    
+    - name: "Stripe Key"
+      regex: "sk_live_[a-zA-Z0-9]{24}"
+
+hooks:
+  pre_commit: true
+  commit_msg: true
+  pre_push: true
+  timeout: 300
+
+mcp:
+  enabled: false
+  port: 8080
+  host: "localhost"
+  daemon: false
+
+tools:
+  auto_detect: true
+  auto_install: false  # Set to true to auto-install missing tools
+  
+  formatters:
+    - name: "rustfmt"
+      command: "cargo fmt"
+      patterns:
+        - "**/*.rs"
+      check_command: "rustfmt --version"
+      install:
+        cargo: "rustup component add rustfmt"
+        manual: "Install Rust toolchain: https://rustup.rs/"
+  
+  linters:
+    - name: "clippy"
+      command: "cargo clippy --all-targets --all-features -- -D warnings"
+      patterns:
+        - "**/*.rs"
+      check_command: "cargo clippy --version"
+      install:
+        cargo: "rustup component add clippy"
+        manual: "Install Rust toolchain: https://rustup.rs/"
