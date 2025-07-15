@@ -2,11 +2,14 @@
 
 ## Project Overview
 
-**Guardy by DeepBrain** - A developer workflow intelligence tool written in pure Rust, designed to streamline git workflows with smart enforcement of quality, security, and team standards. Inspired by husky's simplicity and lint-staged's polish, but focused on comprehensive workflow automation.
+**Guardy by DeepBrain** - A revolutionary MCP-first developer workflow intelligence tool written in pure Rust. Designed to streamline git workflows with AI-assisted configuration and smart enforcement of quality, security, and team standards. Built to replace traditional bash-based git hooks with a high-performance, intelligent system that integrates seamlessly with AI assistants.
+
+**Key Innovation**: MCP (Model Context Protocol) integration allows AI assistants to analyze your project and generate optimal configurations automatically.
 
 **Domain**: guardy.dev  
 **Repository**: github.com/deepbrainspace/guardy  
-**Packages**: `guardy` (cargo) / `@deepbrainspace/guardy` (pnpm wrapper)  
+**Primary Package**: `guardy` (cargo)  
+**Optional Wrapper**: `@deepbrainspace/guardy` (pnpm compatibility)  
 **Sponsorship**: github.com/sponsors/wizardsupreme
 
 ## Reference Repositories
@@ -45,8 +48,8 @@ This project builds upon and aims to replace existing implementations:
 
 ## Installation Model
 
-### Global Binary + Per-Repository Configuration
-**Pattern**: Similar to NX, Husky, Prettier - global tool with local config
+### MCP-First Installation + Per-Repository Configuration
+**Revolutionary Pattern**: AI-assisted configuration with traditional CLI fallback
 
 ```bash
 # 1. Global Installation (once per system)
@@ -54,19 +57,25 @@ cargo install guardy
 brew install guardy
 pnpm add -g guardy
 
-# 2. Per-Repository Initialization
+# 2. MCP Setup (Recommended - AI Integration)
 cd my-project/
-guardy init                    # Creates .guardy.yml + installs git hooks
+guardy mcp setup              # Registers with AI assistants + starts daemon
+# AI can now analyze project and configure automatically
 
-# 3. Repository-Specific Configuration
-vim .guardy.yml               # Customize security rules per repo
+# 3. Traditional Setup (Alternative)
+guardy init                   # Creates .guardy.yml + installs git hooks
 
-# 4. Automatic Hook Execution
+# 4. Repository-Specific Configuration
+vim .guardy.yml               # Customize security rules per repo (optional)
+
+# 5. Automatic Hook Execution
 git commit                    # Triggers guardy pre-commit hook
 ```
 
 ### Benefits
+- **AI-Powered Configuration**: Intelligent project analysis and setup
 - **Single Binary**: One global installation, no per-project overhead
+- **Dual Interface**: AI-assisted + traditional CLI workflows
 - **Flexible Configuration**: Each repo can have different security levels
 - **Team Consistency**: Share `.guardy.yml` via git for team standards
 - **Easy Updates**: Update global binary, all repos benefit instantly
@@ -649,7 +658,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize guardy in repository
+    /// Initialize guardy in repository (quick setup)
     Init {
         #[arg(long)]
         security_level: Option<SecurityLevel>,
@@ -658,27 +667,59 @@ enum Commands {
         force: bool,
     },
     
+    /// Overall system status
+    Status,
+    
+    /// MCP server management
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+    
+    /// Git hooks management
+    Hooks {
+        #[command(subcommand)]
+        action: HooksAction,
+    },
+    
+    /// Configuration management
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpAction {
+    /// Setup MCP integration with AI assistants
+    Setup,
+    /// Start MCP daemon
+    Start,
+    /// Stop MCP daemon  
+    Stop,
+    /// Check MCP daemon status
+    Status,
+    /// View MCP daemon logs
+    Logs,
+}
+
+#[derive(Subcommand)]
+enum HooksAction {
+    /// Install git hooks
+    Install {
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove git hooks
+    Remove,
+    /// List available hooks
+    List,
     /// Run specific hook
     Run {
         hook: HookType,
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
     },
-    
-    /// Validate configuration
-    Config {
-        #[command(subcommand)]
-        action: ConfigAction,
-    },
-    
-    /// Install git hooks
-    Install {
-        #[arg(long)]
-        force: bool,
-    },
-    
-    /// Uninstall git hooks
-    Uninstall,
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -1099,9 +1140,21 @@ yarn add -D @deepbrainspace/guardy
 
 ## Usage
 
-### Initialize in Repository
+### MCP-First Setup (Recommended)
 ```bash
-# Basic initialization
+# Setup MCP integration with AI assistants
+guardy mcp setup
+
+# Start MCP daemon
+guardy mcp start
+
+# Now AI assistants can configure guardy automatically
+# Example: "Configure guardy for my NX monorepo with strict security"
+```
+
+### Traditional CLI Setup
+```bash
+# Quick initialization (hooks + config)
 guardy init
 
 # With security level
@@ -1111,28 +1164,49 @@ guardy init --security-level=strict
 guardy init --force
 ```
 
-### Manual Hook Execution
+### MCP Server Management
 ```bash
-# Run pre-commit hook
-guardy run pre-commit
+# Check MCP daemon status
+guardy mcp status
 
-# Run commit-msg hook with message file
-guardy run commit-msg .git/COMMIT_EDITMSG
+# View MCP daemon logs
+guardy mcp logs
 
-# Run pre-push hook
-guardy run pre-push
+# Stop MCP daemon
+guardy mcp stop
+```
+
+### Git Hooks Management
+```bash
+# Install git hooks
+guardy hooks install
+
+# List available hooks
+guardy hooks list
+
+# Run specific hook manually
+guardy hooks run pre-commit
+
+# Remove git hooks
+guardy hooks remove
 ```
 
 ### Configuration Management
 ```bash
+# Initialize default configuration
+guardy config init
+
 # Validate configuration
 guardy config validate
 
 # Show current configuration
 guardy config show
+```
 
-# Create default configuration
-guardy config init
+### System Status
+```bash
+# Overall status check
+guardy status
 ```
 
 ## Development Workflow
