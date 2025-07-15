@@ -6,6 +6,29 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Rust build and dependency files
+target/
+Cargo.lock
+
+# Rust toolchain files
+.rustup/
+.cargo/
+
+# Rust environment files
+.env
+.env.*
+
+# Rust coverage files
+/coverage/
+
+# Rust test output
+/test-output/
+
+# Rust IDE files
+.idea/
+*.rs.bk
+
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
