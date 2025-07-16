@@ -15,9 +15,7 @@ mod tests;
 pub use scanner::SecretScanner;
 
 /// Security check result
-/// TODO: Remove #[allow(dead_code)] when security features are used in Phase 1.3
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SecurityMatch {
     /// File path where secret was found
     pub file_path: String,
@@ -42,7 +40,7 @@ pub struct SecurityMatch {
 ///
 /// We keep this simple - secrets are either critical security issues or informational warnings.
 /// There's no middle ground with secrets - they either pose immediate risk or they don't.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
     /// Critical: Confirmed secrets that pose immediate security risk
     Critical,
@@ -60,7 +58,6 @@ impl std::fmt::Display for Severity {
 }
 
 /// Security pattern definition
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SecurityPattern {
     /// Pattern name

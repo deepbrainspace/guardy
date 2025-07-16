@@ -53,6 +53,9 @@ pub enum Commands {
     /// Configuration management
     #[command(subcommand)]
     Config(ConfigCommands),
+    /// Security scanning and validation
+    #[command(subcommand)]
+    Security(SecurityCommands),
 }
 
 /// MCP server subcommands
@@ -105,6 +108,27 @@ pub enum ConfigCommands {
     Show,
 }
 
+/// Security subcommands
+#[derive(Subcommand)]
+pub enum SecurityCommands {
+    /// Scan for secrets in files
+    Scan {
+        /// Specific files to scan
+        #[arg(short, long)]
+        files: Vec<String>,
+        /// Scan specific directory
+        #[arg(short, long)]
+        directory: Option<String>,
+        /// Output format (text, json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// Validate branch protection settings
+    Validate,
+    /// Check staging area for security issues
+    Check,
+}
+
 impl Cli {
     /// Execute the CLI command
     pub async fn run(self) -> Result<()> {
@@ -118,6 +142,7 @@ impl Cli {
             Some(Commands::Mcp(cmd)) => commands::mcp::execute(cmd, &output).await,
             Some(Commands::Hooks(cmd)) => commands::hooks::execute(cmd, &output).await,
             Some(Commands::Config(cmd)) => commands::config::execute(cmd, &output).await,
+            Some(Commands::Security(cmd)) => commands::security::execute(cmd, &output).await,
             None => {
                 // Show help when no command is provided
                 let mut cmd = Cli::command();
