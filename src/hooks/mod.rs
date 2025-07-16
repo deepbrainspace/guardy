@@ -11,6 +11,8 @@ pub mod pre_commit;
 pub mod pre_push;
 
 /// Generate hook script content
+/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
+#[allow(dead_code)]
 pub fn generate_hook_script(hook_name: &str, _config: &GuardyConfig) -> Result<String> {
     let guardy_binary = std::env::current_exe()?.to_string_lossy().to_string();
 
@@ -31,6 +33,8 @@ exec "{}" hooks run "{}"
 }
 
 /// Hook execution context
+/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
+#[allow(dead_code)]
 pub struct HookContext {
     /// Hook name
     pub hook_name: String,
@@ -42,6 +46,7 @@ pub struct HookContext {
     pub args: Vec<String>,
 }
 
+#[allow(dead_code)]
 impl HookContext {
     /// Create a new hook context
     pub fn new(hook_name: String, config: GuardyConfig, args: Vec<String>) -> Self {
@@ -54,6 +59,8 @@ impl HookContext {
 }
 
 /// Execute a hook by name
+/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
+#[allow(dead_code)]
 pub async fn execute_hook(context: HookContext) -> Result<()> {
     match context.hook_name.as_str() {
         "pre-commit" => pre_commit::execute(context).await,

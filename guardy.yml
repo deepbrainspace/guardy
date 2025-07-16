@@ -1,0 +1,27 @@
+security:
+  secret_detection: true
+  patterns: []
+  exclude_patterns:
+  - '*.tmp'
+  - '*.temp'
+  use_gitignore: true
+  protected_branches:
+  - main
+  - master
+  - develop
+  git_crypt: false
+hooks:
+  pre_commit: true
+  commit_msg: true
+  pre_push: true
+  timeout: 300
+mcp:
+  enabled: false
+  port: 8080
+  host: localhost
+  daemon: false
+tools:
+  auto_detect: true
+  auto_install: false
+  formatters: []
+  linters: []

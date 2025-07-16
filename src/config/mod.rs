@@ -247,7 +247,6 @@ impl Default for ToolsConfig {
     }
 }
 
-#[allow(dead_code)]
 impl GuardyConfig {
     /// Load configuration from file
     pub fn load_from_file(path: &PathBuf) -> Result<Self> {
@@ -364,6 +363,8 @@ impl GuardyConfig {
     }
 
     /// Find configuration file in current directory or parent directories
+    /// TODO: Remove #[allow(dead_code)] when find_config_file is used
+    #[allow(dead_code)]
     pub fn find_config_file() -> Option<PathBuf> {
         let mut current = std::env::current_dir().ok()?;
 
@@ -387,6 +388,8 @@ impl GuardyConfig {
     }
 
     /// Load configuration from found file or use defaults
+    /// TODO: Remove #[allow(dead_code)] when load_or_default is used
+    #[allow(dead_code)]
     pub fn load_or_default() -> Self {
         if let Some(config_path) = Self::find_config_file() {
             Self::load_from_file(&config_path).unwrap_or_default()
@@ -396,6 +399,8 @@ impl GuardyConfig {
     }
 
     /// Validate configuration
+    /// TODO: Remove #[allow(dead_code)] when validate is used
+    #[allow(dead_code)]
     pub fn validate(&self) -> Result<()> {
         // Validate MCP configuration
         if self.mcp.enabled {

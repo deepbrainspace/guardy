@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 /// MCP protocol version
+/// TODO: Remove #[allow(dead_code)] when MCP server is implemented in Phase 1.6
+#[allow(dead_code)]
 pub const MCP_VERSION: &str = "2024-11-05";
 
 /// MCP message types

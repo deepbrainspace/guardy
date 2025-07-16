@@ -6,6 +6,8 @@ use anyhow::Result;
 use std::path::Path;
 
 /// Project type detection
+/// TODO: Remove #[allow(dead_code)] when utility functions are used in Phase 1.4
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProjectType {
     Rust,
@@ -52,11 +54,13 @@ pub fn detect_project_type<P: AsRef<Path>>(path: P) -> ProjectType {
 }
 
 /// Check if a command exists in PATH
+#[allow(dead_code)]
 pub fn command_exists(command: &str) -> bool {
     which::which(command).is_ok()
 }
 
 /// Get the default shell
+#[allow(dead_code)]
 pub fn get_default_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| {
         if cfg!(windows) {
@@ -68,27 +72,32 @@ pub fn get_default_shell() -> String {
 }
 
 /// Create a temporary directory
+#[allow(dead_code)]
 pub fn create_temp_dir() -> Result<tempfile::TempDir> {
     tempfile::tempdir().map_err(Into::into)
 }
 
 /// Ensure a directory exists
+#[allow(dead_code)]
 pub fn ensure_dir_exists<P: AsRef<Path>>(path: P) -> Result<()> {
     std::fs::create_dir_all(path)?;
     Ok(())
 }
 
 /// Get the user's home directory
+#[allow(dead_code)]
 pub fn get_home_dir() -> Option<std::path::PathBuf> {
     dirs::home_dir()
 }
 
 /// Get the user's config directory
+#[allow(dead_code)]
 pub fn get_config_dir() -> Option<std::path::PathBuf> {
     dirs::config_dir()
 }
 
 /// Check if running in a CI environment
+#[allow(dead_code)]
 pub fn is_ci() -> bool {
     std::env::var("CI").is_ok()
         || std::env::var("GITHUB_ACTIONS").is_ok()
@@ -103,6 +112,7 @@ pub fn get_current_dir() -> Result<std::path::PathBuf> {
 }
 
 /// Format file size in human-readable format
+#[allow(dead_code)]
 pub fn format_file_size(size: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = size as f64;
@@ -121,6 +131,7 @@ pub fn format_file_size(size: u64) -> String {
 }
 
 /// Check if a file has a specific extension
+#[allow(dead_code)]
 pub fn has_extension<P: AsRef<Path>>(path: P, extension: &str) -> bool {
     path.as_ref()
         .extension()
@@ -129,6 +140,7 @@ pub fn has_extension<P: AsRef<Path>>(path: P, extension: &str) -> bool {
 }
 
 /// Get file modification time
+#[allow(dead_code)]
 pub fn get_file_mtime<P: AsRef<Path>>(path: P) -> Result<std::time::SystemTime> {
     let metadata = std::fs::metadata(path)?;
     Ok(metadata.modified()?)
@@ -140,6 +152,7 @@ pub fn is_git_repository<P: AsRef<Path>>(path: P) -> bool {
 }
 
 /// Truncate string to specified length with ellipsis
+#[allow(dead_code)]
 pub fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()

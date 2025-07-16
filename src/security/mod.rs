@@ -15,6 +15,8 @@ mod tests;
 pub use scanner::SecretScanner;
 
 /// Security check result
+/// TODO: Remove #[allow(dead_code)] when security features are used in Phase 1.3
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SecurityMatch {
     /// File path where secret was found
@@ -58,6 +60,7 @@ impl std::fmt::Display for Severity {
 }
 
 /// Security pattern definition
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SecurityPattern {
     /// Pattern name

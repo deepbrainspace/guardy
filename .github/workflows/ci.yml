@@ -32,8 +32,9 @@ jobs:
     - name: Run unit tests
       run: cargo test --lib
       
-    - name: Run integration tests
-      run: cargo test --test integration_tests || true  # Allow integration tests to fail for now
+    # TODO: Enable integration tests once CLI commands are implemented
+    # - name: Run integration tests
+    #   run: cargo test --test integration_tests
       
   lint:
     name: Lint
@@ -55,7 +56,7 @@ jobs:
       run: cargo fmt -- --check
       
     - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -W clippy::all -A dead_code -A unused_imports -A unused_variables
+      run: cargo clippy --all-targets --all-features -- -D warnings
       
   security:
     name: Security Audit

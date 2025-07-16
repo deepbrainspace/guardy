@@ -8,6 +8,8 @@ use regex::Regex;
 use std::fs;
 
 /// Execute commit-msg hook
+/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
+#[allow(dead_code)]
 pub async fn execute(context: HookContext) -> Result<()> {
     println!("📝 Validating commit message...");
 
@@ -25,6 +27,7 @@ pub async fn execute(context: HookContext) -> Result<()> {
 }
 
 /// Validate commit message format
+#[allow(dead_code)]
 fn validate_commit_message(msg: &str) -> Result<()> {
     // Remove comments and empty lines
     let msg = msg
