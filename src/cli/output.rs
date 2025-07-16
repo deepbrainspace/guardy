@@ -13,7 +13,6 @@ pub struct Output {
     debug: bool,
 }
 
-#[allow(dead_code)]
 impl Output {
     /// Create a new output handler
     pub fn new(debug: bool) -> Self {
@@ -41,6 +40,8 @@ impl Output {
     }
 
     /// Print a debug message (only if debug mode is enabled)
+    /// TODO: Remove #[allow(dead_code)] when debug logging is implemented
+    #[allow(dead_code)]
     pub fn debug(&self, message: &str) {
         if self.debug {
             println!("{} {}", style("🐛").dim(), style(message).dim());
@@ -58,6 +59,8 @@ impl Output {
     }
 
     /// Create a progress bar
+    /// TODO: Remove #[allow(dead_code)] when progress bars are used
+    #[allow(dead_code)]
     pub fn progress_bar(&self, len: u64, message: &str) -> ProgressBar {
         let pb = ProgressBar::new(len);
         pb.set_style(
@@ -73,6 +76,8 @@ impl Output {
     }
 
     /// Create a spinner for indefinite progress
+    /// TODO: Remove #[allow(dead_code)] when spinners are used
+    #[allow(dead_code)]
     pub fn spinner(&self, message: &str) -> ProgressBar {
         let pb = ProgressBar::new_spinner();
         pb.set_style(

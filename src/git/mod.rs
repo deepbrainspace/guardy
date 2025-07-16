@@ -8,10 +8,13 @@ use git2::{Repository, Status, StatusOptions};
 use std::path::Path;
 
 /// Git operations handler
+/// TODO: Remove #[allow(dead_code)] when CLI commands are implemented in Phase 1.7
+#[allow(dead_code)]
 pub struct GitOperations {
     repo: Repository,
 }
 
+#[allow(dead_code)]
 impl GitOperations {
     /// Open a Git repository
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {

@@ -12,6 +12,8 @@ use crate::security::SecretScanner;
 use anyhow::Result;
 
 /// Execute pre-commit hook
+/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
+#[allow(dead_code)]
 pub async fn execute(context: HookContext) -> Result<()> {
     println!("🔍 Running pre-commit checks...");
 
@@ -35,6 +37,7 @@ pub async fn execute(context: HookContext) -> Result<()> {
 }
 
 /// Check if current branch is protected
+#[allow(dead_code)]
 fn check_branch_protection(git: &GitOperations, protected_branches: &[String]) -> Result<()> {
     if git.is_protected_branch(protected_branches)? {
         let current_branch = git.current_branch()?;
@@ -50,6 +53,7 @@ fn check_branch_protection(git: &GitOperations, protected_branches: &[String]) -
 }
 
 /// Run secret detection on staged files
+#[allow(dead_code)]
 async fn run_secret_detection(git: &GitOperations) -> Result<()> {
     let staged_files = git.get_staged_files()?;
 
@@ -82,6 +86,7 @@ async fn run_secret_detection(git: &GitOperations) -> Result<()> {
 }
 
 /// Validate staging area
+#[allow(dead_code)]
 fn validate_staging(git: &GitOperations) -> Result<()> {
     let staged_files = git.get_staged_files()?;
 

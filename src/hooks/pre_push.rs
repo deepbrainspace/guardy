@@ -7,6 +7,8 @@ use crate::git::GitOperations;
 use anyhow::Result;
 
 /// Execute pre-push hook
+/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
+#[allow(dead_code)]
 pub async fn execute(_context: HookContext) -> Result<()> {
     println!("🚀 Running pre-push checks...");
 
@@ -24,6 +26,7 @@ pub async fn execute(_context: HookContext) -> Result<()> {
 }
 
 /// Validate working tree state
+#[allow(dead_code)]
 fn validate_working_tree(git: &GitOperations) -> Result<()> {
     if !git.is_working_tree_clean()? {
         anyhow::bail!(

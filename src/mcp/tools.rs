@@ -15,6 +15,8 @@ pub struct McpTool {
 }
 
 /// Get all available MCP tools
+/// TODO: Remove #[allow(dead_code)] when MCP server is implemented in Phase 1.6
+#[allow(dead_code)]
 pub fn get_available_tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -110,6 +112,7 @@ pub fn get_available_tools() -> Vec<McpTool> {
 }
 
 /// Execute a tool by name
+#[allow(dead_code)]
 pub async fn execute_tool(tool_name: &str, params: Value) -> Result<Value, String> {
     match tool_name {
         "analyze_project" => analyze_project(params).await,
@@ -123,6 +126,7 @@ pub async fn execute_tool(tool_name: &str, params: Value) -> Result<Value, Strin
 }
 
 /// Analyze project structure and recommend configuration
+#[allow(dead_code)]
 async fn analyze_project(_params: Value) -> Result<Value, String> {
     // TODO: Implement project analysis
     Ok(json!({
@@ -136,6 +140,7 @@ async fn analyze_project(_params: Value) -> Result<Value, String> {
 }
 
 /// Generate Guardy configuration
+#[allow(dead_code)]
 async fn generate_config(_params: Value) -> Result<Value, String> {
     // TODO: Implement configuration generation
     Ok(json!({
@@ -145,6 +150,7 @@ async fn generate_config(_params: Value) -> Result<Value, String> {
 }
 
 /// Validate Guardy configuration
+#[allow(dead_code)]
 async fn validate_config(_params: Value) -> Result<Value, String> {
     // TODO: Implement configuration validation
     Ok(json!({
@@ -155,6 +161,7 @@ async fn validate_config(_params: Value) -> Result<Value, String> {
 }
 
 /// Detect available development tools
+#[allow(dead_code)]
 async fn detect_tools(_params: Value) -> Result<Value, String> {
     // TODO: Implement tool detection
     Ok(json!({
@@ -169,6 +176,7 @@ async fn detect_tools(_params: Value) -> Result<Value, String> {
 }
 
 /// Run setup wizard
+#[allow(dead_code)]
 async fn setup_wizard(_params: Value) -> Result<Value, String> {
     // TODO: Implement setup wizard
     Ok(json!({
@@ -183,6 +191,7 @@ async fn setup_wizard(_params: Value) -> Result<Value, String> {
 }
 
 /// Troubleshoot issues
+#[allow(dead_code)]
 async fn troubleshoot(_params: Value) -> Result<Value, String> {
     // TODO: Implement troubleshooting
     Ok(json!({

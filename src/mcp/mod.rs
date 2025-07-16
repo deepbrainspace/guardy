@@ -18,6 +18,8 @@ pub mod types;
 pub mod utils;
 
 /// MCP server state
+/// TODO: Remove #[allow(dead_code)] when MCP server is implemented in Phase 1.6
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct McpServer {
     /// Server configuration
@@ -25,6 +27,7 @@ pub struct McpServer {
 }
 
 /// MCP JSON-RPC request
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct McpRequest {
     pub jsonrpc: String,
@@ -53,6 +56,7 @@ pub struct McpError {
     pub data: Option<serde_json::Value>,
 }
 
+#[allow(dead_code)]
 impl McpServer {
     /// Create a new MCP server
     pub fn new(config: crate::config::McpConfig) -> Self {
@@ -82,6 +86,7 @@ impl McpServer {
 }
 
 /// Health check endpoint
+#[allow(dead_code)]
 async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "healthy",
@@ -91,6 +96,7 @@ async fn health_check() -> impl IntoResponse {
 }
 
 /// Handle MCP JSON-RPC requests
+#[allow(dead_code)]
 async fn handle_mcp_request(Json(request): Json<McpRequest>) -> impl IntoResponse {
     let response = match request.method.as_str() {
         "initialize" => handle_initialize(request.id, request.params).await,
@@ -112,6 +118,7 @@ async fn handle_mcp_request(Json(request): Json<McpRequest>) -> impl IntoRespons
 }
 
 /// Handle initialize request
+#[allow(dead_code)]
 async fn handle_initialize(
     id: Option<serde_json::Value>,
     _params: Option<serde_json::Value>,
@@ -134,6 +141,7 @@ async fn handle_initialize(
 }
 
 /// Handle tools list request
+#[allow(dead_code)]
 async fn handle_tools_list(id: Option<serde_json::Value>) -> McpResponse {
     let tools = tools::get_available_tools();
 
@@ -148,6 +156,7 @@ async fn handle_tools_list(id: Option<serde_json::Value>) -> McpResponse {
 }
 
 /// Handle tools call request
+#[allow(dead_code)]
 async fn handle_tools_call(
     id: Option<serde_json::Value>,
     _params: Option<serde_json::Value>,
