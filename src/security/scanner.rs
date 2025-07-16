@@ -10,8 +10,6 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 /// Secret scanner for detecting secrets in files
-/// TODO: Remove #[allow(dead_code)] when security features are used in Phase 1.3
-#[allow(dead_code)]
 pub struct SecretScanner {
     patterns: Vec<SecurityPattern>,
     exclude_patterns: Vec<String>,
@@ -36,19 +34,16 @@ impl SecretScanner {
     }
 
     /// Add a custom pattern
-    #[allow(dead_code)]
     pub fn add_pattern(&mut self, pattern: SecurityPattern) {
         self.patterns.push(pattern);
     }
 
     /// Add exclude pattern
-    #[allow(dead_code)]
     pub fn add_exclude_pattern(&mut self, pattern: String) {
         self.exclude_patterns.push(pattern);
     }
 
     /// Scan a single file for secrets
-    #[allow(dead_code)]
     pub fn scan_file<P: AsRef<Path>>(&self, file_path: P) -> Result<Vec<SecurityMatch>> {
         let path = file_path.as_ref();
         let content = fs::read_to_string(path)
@@ -75,7 +70,6 @@ impl SecretScanner {
     }
 
     /// Scan multiple files for secrets
-    #[allow(dead_code)]
     pub fn scan_files<P: AsRef<Path>>(&self, files: &[P]) -> Result<Vec<SecurityMatch>> {
         let mut all_matches = Vec::new();
 
@@ -90,7 +84,6 @@ impl SecretScanner {
     }
 
     /// Scan a directory recursively for secrets
-    #[allow(dead_code)]
     pub fn scan_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<Vec<SecurityMatch>> {
         let mut all_matches = Vec::new();
 
@@ -107,7 +100,6 @@ impl SecretScanner {
     }
 
     /// Check if a file should be scanned based on exclude patterns
-    #[allow(dead_code)]
     fn should_scan_file(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy();
 

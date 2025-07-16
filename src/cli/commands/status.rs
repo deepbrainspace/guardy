@@ -28,6 +28,9 @@ pub async fn execute(output: &Output) -> Result<()> {
     // Check MCP server status
     check_mcp_status(output);
     
+    // Check security status
+    check_security_status(&current_dir, output);
+    
     Ok(())
 }
 
@@ -147,4 +150,41 @@ fn check_mcp_status(output: &Output) {
     output.indent("• Port configuration");
     output.indent("• Connected clients");
     output.indent("• Available tools");
+}
+
+/// Check security status
+fn check_security_status(current_dir: &Path, output: &Output) {
+    output.blank_line();
+    output.step("Security Status");
+    
+    let config_path = current_dir.join("guardy.yml");
+    
+    if let Ok(config) = GuardyConfig::load_from_file(&config_path) {
+        // Check secret detection
+        if config.security.secret_detection {
+            output.success("Secret detection enabled");
+        } else {
+            output.warning("Secret detection disabled");
+        }
+        
+        // Check protected branches
+        if !config.security.protected_branches.is_empty() {
+            output.success(&format!("{} protected branches configured", config.security.protected_branches.len()));
+        } else {
+            output.warning("No protected branches configured");
+        }
+        
+        // Check git-crypt
+        if config.security.git_crypt {
+            if Path::new(".git-crypt").exists() {
+                output.success("Git-crypt enabled and initialized");
+            } else {
+                output.warning("Git-crypt enabled but not initialized");
+            }
+        } else {
+            output.info("Git-crypt integration disabled");
+        }
+    } else {
+        output.warning("Security configuration not available");
+    }
 }

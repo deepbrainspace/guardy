@@ -7,4 +7,5 @@ pub mod config;
 pub mod hooks;
 pub mod init;
 pub mod mcp;
+pub mod security;
 pub mod status;

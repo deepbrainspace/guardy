@@ -197,7 +197,51 @@ impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
             secret_detection: true,
-            patterns: vec![],
+            patterns: vec![
+                // API Keys and Secrets
+                SecurityPatternConfig {
+                    name: "AWS Access Key".to_string(),
+                    regex: r"AKIA[0-9A-Z]{16}".to_string(),
+                    severity: "Critical".to_string(),
+                    description: "AWS Access Key ID".to_string(),
+                    enabled: true,
+                },
+                SecurityPatternConfig {
+                    name: "AWS Secret Key".to_string(),
+                    regex: r"[0-9a-zA-Z/+]{40}".to_string(),
+                    severity: "Critical".to_string(),
+                    description: "AWS Secret Access Key".to_string(),
+                    enabled: true,
+                },
+                SecurityPatternConfig {
+                    name: "Generic API Key".to_string(),
+                    regex: r"(?i)(api[_-]?key|apikey)\s*[=:]\s*[a-zA-Z0-9_-]{16,}".to_string(),
+                    severity: "Critical".to_string(),
+                    description: "Generic API key pattern".to_string(),
+                    enabled: true,
+                },
+                SecurityPatternConfig {
+                    name: "Generic Secret".to_string(),
+                    regex: r"(?i)(secret|password|token)\s*[=:]\s*[a-zA-Z0-9_-]{8,}".to_string(),
+                    severity: "Critical".to_string(),
+                    description: "Generic secret pattern".to_string(),
+                    enabled: true,
+                },
+                SecurityPatternConfig {
+                    name: "Private Key".to_string(),
+                    regex: r"-----BEGIN [A-Z]+ PRIVATE KEY-----".to_string(),
+                    severity: "Critical".to_string(),
+                    description: "Private key header".to_string(),
+                    enabled: true,
+                },
+                SecurityPatternConfig {
+                    name: "JSON Web Token".to_string(),
+                    regex: r"eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*".to_string(),
+                    severity: "Critical".to_string(),
+                    description: "JWT token pattern".to_string(),
+                    enabled: true,
+                },
+            ],
             exclude_patterns: vec![
                 // Only essential patterns that aren't typically in gitignore
                 "*.tmp".to_string(),
