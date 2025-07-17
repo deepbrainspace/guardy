@@ -12,9 +12,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
 /// Execute hooks commands
-pub async fn execute(cmd: HooksCommands, output: &Output) -> Result<()> {
+pub async fn execute(cmd: HooksCommands, force: bool, output: &Output) -> Result<()> {
     match cmd {
-        HooksCommands::Install { force } => install(force, output).await,
+        HooksCommands::Install => install(force, output).await,
         HooksCommands::Remove => remove(output).await,
         HooksCommands::List => list(output).await,
         HooksCommands::Run { hook } => run(hook, output).await,

@@ -383,7 +383,14 @@ impl GuardyConfig {
                         continue;
                     }
 
-                    patterns.push(line.to_string());
+                    // Convert directory patterns to glob patterns for better matching
+                    let pattern = if line.ends_with('/') {
+                        // For patterns like "target/", add "**" to match all files under it
+                        format!("{}**", line)
+                    } else {
+                        line.to_string()
+                    };
+                    patterns.push(pattern);
                 }
             }
 

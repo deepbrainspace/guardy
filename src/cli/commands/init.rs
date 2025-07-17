@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 /// Execute the init command
-pub async fn execute(yes: bool, output: &Output) -> Result<()> {
+pub async fn execute(force: bool, output: &Output) -> Result<()> {
     output.header("🚀 Initializing Guardy");
 
     let current_dir = get_current_dir()?;
@@ -18,7 +18,7 @@ pub async fn execute(yes: bool, output: &Output) -> Result<()> {
     // Check if we're in a git repository
     if !is_git_repository(&current_dir) {
         output.error("Not a git repository");
-        if !yes && !output.confirm("Initialize git repository first?") {
+        if !force && !output.confirm("Initialize git repository first?") {
             output.info("Initialization cancelled");
             return Ok(());
         }
@@ -42,13 +42,13 @@ pub async fn execute(yes: bool, output: &Output) -> Result<()> {
     output.info(&format!("Detected project type: {:?}", project_type));
     
     // Initialize configuration
-    initialize_config(&current_dir, yes, output)?;
+    initialize_config(&current_dir, force, output)?;
     
     // Install git hooks
-    install_hooks(&current_dir, yes, output)?;
+    install_hooks(&current_dir, force, output)?;
     
     // Setup MCP server configuration
-    setup_mcp_server(yes, output)?;
+    setup_mcp_server(force, output)?;
     
     output.blank_line();
     output.success("Guardy initialization complete!");

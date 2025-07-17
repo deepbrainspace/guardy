@@ -10,10 +10,10 @@ use anyhow::Result;
 use std::path::Path;
 
 /// Execute security commands
-pub async fn execute(cmd: SecurityCommands, output: &Output) -> Result<()> {
+pub async fn execute(cmd: SecurityCommands, format: &str, output: &Output) -> Result<()> {
     match cmd {
-        SecurityCommands::Scan { files, directory, format } => {
-            scan(files, directory, format, output).await
+        SecurityCommands::Scan { files, directory } => {
+            scan(files, directory, format.to_string(), output).await
         }
         SecurityCommands::Validate => validate(output).await,
         SecurityCommands::Check => check(output).await,
@@ -47,7 +47,7 @@ async fn scan(
     }
 
     // Create scanner
-    let scanner = SecretScanner::from_config(&config)?;
+    let scanner = SecretScanner::from_config(&config, output)?;
 
     let mut all_matches = Vec::new();
 
@@ -262,7 +262,7 @@ async fn check(output: &Output) -> Result<()> {
     output.step(&format!("Checking {} staged files", staged_files.len()));
 
     // Create scanner
-    let scanner = SecretScanner::from_config(&config)?;
+    let scanner = SecretScanner::from_config(&config, output)?;
     let mut all_matches = Vec::new();
 
     for file_path in &staged_files {
