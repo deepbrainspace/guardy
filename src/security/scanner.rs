@@ -5,6 +5,7 @@
 use super::patterns::patterns_from_config;
 use super::{SecurityMatch, SecurityPattern};
 use anyhow::{Context, Result};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -12,40 +13,62 @@ use walkdir::WalkDir;
 /// Secret scanner for detecting secrets in files
 pub struct SecretScanner {
     patterns: Vec<SecurityPattern>,
-    exclude_patterns: Vec<String>,
+    exclude_globset: GlobSet,
+    verbose: bool,
 }
 
 impl SecretScanner {
     /// Create a new secret scanner with patterns from configuration
-    pub fn from_config(config: &crate::config::GuardyConfig) -> Result<Self> {
+    pub fn from_config(config: &crate::config::GuardyConfig, output: &crate::cli::Output) -> Result<Self> {
         let patterns = patterns_from_config(&config.security.patterns)?;
         let exclude_patterns = config.get_effective_exclude_patterns();
 
+        // Build GlobSet from exclude patterns
+        let mut builder = GlobSetBuilder::new();
+        if output.is_verbose() {
+            output.verbose(&format!("Loading {} exclude patterns", exclude_patterns.len()));
+        }
+        for pattern in &exclude_patterns {
+            let glob = Glob::new(pattern)
+                .with_context(|| format!("Invalid glob pattern: {}", pattern))?;
+            builder.add(glob);
+        }
+        let exclude_globset = builder.build()
+            .with_context(|| "Failed to build exclude pattern globset")?;
+
         Ok(Self {
             patterns,
-            exclude_patterns,
+            exclude_globset,
+            verbose: output.is_verbose(),
         })
     }
 
     /// Create a new secret scanner with default patterns (deprecated - use from_config instead)
     pub fn new() -> Result<Self> {
         let config = crate::config::GuardyConfig::default();
-        Self::from_config(&config)
+        let output = crate::cli::Output::new(false, false); // No verbose, no quiet for default
+        Self::from_config(&config, &output)
     }
 
     /// Add a custom pattern
+    #[allow(dead_code)]
     pub fn add_pattern(&mut self, pattern: SecurityPattern) {
         self.patterns.push(pattern);
     }
 
-    /// Add exclude pattern
-    pub fn add_exclude_pattern(&mut self, pattern: String) {
-        self.exclude_patterns.push(pattern);
-    }
 
     /// Scan a single file for secrets
     pub fn scan_file<P: AsRef<Path>>(&self, file_path: P) -> Result<Vec<SecurityMatch>> {
         let path = file_path.as_ref();
+        
+        // Check if file should be scanned
+        if !self.should_scan_file(path) {
+            if self.verbose {
+                println!("Skipping excluded file: {}", path.display());
+            }
+            return Ok(Vec::new());
+        }
+        
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read file: {}", path.display()))?;
 
@@ -101,13 +124,58 @@ impl SecretScanner {
 
     /// Check if a file should be scanned based on exclude patterns
     fn should_scan_file(&self, path: &Path) -> bool {
-        let path_str = path.to_string_lossy();
+        if self.verbose {
+            println!("Checking file: {}", path.display());
+        }
+        
+        // Check absolute path
+        if self.exclude_globset.is_match(path) {
+            if self.verbose {
+                println!("  -> Excluded by absolute path match");
+            }
+            return false;
+        }
 
-        // Check if file should be excluded
-        for exclude_pattern in &self.exclude_patterns {
-            if path_str.contains(exclude_pattern) {
+        // Check relative path for patterns like ".claude/**/*.md"
+        if let Ok(current_dir) = std::env::current_dir() {
+            if let Ok(relative_path) = path.strip_prefix(current_dir) {
+                if self.verbose {
+                    println!("  -> Relative path: {}", relative_path.display());
+                }
+                if self.exclude_globset.is_match(relative_path) {
+                    if self.verbose {
+                        println!("  -> Excluded by relative path match");
+                    }
+                    return false;
+                }
+            }
+        }
+
+        // Check if any parent directory matches the patterns
+        // This handles directory patterns like "target/" and "node_modules/"
+        if let Some(parent) = path.parent() {
+            if self.exclude_globset.is_match(parent) {
+                if self.verbose {
+                    println!("  -> Excluded by parent directory match");
+                }
                 return false;
             }
+            
+            // Also check relative parent paths
+            if let Ok(current_dir) = std::env::current_dir() {
+                if let Ok(relative_parent) = parent.strip_prefix(current_dir) {
+                    if self.exclude_globset.is_match(relative_parent) {
+                        if self.verbose {
+                            println!("  -> Excluded by relative parent match");
+                        }
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if self.verbose {
+            println!("  -> File will be scanned");
         }
 
         // Only scan text files

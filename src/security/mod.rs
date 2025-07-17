@@ -70,6 +70,7 @@ pub struct SecurityPattern {
     pub severity: Severity,
 
     /// Description
+    #[allow(dead_code)]
     pub description: String,
 }
 

@@ -17,16 +17,32 @@ pub use output::Output;
 #[command(propagate_version = true)]
 pub struct Cli {
     /// Configuration file path
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long, value_name = "FILE", global = true)]
     pub config: Option<String>,
 
-    /// Enable debug logging
-    #[arg(short, long)]
-    pub debug: bool,
+    /// Enable verbose output
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
+    /// Enable quiet output (minimal)
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
 
     /// Auto-install missing tools instead of failing
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub auto_install: bool,
+
+    /// Show what would be done without executing
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+
+    /// Output format (text, json, yaml)
+    #[arg(long, default_value = "text", global = true)]
+    pub format: String,
+
+    /// Force overwrite without prompting
+    #[arg(short, long, global = true)]
+    pub force: bool,
 
     /// Subcommands
     #[command(subcommand)]
@@ -37,11 +53,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize Guardy in current repository
-    Init {
-        /// Skip interactive prompts
-        #[arg(short, long)]
-        yes: bool,
-    },
+    Init,
     /// Show system status
     Status,
     /// MCP server commands
@@ -81,11 +93,7 @@ pub enum McpCommands {
 #[derive(Subcommand)]
 pub enum HooksCommands {
     /// Install git hooks
-    Install {
-        /// Force overwrite existing hooks
-        #[arg(short, long)]
-        force: bool,
-    },
+    Install,
     /// Remove git hooks
     Remove,
     /// List available hooks
@@ -114,14 +122,11 @@ pub enum SecurityCommands {
     /// Scan for secrets in files
     Scan {
         /// Specific files to scan
-        #[arg(short, long)]
+        #[arg(short = 'i', long)]
         files: Vec<String>,
         /// Scan specific directory
         #[arg(short, long)]
         directory: Option<String>,
-        /// Output format (text, json)
-        #[arg(long, default_value = "text")]
-        format: String,
     },
     /// Validate branch protection settings
     Validate,
@@ -132,17 +137,17 @@ pub enum SecurityCommands {
 impl Cli {
     /// Execute the CLI command
     pub async fn run(self) -> Result<()> {
-        // Initialize output handler
-        let output = Output::new(self.debug);
+        // Initialize output handler with global verbose and quiet settings
+        let output = Output::new(self.verbose, self.quiet);
 
         // Handle the command
         match self.command {
-            Some(Commands::Init { yes }) => commands::init::execute(yes, &output).await,
+            Some(Commands::Init) => commands::init::execute(self.force, &output).await,
             Some(Commands::Status) => commands::status::execute(&output).await,
             Some(Commands::Mcp(cmd)) => commands::mcp::execute(cmd, &output).await,
-            Some(Commands::Hooks(cmd)) => commands::hooks::execute(cmd, &output).await,
+            Some(Commands::Hooks(cmd)) => commands::hooks::execute(cmd, self.force, &output).await,
             Some(Commands::Config(cmd)) => commands::config::execute(cmd, &output).await,
-            Some(Commands::Security(cmd)) => commands::security::execute(cmd, &output).await,
+            Some(Commands::Security(cmd)) => commands::security::execute(cmd, &self.format, &output).await,
             None => {
                 // Show help when no command is provided
                 let mut cmd = Cli::command();

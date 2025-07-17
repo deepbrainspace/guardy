@@ -9,53 +9,67 @@ use std::io::{self, Write};
 
 /// Output handler for consistent CLI formatting
 pub struct Output {
-    #[allow(dead_code)]
-    debug: bool,
+    verbose: bool,
+    quiet: bool,
 }
 
 impl Output {
     /// Create a new output handler
-    pub fn new(debug: bool) -> Self {
-        Self { debug }
+    pub fn new(verbose: bool, quiet: bool) -> Self {
+        Self { verbose, quiet }
     }
 
     /// Print a success message
     pub fn success(&self, message: &str) {
-        println!("{} {}", style("✔").green(), message);
+        if !self.quiet {
+            println!("{} {}", style("✔").green(), message);
+        }
     }
 
     /// Print an error message
     pub fn error(&self, message: &str) {
+        // Errors are always shown, even in quiet mode
         eprintln!("{} {}", style("✖").red(), message);
     }
 
     /// Print a warning message
     pub fn warning(&self, message: &str) {
-        println!("{} {}", style("⚠").yellow(), message);
+        if !self.quiet {
+            println!("{} {}", style("⚠").yellow(), message);
+        }
     }
 
     /// Print an info message
     pub fn info(&self, message: &str) {
-        println!("{} {}", style("ℹ").blue(), message);
+        if !self.quiet {
+            println!("{} {}", style("ℹ").blue(), message);
+        }
     }
 
-    /// Print a debug message (only if debug mode is enabled)
-    /// TODO: Remove #[allow(dead_code)] when debug logging is implemented
-    #[allow(dead_code)]
-    pub fn debug(&self, message: &str) {
-        if self.debug {
-            println!("{} {}", style("🐛").dim(), style(message).dim());
+    /// Print a verbose message (only if verbose mode is enabled)
+    pub fn verbose(&self, message: &str) {
+        if self.verbose {
+            println!("{} {}", style("ℹ").dim(), style(message).dim());
         }
+    }
+
+    /// Get verbose mode status
+    pub fn is_verbose(&self) -> bool {
+        self.verbose
     }
 
     /// Print a header/title
     pub fn header(&self, title: &str) {
-        println!("\n{}", style(title).bold().underlined());
+        if !self.quiet {
+            println!("\n{}", style(title).bold().underlined());
+        }
     }
 
     /// Print a step in a process
     pub fn step(&self, step: &str) {
-        println!("{} {}", style("❯").cyan(), step);
+        if !self.quiet {
+            println!("{} {}", style("❯").cyan(), step);
+        }
     }
 
     /// Create a progress bar

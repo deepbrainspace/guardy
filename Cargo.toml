@@ -47,6 +47,7 @@ regex = "1.10"
 # File System
 walkdir = "2.5"
 tempfile = "3.10"
+globset = "0.4"
 
 # Networking (for MCP server)
 axum = "0.7.9"
