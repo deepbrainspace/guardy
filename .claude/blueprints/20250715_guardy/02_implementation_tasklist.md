@@ -148,6 +148,30 @@
   - [x] Add staging validation
   - [x] Integrate secret detection
   - [x] Add git-crypt validation
+  - [ ] **Implement working tree validation** (NOT IMPLEMENTED)
+    - [ ] Add unstaged changes detection
+    - [ ] Ensure all changes are staged before committing
+    - [ ] Add helpful error messages for unstaged files
+    - [ ] Implement clean working tree validation
+    - [ ] Add configuration flag to enable/disable working tree validation
+  - [ ] **Add interactive user overrides for secret detection** (NOT IMPLEMENTED)
+    - [ ] Allow users to override false positive secret detections
+    - [ ] Implement interactive prompts for suspected secrets
+    - [ ] Add confirmation dialogs for security warnings
+    - [ ] Create bypass mechanisms for legitimate patterns
+    - [ ] Add configuration flag to enable/disable interactive overrides
+  - [ ] **Enhance git-crypt integration** (PARTIAL IMPLEMENTATION)
+    - [ ] Add proper .gitattributes validation
+    - [ ] Implement encrypted file status checking
+    - [ ] Add git-crypt installation detection
+    - [ ] Create comprehensive encryption requirement validation
+    - [ ] Add configuration flag to enable/disable git-crypt integration
+  - [ ] **Move branch protection from pre-push to pre-commit** (NEEDS REFACTORING)
+    - [ ] Relocate branch protection logic to pre-commit hook
+    - [ ] Update pre-push hook to remove branch protection
+    - [ ] Ensure proper protection enforcement timing
+    - [ ] Update documentation and help messages
+    - [ ] Add configuration flag to enable/disable branch protection
   - [ ] **Implement code formatting** (PLACEHOLDER ONLY)
   - [ ] **Create parallel execution** (NOT IMPLEMENTED)
   - [ ] **Add error aggregation** (NOT IMPLEMENTED)
@@ -167,12 +191,28 @@
   - [x] Create pre-push hook template
   - [x] Implement full repository security scan
   - [x] Add branch protection checks
-  - [ ] **Implement lockfile validation** (NOT IMPLEMENTED)
+    - [ ] **Implement lockfile validation** (NOT IMPLEMENTED)
+    - [ ] Add pnpm-lock.yaml validation with `pnpm install --frozen-lockfile`
+    - [ ] Support multiple package managers (npm, yarn, pnpm)
+    - [ ] Test lockfile synchronization with package.json
+    - [ ] Add lockfile change detection and warnings
+    - [ ] Add configuration flag to enable/disable lockfile validation
   - [ ] **Add optional test execution** (PLACEHOLDER ONLY)
   - [ ] **Create lint checks integration** (NOT IMPLEMENTED)
   - [ ] **Implement timeout handling** (NOT IMPLEMENTED)
   - [ ] **Add configurable checks** (NOT IMPLEMENTED)
   - [x] Create basic validation pipeline with workflow steps
+
+- [ ] **Post-checkout Hook** (NOT IMPLEMENTED)
+  - [ ] **Implement dependency management automation** (NEW FEATURE)
+    - [ ] Create post-checkout hook template
+    - [ ] Add branch change detection logic
+    - [ ] Implement package file change detection (package.json, pnpm-workspace.yaml)
+    - [ ] Add automatic `pnpm install` execution when dependencies change
+    - [ ] Create progress indicators for dependency installation
+    - [ ] Add error handling for failed installations
+    - [ ] Implement skip logic for non-package-related checkouts
+    - [ ] Add configuration flag to enable/disable post-checkout dependency management
 
 ### 1.6 MCP Server (Revolutionary Feature)
 
@@ -327,7 +367,27 @@
   - [ ] Configure npm publishing
   - [ ] Add compatibility testing
 
-### 2.3 Website and Documentation
+### 2.3 Professional CLI Output System Enhancement
+
+- [ ] **Enhanced Professional CLI Output** (INSPIRED BY GOODIEBAG)
+  - [ ] **Implement lint-staged style professional output**
+    - [ ] Create unified styling system with consistent symbols
+    - [ ] Add professional status indicators (ℹ, ✔, ✖, ⚠, ↩, ❯)
+    - [ ] Implement color-coded messaging system
+    - [ ] Add debug output functionality with GUARDY_DEBUG flag
+    - [ ] Create accessibility-friendly terminal output
+  - [ ] **Add workflow step timing and progress**
+    - [ ] Enhance existing timing system with better formatting
+    - [ ] Add total execution time summaries
+    - [ ] Implement progress indicators for long-running operations
+    - [ ] Add step-by-step execution reporting
+  - [ ] **Create consistent messaging patterns**
+    - [ ] Standardize all CLI output across commands
+    - [ ] Add semantic function names for different message types
+    - [ ] Implement centralized styling system
+    - [ ] Create maintainable output formatting
+
+### 2.4 Website and Documentation
 
 - [ ] **Website Development**
   - [ ] Setup Cloudflare Pages
@@ -353,7 +413,7 @@
   - [ ] Create troubleshooting patterns
   - [ ] Add AI prompt templates
 
-### 2.4 Installation Scripts
+### 2.5 Installation Scripts
 
 - [ ] **Universal Installer**
   - [ ] Create install.sh script
@@ -422,6 +482,10 @@
 
 ### Phase 1 Complete When:
 - [ ] All core features implemented and tested
+- [ ] **All git hooks implemented** (pre-commit, commit-msg, pre-push, post-checkout)
+- [ ] **Professional CLI output system** matching goodiebag quality standards
+- [ ] **Security features complete** (working tree validation, interactive overrides, git-crypt)
+- [ ] **Lockfile validation** implemented for all package managers
 - [ ] MCP server fully functional
 - [ ] All security checks working
 - [ ] CLI commands complete

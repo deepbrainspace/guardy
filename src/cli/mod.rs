@@ -102,10 +102,10 @@ pub enum HooksCommands {
     Remove,
     /// List available hooks
     List,
-    /// Run specific hook
+    /// Run specific hook or all hooks
     Run {
-        /// Hook name to run
-        hook: String,
+        /// Hook name to run (optional - if not provided, runs all hooks)
+        hook: Option<String>,
     },
 }
 
