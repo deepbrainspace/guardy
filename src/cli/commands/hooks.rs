@@ -456,12 +456,13 @@ async fn execute_pre_push_hook(current_dir: &Path, output: &Output) -> Result<bo
     // 1. Final security validation - scan entire repository
     if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
         if config.security.secret_detection {
-            output.info("Running final security scan...");
+            output.info("🏃 Running final security scan...");
             
             let scanner = SecretScanner::from_config(&config, output)?;
             let (violations, _, _) = scanner.scan_directory(current_dir)?;
             
             if !violations.is_empty() {
+                output.clear_line();
                 output.error("❌ Security issues found in repository");
                 for violation in &violations {
                     output.indent(&format!("  {} in {} ({:?})", violation.pattern_name, violation.file_path, violation.severity));
@@ -469,6 +470,7 @@ async fn execute_pre_push_hook(current_dir: &Path, output: &Output) -> Result<bo
                 return Ok(false);
             }
             
+            output.clear_line();
             output.success("✅ No security issues found");
         }
     }
@@ -494,7 +496,7 @@ async fn execute_pre_push_hook(current_dir: &Path, output: &Output) -> Result<bo
     }
     
     // 3. Test suite execution (placeholder for future test integration)
-    output.info("Running test suite...");
+    output.info("🏃 Running test suite...");
     output.success("✅ Test suite passed");
     
     Ok(true)
