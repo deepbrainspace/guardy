@@ -5,6 +5,7 @@
 
 use crate::cli::Output;
 use crate::config::GuardyConfig;
+// use crate::tools::ToolManager;
 use crate::utils::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
@@ -20,29 +21,34 @@ pub async fn execute(output: &Output) -> Result<()> {
     
     // Use workflow steps for better progress indication
     if output.is_verbose() {
-        output.workflow_step(1, 5, "Checking git repository", "🔍");
+        output.workflow_step(1, 6, "Checking git repository", "🔍");
     }
     check_git_status(&current_dir, output);
     
     if output.is_verbose() {
-        output.workflow_step(2, 5, "Validating configuration", "⚙️");
+        output.workflow_step(2, 6, "Validating configuration", "⚙️");
     }
     check_config_status(&current_dir, output);
     
     if output.is_verbose() {
-        output.workflow_step(3, 5, "Inspecting git hooks", "🪝");
+        output.workflow_step(3, 6, "Inspecting git hooks", "🪝");
     }
     check_hooks_status(&current_dir, output);
     
     if output.is_verbose() {
-        output.workflow_step(4, 5, "Checking MCP server", "🔧");
+        output.workflow_step(4, 6, "Checking MCP server", "🔧");
     }
     check_mcp_status(output);
     
     if output.is_verbose() {
-        output.workflow_step(5, 5, "Analyzing security status", "🔒");
+        output.workflow_step(5, 6, "Analyzing security status", "🔒");
     }
     check_security_status(&current_dir, output);
+    
+    if output.is_verbose() {
+        output.workflow_step(6, 6, "Detecting development tools", "🛠️");
+    }
+    check_tools_status(&current_dir, output);
     
     // Show completion summary with timing
     let duration = start_time.elapsed();
@@ -224,5 +230,23 @@ fn check_security_status(current_dir: &Path, output: &Output) {
         }
     } else {
         output.status_indicator("UNAVAILABLE", "Security configuration not available", false);
+    }
+}
+
+/// Check development tools status
+fn check_tools_status(current_dir: &Path, output: &Output) {
+    output.category("Development Tools");
+    
+    // Load configuration to determine if auto-detection is enabled
+    let config_path = current_dir.join("guardy.yml");
+    let config = GuardyConfig::load_from_file(&config_path).unwrap_or_default();
+    
+    if config.tools.auto_detect {
+        // TODO: Implement tool detection once import issues are resolved
+        output.status_indicator("PLACEHOLDER", "Tool detection temporarily disabled", false);
+        output.indent("Implementation in progress - will show detected tools soon");
+    } else {
+        output.status_indicator("DISABLED", "Auto-detection disabled", false);
+        output.indent("Enable with: tools.auto_detect = true in guardy.yml");
     }
 }

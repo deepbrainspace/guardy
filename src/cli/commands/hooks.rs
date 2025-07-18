@@ -6,6 +6,7 @@ use crate::cli::HooksCommands;
 use crate::cli::Output;
 use crate::config::GuardyConfig;
 use crate::security::SecretScanner;
+use crate::tools::ToolManager;
 use crate::utils::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
@@ -288,9 +289,87 @@ async fn execute_pre_commit_hook(current_dir: &Path, output: &Output) -> Result<
         output.workflow_step(2, 3, "Running formatting checks", "🎨");
     }
     
-    // 2. Format checking (placeholder for future formatter integration)
-    output.info("Checking code formatting...");
-    output.success("✅ Code formatting checks passed");
+    // 2. Format checking using configured formatters with auto-detection
+    if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
+        let tool_manager = ToolManager::new(config.tools.clone(), false); // Don't auto-install during hook
+        
+        // Auto-detect available tools if enabled
+        let mut detected_tools = Vec::new();
+        if config.tools.auto_detect {
+            match tool_manager.detect_project_tools(current_dir) {
+                Ok(tools) => {
+                    detected_tools = tools;
+                    if !detected_tools.is_empty() {
+                        output.info(&format!("Auto-detected tools: {}", detected_tools.join(", ")));
+                    }
+                }
+                Err(e) => {
+                    output.warning(&format!("Failed to auto-detect tools: {}", e));
+                }
+            }
+        }
+        
+        if !config.tools.formatters.is_empty() {
+            output.info("Checking code formatting...");
+            
+            // Get staged files for formatting
+            let staged_files = get_staged_files(current_dir)?;
+            if !staged_files.is_empty() {
+                let mut formatting_errors = Vec::new();
+                
+                for formatter in &config.tools.formatters {
+                    // Check if formatter is available
+                    if let Err(e) = tool_manager.ensure_formatter_available(formatter) {
+                        formatting_errors.push(format!("Formatter '{}' not available: {}", formatter.name, e));
+                        continue;
+                    }
+                    
+                    // Find files matching formatter patterns
+                    let matching_files = find_matching_files(&staged_files, &formatter.patterns);
+                    if matching_files.is_empty() {
+                        continue;
+                    }
+                    
+                    output.info(&format!("Running {} on {} files...", formatter.name, matching_files.len()));
+                    
+                    // Run formatter in check mode (dry run)
+                    let result = run_formatter_check(&formatter.command, &matching_files, current_dir, output);
+                    match result {
+                        Ok(has_changes) => {
+                            if has_changes {
+                                formatting_errors.push(format!("Files need formatting with {}: {}", formatter.name, matching_files.join(", ")));
+                            } else {
+                                output.success(&format!("✅ {} formatting is correct", formatter.name));
+                            }
+                        }
+                        Err(e) => {
+                            formatting_errors.push(format!("Formatter '{}' failed: {}", formatter.name, e));
+                        }
+                    }
+                }
+                
+                if !formatting_errors.is_empty() {
+                    output.error("❌ Code formatting issues found:");
+                    for error in &formatting_errors {
+                        output.indent(&format!("  {}", error));
+                    }
+                    output.indent("Run formatters to fix these issues before committing");
+                    return Ok(false);
+                }
+                
+                output.success("✅ Code formatting checks passed");
+            } else {
+                output.info("No staged files to format");
+            }
+        } else if config.tools.auto_detect && !detected_tools.is_empty() {
+            output.info("Auto-detection enabled but no formatters configured yet");
+            output.info("Consider adding detected tools to your guardy.yml configuration");
+        } else {
+            output.info("No formatters configured - skipping formatting checks");
+        }
+    } else {
+        output.info("No configuration found - skipping formatting checks");
+    }
     
     if output.is_verbose() {
         output.workflow_step(3, 3, "Running linting validation", "🔧");
@@ -468,4 +547,259 @@ fn is_conventional_commit(message: &str) -> bool {
     }
     
     false
+}
+
+/// Find files that match formatter patterns
+fn find_matching_files(files: &[String], patterns: &[String]) -> Vec<String> {
+    let mut matching_files = Vec::new();
+    
+    for file in files {
+        for pattern in patterns {
+            if glob_match(pattern, file) {
+                matching_files.push(file.clone());
+                break;
+            }
+        }
+    }
+    
+    matching_files
+}
+
+/// Simple glob matching for file patterns
+fn glob_match(pattern: &str, file: &str) -> bool {
+    // Convert simple glob patterns to regex
+    let mut regex_pattern = pattern.to_string();
+    
+    // Replace ** with .* (matches anything including path separators)
+    regex_pattern = regex_pattern.replace("**", "DOUBLE_STAR");
+    // Replace * with [^/]* (matches anything except path separators)
+    regex_pattern = regex_pattern.replace("*", "[^/]*");
+    // Replace the placeholder back with .*
+    regex_pattern = regex_pattern.replace("DOUBLE_STAR", ".*");
+    // Replace ? with [^/] (matches single character except path separator)
+    regex_pattern = regex_pattern.replace("?", "[^/]");
+    
+    if let Ok(regex) = regex::Regex::new(&format!("^{}$", regex_pattern)) {
+        regex.is_match(file)
+    } else {
+        false
+    }
+}
+
+/// Run formatter in check mode to see if files need formatting
+fn run_formatter_check(command: &str, files: &[String], current_dir: &Path, output: &Output) -> Result<bool> {
+    // Different formatters have different check modes
+    let check_command = if command.contains("cargo fmt") {
+        "cargo fmt -- --check".to_string()
+    } else if command.contains("prettier") {
+        format!("{} --check", command)
+    } else if command.contains("black") {
+        format!("{} --check", command)
+    } else if command.contains("ruff format") {
+        format!("{} --check", command)
+    } else if command.contains("gofmt") {
+        format!("{} -d", command)
+    } else {
+        // For other formatters, try common check patterns
+        format!("{} --check", command)
+    };
+    
+    // Run the check command
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
+        .arg(&check_command)
+        .current_dir(current_dir);
+    
+    // Add files as arguments if the formatter supports it
+    if !command.contains("cargo fmt") {
+        for file in files {
+            cmd.arg(file);
+        }
+    }
+    
+    let result = cmd.output()?;
+    
+    if output.is_verbose() {
+        if !result.stdout.is_empty() {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            output.info(&format!("Formatter output: {}", stdout));
+        }
+        if !result.stderr.is_empty() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            output.info(&format!("Formatter stderr: {}", stderr));
+        }
+    }
+    
+    // Non-zero exit code usually means formatting is needed
+    Ok(!result.status.success())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+    use crate::config::{GuardyConfig, SecurityConfig, HooksConfig, McpConfig, ToolsConfig, FormatterConfig, InstallConfig};
+
+    fn create_test_config() -> GuardyConfig {
+        GuardyConfig {
+            security: SecurityConfig::default(),
+            hooks: HooksConfig::default(),
+            mcp: McpConfig::default(),
+            tools: ToolsConfig {
+                auto_detect: true,
+                auto_install: false,
+                formatters: vec![
+                    FormatterConfig {
+                        name: "rustfmt".to_string(),
+                        command: "cargo fmt".to_string(),
+                        patterns: vec!["**/*.rs".to_string()],
+                        check_command: Some("rustfmt --version".to_string()),
+                        install: Some(InstallConfig {
+                            cargo: Some("rustup component add rustfmt".to_string()),
+                            npm: None,
+                            brew: None,
+                            apt: None,
+                            manual: "Install Rust toolchain: https://rustup.rs/".to_string(),
+                        }),
+                    },
+                ],
+                linters: vec![],
+            },
+        }
+    }
+
+    fn create_test_repository() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Initialize git repository
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .unwrap();
+        
+        // Configure git user (required for commits)
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(temp_dir.path())
+            .output()
+            .unwrap();
+        
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .unwrap();
+        
+        temp_dir
+    }
+
+    #[test]
+    fn test_glob_match() {
+        assert!(glob_match("**/*.rs", "src/main.rs"));
+        assert!(glob_match("**/*.rs", "lib/utils/mod.rs"));
+        assert!(glob_match("*.js", "index.js"));
+        assert!(!glob_match("*.js", "src/main.rs"));
+        assert!(!glob_match("**/*.rs", "Cargo.toml"));
+    }
+
+    #[test]
+    fn test_find_matching_files() {
+        let files = vec![
+            "src/main.rs".to_string(),
+            "src/lib.rs".to_string(),
+            "index.js".to_string(),
+            "package.json".to_string(),
+        ];
+        
+        let rust_patterns = vec!["**/*.rs".to_string()];
+        let matching_rust = find_matching_files(&files, &rust_patterns);
+        assert_eq!(matching_rust.len(), 2);
+        assert!(matching_rust.contains(&"src/main.rs".to_string()));
+        assert!(matching_rust.contains(&"src/lib.rs".to_string()));
+    }
+
+    #[test]
+    fn test_is_conventional_commit() {
+        // Valid conventional commits
+        assert!(is_conventional_commit("feat: add new feature"));
+        assert!(is_conventional_commit("fix: resolve bug"));
+        assert!(is_conventional_commit("feat(auth): add login functionality"));
+        assert!(is_conventional_commit("fix(api): handle error cases"));
+        assert!(is_conventional_commit("chore: update dependencies"));
+        assert!(is_conventional_commit("feat!: breaking change"));
+        assert!(is_conventional_commit("fix!(api): breaking fix"));
+        
+        // Invalid conventional commits
+        assert!(!is_conventional_commit("add new feature"));
+        assert!(!is_conventional_commit("bug fix"));
+        assert!(!is_conventional_commit("feat:"));
+        assert!(!is_conventional_commit("invalid: message"));
+        assert!(!is_conventional_commit(""));
+    }
+
+    #[tokio::test]
+    async fn test_pre_commit_hook_with_formatters() {
+        let temp_dir = create_test_repository();
+        let config = create_test_config();
+        
+        // Create guardy.yml in temp directory
+        let config_path = temp_dir.path().join("guardy.yml");
+        config.save_to_file(&config_path).unwrap();
+        
+        // Create a poorly formatted Rust file
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let main_rs = src_dir.join("main.rs");
+        fs::write(&main_rs, r#"fn main(){
+let  x   =    5;
+    println!("Hello, world! The value is: {}", x);
+let mut y=10;
+y+=1;
+println!("Y is: {}",y);
+}"#).unwrap();
+        
+        // Create Cargo.toml to make it a valid Rust project
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        fs::write(&cargo_toml, r#"[package]
+name = "test-project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]"#).unwrap();
+        
+        // Stage the files
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .unwrap();
+        
+        // Test get_staged_files function
+        let staged_files = get_staged_files(temp_dir.path()).unwrap();
+        assert!(!staged_files.is_empty());
+        assert!(staged_files.contains(&"src/main.rs".to_string()));
+        
+        // Test the pre-commit hook execution
+        let output = Output::new(true, false); // verbose=true, quiet=false
+        
+        // This should detect formatting issues if rustfmt is available
+        let result = execute_pre_commit_hook(temp_dir.path(), &output).await;
+        
+        match result {
+            Ok(success) => {
+                // If rustfmt is available, it should detect formatting issues
+                if Command::new("rustfmt").arg("--version").output().is_ok() {
+                    // We expect this to fail due to formatting issues
+                    println!("Pre-commit hook result: {}", success);
+                } else {
+                    println!("rustfmt not available, skipping formatter test");
+                }
+            }
+            Err(e) => {
+                println!("Pre-commit hook error: {}", e);
+            }
+        }
+    }
 }

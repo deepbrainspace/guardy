@@ -7,6 +7,7 @@ mod git;
 mod hooks;
 mod mcp;
 mod security;
+mod tools;
 mod utils;
 
 use cli::Cli;
