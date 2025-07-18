@@ -53,6 +53,35 @@ impl Output {
         }
     }
 
+    /// Print a verbose step with emoji and styling
+    pub fn verbose_step(&self, emoji: &str, message: &str) {
+        if self.verbose {
+            println!("{} {}", style(emoji).cyan(), style(message).dim());
+        }
+    }
+
+    /// Print a verbose summary with styling
+    pub fn verbose_summary(&self, icon: &str, message: &str, count: usize) {
+        if self.verbose {
+            println!("{} {} {}", 
+                style(icon).cyan(), 
+                style(message).dim(), 
+                style(format!("({})", count)).yellow().bold()
+            );
+        }
+    }
+
+    /// Print a verbose breakdown item
+    pub fn verbose_breakdown(&self, label: &str, count: usize) {
+        if self.verbose {
+            println!("  {} {} {}", 
+                style("•").cyan(), 
+                style(count.to_string()).yellow().bold(), 
+                style(label).dim()
+            );
+        }
+    }
+
     /// Get verbose mode status
     pub fn is_verbose(&self) -> bool {
         self.verbose

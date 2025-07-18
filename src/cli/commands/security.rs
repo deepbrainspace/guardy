@@ -93,7 +93,7 @@ async fn scan(
     } else if let Some(dir) = directory {
         // Scan specific directory
         if output.is_verbose() {
-            output.step(&format!("Analyzing directory: {}", dir));
+            output.verbose_step("📁", &format!("Analyzing directory: {}", dir));
         }
         let dir_path = Path::new(&dir);
         if dir_path.exists() && dir_path.is_dir() {
@@ -108,7 +108,7 @@ async fn scan(
     } else {
         // Scan current directory
         if output.is_verbose() {
-            output.step("Analyzing current directory");
+            output.verbose_step("🏠", "Analyzing current directory");
         }
         let (matches, scanned, excluded) = scanner.scan_directory(&current_dir)?;
         all_matches.extend(matches);
@@ -144,7 +144,7 @@ fn display_scan_results(
                     output.separator();
                     output.blank_line();
                 }
-                output.task_summary("✓", "Security scan completed successfully", true);
+                output.task_summary("✓", "Security scan completed successfully 🎉", true);
                 output.blank_line();
                 output.summary_stats("Files scanned:", files_scanned);
                 output.summary_stats("Files excluded:", files_excluded);
@@ -201,7 +201,7 @@ fn display_scan_results(
                 }
                 
                 // Enhanced summary with separate lines for better readability
-                output.task_summary("✗", &format!("Security scan completed with {} issues", matches.len()), false);
+                output.task_summary("✗", &format!("Security scan completed with {} issues 🔍", matches.len()), false);
                 output.blank_line();
                 output.summary_stats("Files scanned:", files_scanned);
                 output.summary_stats("Files excluded:", files_excluded);
