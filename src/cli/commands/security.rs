@@ -28,7 +28,7 @@ async fn scan(
     output: &Output,
 ) -> Result<()> {
     if output.is_verbose() {
-        output.header("🔍 Security Scanning");
+        output.section_header("🔍 Security Scanning");
     }
 
     let current_dir = get_current_dir()?;
@@ -140,15 +140,17 @@ fn display_scan_results(
         }
         _ => {
             if matches.is_empty() {
-                let summary = if files_excluded > 0 {
-                    format!("Scan completed successfully: scanned {} files. {} files excluded", files_scanned, files_excluded)
-                } else {
-                    format!("Scan completed successfully: scanned {} files", files_scanned)
-                };
-                output.success(&summary);
+                if !output.is_quiet() {
+                    output.separator();
+                    output.blank_line();
+                }
+                output.task_summary("✓", "Security scan completed successfully", true);
+                output.blank_line();
+                output.summary_stats("Files scanned:", files_scanned);
+                output.summary_stats("Files excluded:", files_excluded);
             } else {
                 if !output.is_quiet() {
-                    output.warning(&format!("⚠ Found {} security issues", matches.len()));
+                    output.count("⚠", "Found security issues", matches.len());
                     output.blank_line();
                 }
 
@@ -160,23 +162,29 @@ fn display_scan_results(
 
                 for (pattern_name, pattern_matches) in grouped_matches.iter() {
                     let severity = &pattern_matches[0].severity;
-                    let _severity_color = match severity {
-                        crate::security::Severity::Critical => "red",
-                        crate::security::Severity::Info => "yellow",
+                    let (_severity_symbol, severity_color) = match severity {
+                        crate::security::Severity::Critical => ("✖", "red"),
+                        crate::security::Severity::Info => ("⚠", "yellow"),
                     };
 
-                    output.error(&format!(
-                        "[{}] {} ({} occurrence{})",
+                    // Print the pattern header with enhanced styling
+                    let pattern_header = format!("[{}] {} ({} occurrence{})",
                         severity,
                         pattern_name,
                         pattern_matches.len(),
                         if pattern_matches.len() == 1 { "" } else { "s" }
-                    ));
+                    );
+                    
+                    if severity_color == "red" {
+                        output.critical(&pattern_header);
+                    } else {
+                        output.warning(&pattern_header);
+                    }
 
                     for security_match in pattern_matches {
-                        // Show relative path instead of full path
+                        // Show relative path instead of full path with enhanced styling
                         let relative_path = PathUtils::to_relative_path(&security_match.file_path);
-                        output.indent(&format!("• {}:{}", relative_path, security_match.line_number));
+                        output.file_location(&relative_path, security_match.line_number);
                         if output.is_verbose() {
                             output.indent(&format!("  Content: {}", security_match.content));
                         }
@@ -189,13 +197,14 @@ fn display_scan_results(
 
                 if !output.is_quiet() {
                     output.separator();
+                    output.blank_line();
                 }
-                let summary = if files_excluded > 0 {
-                    format!("Security scan completed with {} issues: scanned {} files. {} files excluded", matches.len(), files_scanned, files_excluded)
-                } else {
-                    format!("Security scan completed with {} issues: scanned {} files", matches.len(), files_scanned)
-                };
-                output.error(&format!("✖ {}", summary));
+                
+                // Enhanced summary with separate lines for better readability
+                output.task_summary("✗", &format!("Security scan completed with {} issues", matches.len()), false);
+                output.blank_line();
+                output.summary_stats("Files scanned:", files_scanned);
+                output.summary_stats("Files excluded:", files_excluded);
             }
         }
     }

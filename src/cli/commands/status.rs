@@ -36,11 +36,10 @@ pub async fn execute(output: &Output) -> Result<()> {
 
 /// Check git repository status
 fn check_git_status(current_dir: &Path, output: &Output) {
-    output.blank_line();
-    output.step("Git Repository");
+    output.category("Git Repository");
     
     if FileUtils::is_git_repository(current_dir) {
-        output.success("Git repository detected");
+        output.status_indicator("DETECTED", "Git repository found", true);
         
         // Get current branch
         if let Ok(branch) = std::process::Command::new("git")
@@ -48,7 +47,7 @@ fn check_git_status(current_dir: &Path, output: &Output) {
             .output()
         {
             if let Ok(branch_name) = String::from_utf8(branch.stdout) {
-                output.table_row("Current branch", branch_name.trim());
+                output.key_value("Current branch:", branch_name.trim(), true);
             }
         }
         
@@ -58,41 +57,40 @@ fn check_git_status(current_dir: &Path, output: &Output) {
             .output()
         {
             if let Ok(root_path) = String::from_utf8(root.stdout) {
-                output.table_row("Repository root", root_path.trim());
+                output.key_value("Repository root:", root_path.trim(), false);
             }
         }
     } else {
-        output.error("Not a git repository");
+        output.status_indicator("NOT FOUND", "Git repository not found", false);
         output.indent("Run 'git init' to initialize a git repository");
     }
 }
 
 /// Check configuration file status
 fn check_config_status(current_dir: &Path, output: &Output) {
-    output.blank_line();
-    output.step("Configuration");
+    output.category("Configuration");
     
     let config_path = current_dir.join("guardy.yml");
     
     if config_path.exists() {
-        output.success("Configuration file found");
-        output.table_row("Config file", &config_path.display().to_string());
+        output.status_indicator("FOUND", "Configuration file found", true);
+        output.key_value("Config file:", &config_path.display().to_string(), false);
         
         // Try to load and validate config
         match GuardyConfig::load_from_file(&config_path) {
             Ok(config) => {
-                output.success("Configuration is valid");
-                output.table_row("Security patterns", &config.security.patterns.len().to_string());
-                output.table_row("Tool integrations", &(config.tools.formatters.len() + config.tools.linters.len()).to_string());
-                output.table_row("MCP server enabled", &config.mcp.enabled.to_string());
+                output.status_indicator("VALID", "Configuration is valid", true);
+                output.key_value("Security patterns:", &config.security.patterns.len().to_string(), false);
+                output.key_value("Tool integrations:", &(config.tools.formatters.len() + config.tools.linters.len()).to_string(), false);
+                output.key_value("MCP server enabled:", &config.mcp.enabled.to_string(), config.mcp.enabled);
             }
             Err(err) => {
-                output.error("Configuration file is invalid");
+                output.status_indicator("INVALID", "Configuration file is invalid", false);
                 output.indent(&format!("Error: {}", err));
             }
         }
     } else {
-        output.warning("No configuration file found");
+        output.status_indicator("NOT FOUND", "No configuration file found", false);
         output.indent("Run 'guardy init' to create a configuration file");
     }
 }

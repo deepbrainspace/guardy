@@ -70,6 +70,13 @@ impl Output {
         }
     }
 
+    /// Print a section header with enhanced styling
+    pub fn section_header(&self, title: &str) {
+        if !self.quiet {
+            println!("\n{}", style(title).bold().cyan());
+        }
+    }
+
     /// Print a step in a process
     pub fn step(&self, step: &str) {
         if !self.quiet {
@@ -128,6 +135,21 @@ impl Output {
         println!("{}", style("─".repeat(50)).dim());
     }
 
+    /// Print a task completion summary like Claude Code
+    pub fn task_summary(&self, icon: &str, message: &str, success: bool) {
+        let styled_icon = if success {
+            style(icon).green().bold()
+        } else {
+            style(icon).red().bold()
+        };
+        let styled_message = if success {
+            style(message).green()
+        } else {
+            style(message).red()
+        };
+        println!("{} {}", styled_icon, styled_message);
+    }
+
     /// Ask for user confirmation
     pub fn confirm(&self, message: &str) -> bool {
         print!("{} {} (y/N): ", style("❯").cyan(), message);
@@ -142,5 +164,106 @@ impl Output {
     /// Print blank line
     pub fn blank_line(&self) {
         println!();
+    }
+
+    /// Print a critical error with enhanced styling
+    pub fn critical(&self, message: &str) {
+        eprintln!("{} {}", style("✖").red().bold(), style(message).red().bold());
+    }
+
+    /// Print a count/summary with enhanced styling
+    pub fn count(&self, icon: &str, message: &str, count: usize) {
+        if !self.quiet {
+            println!("{} {} {}", 
+                style(icon).cyan().bold(), 
+                style(message).bold(), 
+                style(format!("({})", count)).dim()
+            );
+        }
+    }
+
+    /// Print a file location with enhanced styling
+    pub fn file_location(&self, file: &str, line: usize) {
+        println!("    {} {}:{}", 
+            style("•").cyan(), 
+            style(file).underlined(), 
+            style(line.to_string()).yellow()
+        );
+    }
+
+    /// Print summary statistics with enhanced styling
+    pub fn summary_stats(&self, label: &str, value: usize) {
+        if !self.quiet {
+            println!("  {} {}", 
+                style(label).dim(), 
+                style(value.to_string()).bold()
+            );
+        }
+    }
+
+    /// Print a key-value pair with consistent styling
+    pub fn key_value(&self, key: &str, value: &str, highlight: bool) {
+        if !self.quiet {
+            let styled_value = if highlight {
+                style(value).green().bold()
+            } else {
+                style(value).white()
+            };
+            println!("  {} {}", style(key).dim(), styled_value);
+        }
+    }
+
+    /// Print a status indicator with consistent styling
+    pub fn status_indicator(&self, status: &str, message: &str, is_success: bool) {
+        if !self.quiet {
+            let (icon, color) = if is_success {
+                ("✓", style(status).green())
+            } else {
+                ("✗", style(status).red())
+            };
+            println!("{} {} {}", 
+                style(icon).bold(),
+                color.bold(),
+                message
+            );
+        }
+    }
+
+    /// Print a category header with consistent styling
+    pub fn category(&self, category: &str) {
+        if !self.quiet {
+            println!("\n{}", style(category).bold().cyan());
+        }
+    }
+
+    /// Print a progress indicator with consistent styling
+    pub fn progress_indicator(&self, current: usize, total: usize, message: &str) {
+        if !self.quiet {
+            let percentage = if total > 0 { (current * 100) / total } else { 0 };
+            println!("{} {} {}% ({}/{})", 
+                style("►").cyan(),
+                message,
+                style(percentage.to_string()).bold(),
+                current,
+                total
+            );
+        }
+    }
+
+    /// Print an action result with consistent styling
+    pub fn action_result(&self, action: &str, result: &str, success: bool) {
+        if !self.quiet {
+            let icon = if success { "✓" } else { "✗" };
+            let styled_icon = if success {
+                style(icon).green().bold()
+            } else {
+                style(icon).red().bold()
+            };
+            println!("{} {} {}", 
+                styled_icon,
+                style(action).bold(),
+                style(result).dim()
+            );
+        }
     }
 }
