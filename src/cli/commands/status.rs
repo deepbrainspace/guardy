@@ -39,7 +39,7 @@ fn check_git_status(current_dir: &Path, output: &Output) {
     output.category("Git Repository");
     
     if FileUtils::is_git_repository(current_dir) {
-        output.status_indicator("DETECTED", "Git repository found", true);
+        output.status_indicator("DETECTED", "Git repository found 🎯", true);
         
         // Get current branch
         if let Ok(branch) = std::process::Command::new("git")
@@ -73,13 +73,13 @@ fn check_config_status(current_dir: &Path, output: &Output) {
     let config_path = current_dir.join("guardy.yml");
     
     if config_path.exists() {
-        output.status_indicator("FOUND", "Configuration file found", true);
+        output.status_indicator("FOUND", "Configuration file found 📋", true);
         output.key_value("Config file:", &config_path.display().to_string(), false);
         
         // Try to load and validate config
         match GuardyConfig::load_from_file(&config_path) {
             Ok(config) => {
-                output.status_indicator("VALID", "Configuration is valid", true);
+                output.status_indicator("VALID", "Configuration is valid ✅", true);
                 output.key_value("Security patterns:", &config.security.patterns.len().to_string(), false);
                 output.key_value("Tool integrations:", &(config.tools.formatters.len() + config.tools.linters.len()).to_string(), false);
                 output.key_value("MCP server enabled:", &config.mcp.enabled.to_string(), config.mcp.enabled);

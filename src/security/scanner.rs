@@ -26,7 +26,7 @@ impl SecretScanner {
 
         // Build GlobSet from exclude patterns using unified utility
         if output.is_verbose() {
-            output.verbose(&format!("Loading {} exclude patterns", exclude_patterns.len()));
+            output.verbose_step("📋", &format!("Loading {} exclude patterns", exclude_patterns.len()));
         }
         let exclude_globset = build_globset(&exclude_patterns)
             .with_context(|| "Failed to build exclude pattern globset")?;
@@ -100,9 +100,13 @@ impl SecretScanner {
 
         // Show excluded files summary if verbose
         if self.verbose && !exclusion_counts.is_empty() {
-            println!("Excluded {} files:", total_excluded);
+            println!("🚫 {} files excluded:", total_excluded);
             for (reason, count) in exclusion_counts {
-                println!("  {} files ({})", count, reason);
+                println!("  {} {} files ({})", 
+                    console::style("•").cyan(),
+                    console::style(count).yellow().bold(),
+                    console::style(reason).dim()
+                );
             }
         }
 
@@ -110,7 +114,7 @@ impl SecretScanner {
 
         // Show scanning summary
         if self.verbose && !files_to_scan.is_empty() {
-            println!("Scanning {} files", files_scanned);
+            println!("🔍 Scanning {} files...", console::style(files_scanned).cyan().bold());
         }
 
         // Scan the files
@@ -146,9 +150,13 @@ impl SecretScanner {
 
         // Show excluded files summary if verbose
         if self.verbose && !exclusion_counts.is_empty() {
-            println!("Excluded {} files:", total_excluded);
+            println!("🚫 {} files excluded:", total_excluded);
             for (reason, count) in exclusion_counts {
-                println!("  {} files ({})", count, reason);
+                println!("  {} {} files ({})", 
+                    console::style("•").cyan(),
+                    console::style(count).yellow().bold(),
+                    console::style(reason).dim()
+                );
             }
         }
 
@@ -156,7 +164,7 @@ impl SecretScanner {
 
         // Show scanning summary
         if self.verbose && !files_to_scan.is_empty() {
-            println!("Scanning {} files", files_scanned);
+            println!("🔍 Scanning {} files...", console::style(files_scanned).cyan().bold());
         }
 
         // Scan the files
