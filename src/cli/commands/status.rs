@@ -122,7 +122,9 @@ fn check_hooks_status(current_dir: &Path, output: &Output) {
     
     if hooks_dir.exists() {
         let hooks = ["pre-commit", "commit-msg", "pre-push"];
-        let mut installed_count = 0;
+        let mut installed_hooks = Vec::new();
+        let mut external_hooks = Vec::new();
+        let mut missing_hooks = Vec::new();
         
         for hook in &hooks {
             let hook_path = hooks_dir.join(hook);
@@ -130,22 +132,44 @@ fn check_hooks_status(current_dir: &Path, output: &Output) {
                 // Check if it's a Guardy hook
                 if let Ok(content) = fs::read_to_string(&hook_path) {
                     if content.contains("guardy") {
-                        output.status_indicator("INSTALLED", &format!("{} hook installed", hook), true);
-                        installed_count += 1;
+                        installed_hooks.push(hook);
                     } else {
-                        output.status_indicator("EXTERNAL", &format!("{} hook exists but not managed by Guardy", hook), false);
+                        external_hooks.push(hook);
                     }
                 } else {
-                    output.status_indicator("UNREADABLE", &format!("{} hook exists but cannot be read", hook), false);
+                    external_hooks.push(hook);
                 }
             } else {
-                output.status_indicator("MISSING", &format!("{} hook not installed", hook), false);
+                missing_hooks.push(hook);
             }
         }
         
-        output.key_value("Installed hooks:", &format!("{}/{}", installed_count, hooks.len()), installed_count > 0);
+        // Show overall status
+        if installed_hooks.len() == hooks.len() {
+            output.status_indicator("COMPLETE", "All git hooks installed", true);
+        } else if !installed_hooks.is_empty() {
+            output.status_indicator("PARTIAL", "Some git hooks installed", false);
+        } else {
+            output.status_indicator("NONE", "No git hooks installed", false);
+        }
         
-        if installed_count == 0 {
+        // Show details
+        if !installed_hooks.is_empty() {
+            let installed_list: Vec<String> = installed_hooks.iter().map(|s| s.to_string()).collect();
+            output.key_value("Installed:", &installed_list.join(", "), true);
+        }
+        if !external_hooks.is_empty() {
+            let external_list: Vec<String> = external_hooks.iter().map(|s| s.to_string()).collect();
+            output.key_value("External:", &external_list.join(", "), false);
+        }
+        if !missing_hooks.is_empty() {
+            let missing_list: Vec<String> = missing_hooks.iter().map(|s| s.to_string()).collect();
+            output.key_value("Missing:", &missing_list.join(", "), false);
+        }
+        
+        output.key_value("Status:", &format!("{}/{} hooks active", installed_hooks.len(), hooks.len()), installed_hooks.len() > 0);
+        
+        if installed_hooks.is_empty() {
             output.indent("Run 'guardy hooks install' to install git hooks");
         }
     } else {
