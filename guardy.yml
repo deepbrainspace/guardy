@@ -34,7 +34,6 @@ security:
   exclude_patterns:
   - '*.tmp'
   - '*.temp'
-  - 'demo-secrets.js'
   use_gitignore: true
   protected_branches:
   - main
