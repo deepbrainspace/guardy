@@ -81,6 +81,7 @@ impl SecretScanner {
 
     /// Scan multiple files for secrets
     pub fn scan_files<P: AsRef<Path>>(&self, files: &[P]) -> Result<(Vec<SecurityMatch>, usize, usize)> {
+        let output = crate::cli::Output::new(self.verbose, false);
         let mut all_matches = Vec::new();
         let mut files_to_scan = Vec::new();
         let mut exclusion_counts = std::collections::HashMap::new();
@@ -100,27 +101,35 @@ impl SecretScanner {
 
         // Show excluded files summary if verbose
         if self.verbose && !exclusion_counts.is_empty() {
-            println!("🚫 {} files excluded:", total_excluded);
+            output.verbose_summary("🚫", "files excluded", total_excluded);
             for (reason, count) in exclusion_counts {
-                println!("  {} {} files ({})", 
-                    console::style("•").cyan(),
-                    console::style(count).yellow().bold(),
-                    console::style(reason).dim()
-                );
+                output.verbose_breakdown(&reason, count);
             }
         }
 
         let files_scanned = files_to_scan.len();
 
-        // Show scanning summary
+        // Show scanning summary with progress
         if self.verbose && !files_to_scan.is_empty() {
-            println!("🔍 Scanning {} files...", console::style(files_scanned).cyan().bold());
+            output.verbose_step("🔍", &format!("Starting scan of {} files", files_scanned));
         }
 
-        // Scan the files
-        for file_path in files_to_scan {
+        // Scan the files with progress indication
+        for (index, file_path) in files_to_scan.iter().enumerate() {
+            if self.verbose && files_scanned > 10 {
+                let file_name = file_path.file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_else(|| "unknown".into());
+                output.scanning_progress(index + 1, files_scanned, &file_name);
+            }
+            
             let matches = self.scan_file(file_path)?;
             all_matches.extend(matches);
+        }
+
+        // Clear progress line if we were showing it
+        if self.verbose && files_scanned > 10 {
+            output.clear_line();
         }
 
         Ok((all_matches, files_scanned, total_excluded))
@@ -128,9 +137,15 @@ impl SecretScanner {
 
     /// Scan a directory recursively for secrets
     pub fn scan_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<(Vec<SecurityMatch>, usize, usize)> {
+        let output = crate::cli::Output::new(self.verbose, false);
         let mut all_matches = Vec::new();
         let mut files_to_scan = Vec::new();
         let mut exclusion_counts = std::collections::HashMap::new();
+
+        // Show discovery phase
+        if self.verbose {
+            output.verbose_step("🔍", "Discovering files in directory tree");
+        }
 
         // Collect all files that will be scanned and count exclusions by reason
         for entry in WalkDir::new(dir_path).into_iter().filter_map(|e| e.ok()) {
@@ -150,27 +165,35 @@ impl SecretScanner {
 
         // Show excluded files summary if verbose
         if self.verbose && !exclusion_counts.is_empty() {
-            println!("🚫 {} files excluded:", total_excluded);
+            output.verbose_summary("🚫", "files excluded", total_excluded);
             for (reason, count) in exclusion_counts {
-                println!("  {} {} files ({})", 
-                    console::style("•").cyan(),
-                    console::style(count).yellow().bold(),
-                    console::style(reason).dim()
-                );
+                output.verbose_breakdown(&reason, count);
             }
         }
 
         let files_scanned = files_to_scan.len();
 
-        // Show scanning summary
+        // Show scanning summary with progress
         if self.verbose && !files_to_scan.is_empty() {
-            println!("🔍 Scanning {} files...", console::style(files_scanned).cyan().bold());
+            output.verbose_step("🔍", &format!("Starting scan of {} files", files_scanned));
         }
 
-        // Scan the files
-        for file_path in files_to_scan {
-            let matches = self.scan_file(&file_path)?;
+        // Scan the files with progress indication
+        for (index, file_path) in files_to_scan.iter().enumerate() {
+            if self.verbose && files_scanned > 10 {
+                let file_name = file_path.file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_else(|| "unknown".into());
+                output.scanning_progress(index + 1, files_scanned, &file_name);
+            }
+            
+            let matches = self.scan_file(file_path)?;
             all_matches.extend(matches);
+        }
+
+        // Clear progress line if we were showing it
+        if self.verbose && files_scanned > 10 {
+            output.clear_line();
         }
 
         Ok((all_matches, files_scanned, total_excluded))

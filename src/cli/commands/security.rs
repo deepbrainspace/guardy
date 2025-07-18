@@ -27,6 +27,8 @@ async fn scan(
     format: String,
     output: &Output,
 ) -> Result<()> {
+    let start_time = std::time::Instant::now();
+    
     if output.is_verbose() {
         output.section_header("🔍 Security Scanning");
     }
@@ -34,7 +36,11 @@ async fn scan(
     let current_dir = get_current_dir()?;
     let config_path = current_dir.join("guardy.yml");
 
-    // Load configuration
+    // Step 1: Load configuration
+    if output.is_verbose() {
+        output.workflow_step(1, 4, "Loading configuration", "⚙️");
+    }
+    
     let config = if config_path.exists() {
         GuardyConfig::load_from_file(&config_path)?
     } else {
@@ -48,12 +54,21 @@ async fn scan(
         return Ok(());
     }
 
-    // Create scanner
+    // Step 2: Initialize scanner
+    if output.is_verbose() {
+        output.workflow_step(2, 4, "Initializing scanner", "🔧");
+    }
+    
     let scanner = SecretScanner::from_config(&config, output)?;
 
     let mut all_matches = Vec::new();
     let mut files_scanned = 0;
     let mut files_excluded = 0;
+
+    // Step 3: Scan files
+    if output.is_verbose() {
+        output.workflow_step(3, 4, "Scanning files", "🔍");
+    }
 
     if !files.is_empty() {
         // Scan specific files (including glob patterns)
@@ -116,11 +131,21 @@ async fn scan(
         files_excluded = excluded;
     }
 
-    // Display results
+    // Step 4: Display results
+    if output.is_verbose() {
+        output.workflow_step(4, 4, "Displaying results", "📊");
+    }
+    
     if !output.is_quiet() {
         output.blank_line();
     }
     display_scan_results(&all_matches, files_scanned, files_excluded, &format, output)?;
+
+    // Show completion summary with timing
+    let duration = start_time.elapsed();
+    if output.is_verbose() {
+        output.completion_summary("Security scan", duration, all_matches.is_empty());
+    }
 
     Ok(())
 }
