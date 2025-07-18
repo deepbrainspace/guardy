@@ -4,6 +4,7 @@
 //! from YAML files. It supports project-specific and global configuration.
 
 use anyhow::{Context, Result};
+use crate::utils::glob::process_ignore_patterns;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -375,23 +376,9 @@ impl GuardyConfig {
                     )
                 })?;
 
-                for line in content.lines() {
-                    let line = line.trim();
-
-                    // Skip empty lines and comments
-                    if line.is_empty() || line.starts_with('#') {
-                        continue;
-                    }
-
-                    // Convert directory patterns to glob patterns for better matching
-                    let pattern = if line.ends_with('/') {
-                        // For patterns like "target/", add "**" to match all files under it
-                        format!("{}**", line)
-                    } else {
-                        line.to_string()
-                    };
-                    patterns.push(pattern);
-                }
+                // Use unified glob utility to process ignore patterns
+                let file_patterns = process_ignore_patterns(&content, true);
+                patterns.extend(file_patterns);
             }
 
             // Move to parent directory

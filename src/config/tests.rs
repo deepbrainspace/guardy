@@ -351,7 +351,7 @@ docs/
     assert!(patterns.contains(&"TESTING.md".to_string()));
     assert!(patterns.contains(&"*.test.rs".to_string()));
     assert!(patterns.contains(&"test_*".to_string()));
-    assert!(patterns.contains(&"docs/".to_string()));
+    assert!(patterns.contains(&"docs/**".to_string()));
     assert!(!patterns.iter().any(|p| p.starts_with('#')));
     assert!(!patterns.iter().any(|p| p.trim().is_empty()));
 }

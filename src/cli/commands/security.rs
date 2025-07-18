@@ -5,7 +5,7 @@
 use crate::cli::{SecurityCommands, Output};
 use crate::config::GuardyConfig;
 use crate::security::SecretScanner;
-use crate::utils::get_current_dir;
+use crate::utils::{get_current_dir, PathUtils, glob::{expand_file_patterns, is_glob_pattern}};
 use anyhow::Result;
 use std::path::Path;
 
@@ -27,7 +27,9 @@ async fn scan(
     format: String,
     output: &Output,
 ) -> Result<()> {
-    output.header("🔍 Security Scanning");
+    if output.is_verbose() {
+        output.header("🔍 Security Scanning");
+    }
 
     let current_dir = get_current_dir()?;
     let config_path = current_dir.join("guardy.yml");
@@ -50,41 +52,75 @@ async fn scan(
     let scanner = SecretScanner::from_config(&config, output)?;
 
     let mut all_matches = Vec::new();
+    let mut files_scanned = 0;
+    let mut files_excluded = 0;
 
     if !files.is_empty() {
-        // Scan specific files
-        output.step("Scanning specified files");
-        for file_path in &files {
-            let path = Path::new(file_path);
-            if path.exists() {
-                let matches = scanner.scan_file(path)?;
-                all_matches.extend(matches);
-                output.info(&format!("Scanned: {}", file_path));
-            } else {
-                output.warning(&format!("File not found: {}", file_path));
+        // Scan specific files (including glob patterns)
+        if output.is_verbose() {
+            output.step("Analyzing file patterns");
+        }
+        
+        // Expand file patterns (including globs) using utility function
+        let current_dir = get_current_dir()?;
+        let valid_paths = match expand_file_patterns(&files, &current_dir) {
+            Ok(paths) => paths,
+            Err(e) => {
+                output.error(&format!("Error expanding file patterns: {}", e));
+                return Ok(());
             }
+        };
+        
+        // Report any missing files
+        for file_pattern in &files {
+            if !is_glob_pattern(file_pattern) {
+                // Only check literal paths for existence warnings
+                let path = Path::new(file_pattern);
+                if !path.exists() {
+                    output.warning(&format!("File not found: {}", file_pattern));
+                }
+            }
+        }
+        
+        // Use scan_files for better verbose output
+        if !valid_paths.is_empty() {
+            let path_refs: Vec<&Path> = valid_paths.iter().map(|p| p.as_path()).collect();
+            let (matches, scanned, excluded) = scanner.scan_files(&path_refs)?;
+            all_matches.extend(matches);
+            files_scanned = scanned;
+            files_excluded = excluded;
         }
     } else if let Some(dir) = directory {
         // Scan specific directory
-        output.step(&format!("Scanning directory: {}", dir));
+        if output.is_verbose() {
+            output.step(&format!("Analyzing directory: {}", dir));
+        }
         let dir_path = Path::new(&dir);
         if dir_path.exists() && dir_path.is_dir() {
-            let matches = scanner.scan_directory(dir_path)?;
+            let (matches, scanned, excluded) = scanner.scan_directory(dir_path)?;
             all_matches.extend(matches);
+            files_scanned = scanned;
+            files_excluded = excluded;
         } else {
             output.error(&format!("Directory not found or not a directory: {}", dir));
             return Ok(());
         }
     } else {
         // Scan current directory
-        output.step("Scanning current directory");
-        let matches = scanner.scan_directory(&current_dir)?;
+        if output.is_verbose() {
+            output.step("Analyzing current directory");
+        }
+        let (matches, scanned, excluded) = scanner.scan_directory(&current_dir)?;
         all_matches.extend(matches);
+        files_scanned = scanned;
+        files_excluded = excluded;
     }
 
     // Display results
-    output.blank_line();
-    display_scan_results(&all_matches, &format, output)?;
+    if !output.is_quiet() {
+        output.blank_line();
+    }
+    display_scan_results(&all_matches, files_scanned, files_excluded, &format, output)?;
 
     Ok(())
 }
@@ -92,6 +128,8 @@ async fn scan(
 /// Display scan results in the specified format
 fn display_scan_results(
     matches: &[crate::security::SecurityMatch],
+    files_scanned: usize,
+    files_excluded: usize,
     format: &str,
     output: &Output,
 ) -> Result<()> {
@@ -102,33 +140,62 @@ fn display_scan_results(
         }
         _ => {
             if matches.is_empty() {
-                output.success("No security issues found");
+                let summary = if files_excluded > 0 {
+                    format!("Scan completed successfully: scanned {} files. {} files excluded", files_scanned, files_excluded)
+                } else {
+                    format!("Scan completed successfully: scanned {} files", files_scanned)
+                };
+                output.success(&summary);
             } else {
-                output.warning(&format!("Found {} security issues", matches.len()));
-                output.blank_line();
+                if !output.is_quiet() {
+                    output.warning(&format!("⚠ Found {} security issues", matches.len()));
+                    output.blank_line();
+                }
 
-                for (i, security_match) in matches.iter().enumerate() {
-                    let _severity_color = match security_match.severity {
+                // Group matches by pattern type for cleaner display
+                let mut grouped_matches: std::collections::HashMap<String, Vec<&crate::security::SecurityMatch>> = std::collections::HashMap::new();
+                for security_match in matches {
+                    grouped_matches.entry(security_match.pattern_name.clone()).or_insert_with(Vec::new).push(security_match);
+                }
+
+                for (pattern_name, pattern_matches) in grouped_matches.iter() {
+                    let severity = &pattern_matches[0].severity;
+                    let _severity_color = match severity {
                         crate::security::Severity::Critical => "red",
                         crate::security::Severity::Info => "yellow",
                     };
 
                     output.error(&format!(
-                        "{}. [{}] {} in {}:{}:{}",
-                        i + 1,
-                        security_match.severity,
-                        security_match.pattern_name,
-                        security_match.file_path,
-                        security_match.line_number,
-                        security_match.column
+                        "[{}] {} ({} occurrence{})",
+                        severity,
+                        pattern_name,
+                        pattern_matches.len(),
+                        if pattern_matches.len() == 1 { "" } else { "s" }
                     ));
-                    output.indent(&format!("Content: {}", security_match.content));
-                    output.blank_line();
+
+                    for security_match in pattern_matches {
+                        // Show relative path instead of full path
+                        let relative_path = PathUtils::to_relative_path(&security_match.file_path);
+                        output.indent(&format!("• {}:{}", relative_path, security_match.line_number));
+                        if output.is_verbose() {
+                            output.indent(&format!("  Content: {}", security_match.content));
+                        }
+                    }
+                    
+                    if !output.is_quiet() {
+                        output.blank_line();
+                    }
                 }
 
-                output.separator();
-                output.error("Security scan completed with issues");
-                output.info("Review the findings above and take appropriate action");
+                if !output.is_quiet() {
+                    output.separator();
+                }
+                let summary = if files_excluded > 0 {
+                    format!("Security scan completed with {} issues: scanned {} files. {} files excluded", matches.len(), files_scanned, files_excluded)
+                } else {
+                    format!("Security scan completed with {} issues: scanned {} files", matches.len(), files_scanned)
+                };
+                output.error(&format!("✖ {}", summary));
             }
         }
     }

@@ -4,8 +4,9 @@
 
 use super::patterns::patterns_from_config;
 use super::{SecurityMatch, SecurityPattern};
+use crate::utils::glob::build_globset;
 use anyhow::{Context, Result};
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::GlobSet;
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -23,17 +24,11 @@ impl SecretScanner {
         let patterns = patterns_from_config(&config.security.patterns)?;
         let exclude_patterns = config.get_effective_exclude_patterns();
 
-        // Build GlobSet from exclude patterns
-        let mut builder = GlobSetBuilder::new();
+        // Build GlobSet from exclude patterns using unified utility
         if output.is_verbose() {
             output.verbose(&format!("Loading {} exclude patterns", exclude_patterns.len()));
         }
-        for pattern in &exclude_patterns {
-            let glob = Glob::new(pattern)
-                .with_context(|| format!("Invalid glob pattern: {}", pattern))?;
-            builder.add(glob);
-        }
-        let exclude_globset = builder.build()
+        let exclude_globset = build_globset(&exclude_patterns)
             .with_context(|| "Failed to build exclude pattern globset")?;
 
         Ok(Self {
@@ -61,14 +56,6 @@ impl SecretScanner {
     pub fn scan_file<P: AsRef<Path>>(&self, file_path: P) -> Result<Vec<SecurityMatch>> {
         let path = file_path.as_ref();
         
-        // Check if file should be scanned
-        if !self.should_scan_file(path) {
-            if self.verbose {
-                println!("Skipping excluded file: {}", path.display());
-            }
-            return Ok(Vec::new());
-        }
-        
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read file: {}", path.display()))?;
 
@@ -93,60 +80,112 @@ impl SecretScanner {
     }
 
     /// Scan multiple files for secrets
-    pub fn scan_files<P: AsRef<Path>>(&self, files: &[P]) -> Result<Vec<SecurityMatch>> {
+    pub fn scan_files<P: AsRef<Path>>(&self, files: &[P]) -> Result<(Vec<SecurityMatch>, usize, usize)> {
         let mut all_matches = Vec::new();
+        let mut files_to_scan = Vec::new();
+        let mut exclusion_counts = std::collections::HashMap::new();
 
+        // Collect files that will be scanned and count exclusions by reason
         for file_path in files {
-            if self.should_scan_file(file_path.as_ref()) {
-                let matches = self.scan_file(file_path)?;
-                all_matches.extend(matches);
+            let path = file_path.as_ref();
+            let (should_scan, exclusion_reason) = self.should_scan_file_with_reason(path);
+            if should_scan {
+                files_to_scan.push(path);
+            } else {
+                *exclusion_counts.entry(exclusion_reason).or_insert(0) += 1;
             }
         }
 
-        Ok(all_matches)
+        let total_excluded: usize = exclusion_counts.values().sum();
+
+        // Show excluded files summary if verbose
+        if self.verbose && !exclusion_counts.is_empty() {
+            println!("Excluded {} files:", total_excluded);
+            for (reason, count) in exclusion_counts {
+                println!("  {} files ({})", count, reason);
+            }
+        }
+
+        let files_scanned = files_to_scan.len();
+
+        // Show scanning summary
+        if self.verbose && !files_to_scan.is_empty() {
+            println!("Scanning {} files", files_scanned);
+        }
+
+        // Scan the files
+        for file_path in files_to_scan {
+            let matches = self.scan_file(file_path)?;
+            all_matches.extend(matches);
+        }
+
+        Ok((all_matches, files_scanned, total_excluded))
     }
 
     /// Scan a directory recursively for secrets
-    pub fn scan_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<Vec<SecurityMatch>> {
+    pub fn scan_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<(Vec<SecurityMatch>, usize, usize)> {
         let mut all_matches = Vec::new();
+        let mut files_to_scan = Vec::new();
+        let mut exclusion_counts = std::collections::HashMap::new();
 
+        // Collect all files that will be scanned and count exclusions by reason
         for entry in WalkDir::new(dir_path).into_iter().filter_map(|e| e.ok()) {
             let path = entry.path();
 
-            if path.is_file() && self.should_scan_file(path) {
-                let matches = self.scan_file(path)?;
-                all_matches.extend(matches);
+            if path.is_file() {
+                let (should_scan, exclusion_reason) = self.should_scan_file_with_reason(path);
+                if should_scan {
+                    files_to_scan.push(path.to_path_buf());
+                } else {
+                    *exclusion_counts.entry(exclusion_reason).or_insert(0) += 1;
+                }
             }
         }
 
-        Ok(all_matches)
+        let total_excluded: usize = exclusion_counts.values().sum();
+
+        // Show excluded files summary if verbose
+        if self.verbose && !exclusion_counts.is_empty() {
+            println!("Excluded {} files:", total_excluded);
+            for (reason, count) in exclusion_counts {
+                println!("  {} files ({})", count, reason);
+            }
+        }
+
+        let files_scanned = files_to_scan.len();
+
+        // Show scanning summary
+        if self.verbose && !files_to_scan.is_empty() {
+            println!("Scanning {} files", files_scanned);
+        }
+
+        // Scan the files
+        for file_path in files_to_scan {
+            let matches = self.scan_file(&file_path)?;
+            all_matches.extend(matches);
+        }
+
+        Ok((all_matches, files_scanned, total_excluded))
     }
 
     /// Check if a file should be scanned based on exclude patterns
     fn should_scan_file(&self, path: &Path) -> bool {
-        if self.verbose {
-            println!("Checking file: {}", path.display());
-        }
-        
+        let (should_scan, _) = self.should_scan_file_with_reason(path);
+        should_scan
+    }
+
+    /// Check if a file should be scanned and return the reason if excluded
+    fn should_scan_file_with_reason(&self, path: &Path) -> (bool, String) {
         // Check absolute path
         if self.exclude_globset.is_match(path) {
-            if self.verbose {
-                println!("  -> Excluded by absolute path match");
-            }
-            return false;
+            return (false, "ignored pattern".to_string());
         }
 
         // Check relative path for patterns like ".claude/**/*.md"
         if let Ok(current_dir) = std::env::current_dir() {
             if let Ok(relative_path) = path.strip_prefix(current_dir) {
-                if self.verbose {
-                    println!("  -> Relative path: {}", relative_path.display());
-                }
                 if self.exclude_globset.is_match(relative_path) {
-                    if self.verbose {
-                        println!("  -> Excluded by relative path match");
-                    }
-                    return false;
+                    return (false, "ignored pattern".to_string());
                 }
             }
         }
@@ -155,33 +194,23 @@ impl SecretScanner {
         // This handles directory patterns like "target/" and "node_modules/"
         if let Some(parent) = path.parent() {
             if self.exclude_globset.is_match(parent) {
-                if self.verbose {
-                    println!("  -> Excluded by parent directory match");
-                }
-                return false;
+                return (false, "ignored pattern".to_string());
             }
             
             // Also check relative parent paths
             if let Ok(current_dir) = std::env::current_dir() {
                 if let Ok(relative_parent) = parent.strip_prefix(current_dir) {
                     if self.exclude_globset.is_match(relative_parent) {
-                        if self.verbose {
-                            println!("  -> Excluded by relative parent match");
-                        }
-                        return false;
+                        return (false, "ignored pattern".to_string());
                     }
                 }
             }
         }
 
-        if self.verbose {
-            println!("  -> File will be scanned");
-        }
-
         // Only scan text files
         if let Some(extension) = path.extension() {
             let ext = extension.to_string_lossy().to_lowercase();
-            matches!(
+            let is_text_file = matches!(
                 ext.as_str(),
                 "rs" | "js"
                     | "ts"
@@ -227,12 +256,15 @@ impl SecretScanner {
                     | "build"
                     | "cmake"
                     | "meson"
-            )
+            );
+            if !is_text_file {
+                return (false, "binary file".to_string());
+            }
         } else {
             // Check for common files without extensions
             if let Some(filename) = path.file_name() {
                 let name = filename.to_string_lossy().to_lowercase();
-                matches!(
+                let is_supported_file = matches!(
                     name.as_str(),
                     "dockerfile"
                         | "makefile"
@@ -243,11 +275,16 @@ impl SecretScanner {
                         | "todo"
                         | "authors"
                         | "contributors"
-                )
+                );
+                if !is_supported_file {
+                    return (false, "binary file".to_string());
+                }
             } else {
-                false
+                return (false, "binary file".to_string());
             }
         }
+
+        (true, String::new())
     }
 }
 

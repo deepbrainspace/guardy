@@ -58,6 +58,11 @@ impl Output {
         self.verbose
     }
 
+    /// Get quiet mode status
+    pub fn is_quiet(&self) -> bool {
+        self.quiet
+    }
+
     /// Print a header/title
     pub fn header(&self, title: &str) {
         if !self.quiet {

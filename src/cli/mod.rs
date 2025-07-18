@@ -121,8 +121,8 @@ pub enum ConfigCommands {
 pub enum SecurityCommands {
     /// Scan for secrets in files
     Scan {
-        /// Specific files to scan
-        #[arg(short = 'i', long)]
+        /// Specific files to scan (comma-separated or multiple -i flags, supports glob patterns)
+        #[arg(short = 'i', long, value_delimiter = ',')]
         files: Vec<String>,
         /// Scan specific directory
         #[arg(short, long)]

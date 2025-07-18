@@ -5,7 +5,7 @@
 
 use crate::cli::Output;
 use crate::config::GuardyConfig;
-use crate::utils::{get_current_dir, is_git_repository};
+use crate::utils::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -39,7 +39,7 @@ fn check_git_status(current_dir: &Path, output: &Output) {
     output.blank_line();
     output.step("Git Repository");
     
-    if is_git_repository(current_dir) {
+    if FileUtils::is_git_repository(current_dir) {
         output.success("Git repository detected");
         
         // Get current branch
