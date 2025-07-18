@@ -12,24 +12,43 @@ use std::path::Path;
 
 /// Execute the status command
 pub async fn execute(output: &Output) -> Result<()> {
+    let start_time = std::time::Instant::now();
+    
     output.header("📊 Guardy Status");
 
     let current_dir = get_current_dir()?;
     
-    // Check if we're in a git repository
+    // Use workflow steps for better progress indication
+    if output.is_verbose() {
+        output.workflow_step(1, 5, "Checking git repository", "🔍");
+    }
     check_git_status(&current_dir, output);
     
-    // Check configuration status
+    if output.is_verbose() {
+        output.workflow_step(2, 5, "Validating configuration", "⚙️");
+    }
     check_config_status(&current_dir, output);
     
-    // Check git hooks status
+    if output.is_verbose() {
+        output.workflow_step(3, 5, "Inspecting git hooks", "🪝");
+    }
     check_hooks_status(&current_dir, output);
     
-    // Check MCP server status
+    if output.is_verbose() {
+        output.workflow_step(4, 5, "Checking MCP server", "🔧");
+    }
     check_mcp_status(output);
     
-    // Check security status
+    if output.is_verbose() {
+        output.workflow_step(5, 5, "Analyzing security status", "🔒");
+    }
     check_security_status(&current_dir, output);
+    
+    // Show completion summary with timing
+    let duration = start_time.elapsed();
+    if output.is_verbose() {
+        output.completion_summary("Status check", duration, true);
+    }
     
     Ok(())
 }
@@ -97,8 +116,7 @@ fn check_config_status(current_dir: &Path, output: &Output) {
 
 /// Check git hooks status
 fn check_hooks_status(current_dir: &Path, output: &Output) {
-    output.blank_line();
-    output.step("Git Hooks");
+    output.category("Git Hooks");
     
     let hooks_dir = current_dir.join(".git/hooks");
     
@@ -112,37 +130,36 @@ fn check_hooks_status(current_dir: &Path, output: &Output) {
                 // Check if it's a Guardy hook
                 if let Ok(content) = fs::read_to_string(&hook_path) {
                     if content.contains("guardy") {
-                        output.success(&format!("{} hook installed", hook));
+                        output.status_indicator("INSTALLED", &format!("{} hook installed", hook), true);
                         installed_count += 1;
                     } else {
-                        output.warning(&format!("{} hook exists but not managed by Guardy", hook));
+                        output.status_indicator("EXTERNAL", &format!("{} hook exists but not managed by Guardy", hook), false);
                     }
                 } else {
-                    output.warning(&format!("{} hook exists but cannot be read", hook));
+                    output.status_indicator("UNREADABLE", &format!("{} hook exists but cannot be read", hook), false);
                 }
             } else {
-                output.warning(&format!("{} hook not installed", hook));
+                output.status_indicator("MISSING", &format!("{} hook not installed", hook), false);
             }
         }
         
-        output.table_row("Installed hooks", &format!("{}/{}", installed_count, hooks.len()));
+        output.key_value("Installed hooks:", &format!("{}/{}", installed_count, hooks.len()), installed_count > 0);
         
         if installed_count == 0 {
             output.indent("Run 'guardy hooks install' to install git hooks");
         }
     } else {
-        output.error("Git hooks directory not found");
+        output.status_indicator("NOT FOUND", "Git hooks directory not found", false);
         output.indent("This might not be a git repository");
     }
 }
 
 /// Check MCP server status
 fn check_mcp_status(output: &Output) {
-    output.blank_line();
-    output.step("MCP Server");
+    output.category("MCP Server");
     
     // TODO: Implement actual MCP server status checking
-    output.info("MCP server status checking not yet implemented");
+    output.status_indicator("NOT IMPLEMENTED", "MCP server status checking not yet implemented", false);
     output.indent("This will show:");
     output.indent("• Server running status");
     output.indent("• Port configuration");
@@ -152,37 +169,36 @@ fn check_mcp_status(output: &Output) {
 
 /// Check security status
 fn check_security_status(current_dir: &Path, output: &Output) {
-    output.blank_line();
-    output.step("Security Status");
+    output.category("Security Status");
     
     let config_path = current_dir.join("guardy.yml");
     
     if let Ok(config) = GuardyConfig::load_from_file(&config_path) {
         // Check secret detection
         if config.security.secret_detection {
-            output.success("Secret detection enabled");
+            output.status_indicator("ENABLED", "Secret detection enabled", true);
         } else {
-            output.warning("Secret detection disabled");
+            output.status_indicator("DISABLED", "Secret detection disabled", false);
         }
         
         // Check protected branches
         if !config.security.protected_branches.is_empty() {
-            output.success(&format!("{} protected branches configured", config.security.protected_branches.len()));
+            output.status_indicator("CONFIGURED", &format!("{} protected branches configured", config.security.protected_branches.len()), true);
         } else {
-            output.warning("No protected branches configured");
+            output.status_indicator("NONE", "No protected branches configured", false);
         }
         
         // Check git-crypt
         if config.security.git_crypt {
             if Path::new(".git-crypt").exists() {
-                output.success("Git-crypt enabled and initialized");
+                output.status_indicator("INITIALIZED", "Git-crypt enabled and initialized", true);
             } else {
-                output.warning("Git-crypt enabled but not initialized");
+                output.status_indicator("NOT INITIALIZED", "Git-crypt enabled but not initialized", false);
             }
         } else {
-            output.info("Git-crypt integration disabled");
+            output.status_indicator("DISABLED", "Git-crypt integration disabled", false);
         }
     } else {
-        output.warning("Security configuration not available");
+        output.status_indicator("UNAVAILABLE", "Security configuration not available", false);
     }
 }

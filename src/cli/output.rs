@@ -114,8 +114,6 @@ impl Output {
     }
 
     /// Create a progress bar
-    /// TODO: Remove #[allow(dead_code)] when progress bars are used
-    #[allow(dead_code)]
     pub fn progress_bar(&self, len: u64, message: &str) -> ProgressBar {
         let pb = ProgressBar::new(len);
         pb.set_style(
@@ -131,8 +129,6 @@ impl Output {
     }
 
     /// Create a spinner for indefinite progress
-    /// TODO: Remove #[allow(dead_code)] when spinners are used
-    #[allow(dead_code)]
     pub fn spinner(&self, message: &str) -> ProgressBar {
         let pb = ProgressBar::new_spinner();
         pb.set_style(
@@ -292,6 +288,77 @@ impl Output {
                 styled_icon,
                 style(action).bold(),
                 style(result).dim()
+            );
+        }
+    }
+
+    /// Print a multi-step workflow indicator
+    pub fn workflow_step(&self, current: usize, total: usize, step_name: &str, emoji: &str) {
+        if !self.quiet {
+            let progress = format!("[{}/{}]", current, total);
+            println!("{} {} {} {}", 
+                style(progress).cyan().bold(),
+                style(emoji).cyan(),
+                style(step_name).bold(),
+                if current == total { style("🎉").green() } else { style("").white() }
+            );
+        }
+    }
+
+    /// Print a scanning progress update
+    pub fn scanning_progress(&self, current: usize, total: usize, file_name: &str) {
+        if !self.quiet {
+            let percentage = if total > 0 { (current * 100) / total } else { 0 };
+            print!("\r{} Scanning... {}% ({}/{}) {}", 
+                style("🔍").cyan(),
+                style(percentage.to_string()).bold(),
+                current,
+                total,
+                style(file_name).dim()
+            );
+            io::stdout().flush().unwrap();
+        }
+    }
+
+    /// Clear the current line (for progress updates)
+    pub fn clear_line(&self) {
+        if !self.quiet {
+            print!("\r{}\r", " ".repeat(80));
+            io::stdout().flush().unwrap();
+        }
+    }
+
+    /// Print a completion message with timing
+    pub fn completion_summary(&self, task: &str, duration: std::time::Duration, success: bool) {
+        if !self.quiet {
+            let icon = if success { "✨" } else { "💥" };
+            let status = if success { "completed" } else { "failed" };
+            let duration_str = if duration.as_secs() > 0 {
+                format!("{}s", duration.as_secs())
+            } else {
+                format!("{}ms", duration.as_millis())
+            };
+            
+            println!("{} {} {} in {}", 
+                style(icon).bold(),
+                style(task).bold(),
+                style(status).bold(),
+                style(duration_str).dim()
+            );
+        }
+    }
+
+    /// Print an interactive menu option
+    pub fn menu_option(&self, key: &str, description: &str, selected: bool) {
+        if !self.quiet {
+            let indicator = if selected { "►" } else { " " };
+            let key_style = if selected { style(key).cyan().bold() } else { style(key).dim() };
+            let desc_style = if selected { style(description).white().bold() } else { style(description).dim() };
+            
+            println!("{} {} {}", 
+                style(indicator).cyan().bold(),
+                key_style,
+                desc_style
             );
         }
     }

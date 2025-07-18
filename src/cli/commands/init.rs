@@ -11,11 +11,17 @@ use std::path::Path;
 
 /// Execute the init command
 pub async fn execute(force: bool, output: &Output) -> Result<()> {
+    let start_time = std::time::Instant::now();
+    
     output.header("🚀 Initializing Guardy");
 
     let current_dir = get_current_dir()?;
     
-    // Check if we're in a git repository
+    // Step 1: Check git repository
+    if output.is_verbose() {
+        output.workflow_step(1, 4, "Checking git repository", "🔍");
+    }
+    
     if !FileUtils::is_git_repository(&current_dir) {
         output.error("Not a git repository");
         if !force && !output.confirm("Initialize git repository first?") {
@@ -37,7 +43,11 @@ pub async fn execute(force: bool, output: &Output) -> Result<()> {
         }
     }
     
-    // Detect project type
+    // Step 2: Detect project type
+    if output.is_verbose() {
+        output.workflow_step(2, 4, "Detecting project type", "🔍");
+    }
+    
     let project_type = detect_project_type(&current_dir);
     output.info(&format!("Detected project type: {:?}", project_type));
     
@@ -57,13 +67,20 @@ pub async fn execute(force: bool, output: &Output) -> Result<()> {
     output.list_item("Run 'guardy status' to check installation");
     output.list_item("Make your first commit to test the hooks");
     
+    // Show completion summary with timing
+    let duration = start_time.elapsed();
+    if output.is_verbose() {
+        output.completion_summary("Guardy initialization", duration, true);
+    }
+    
     Ok(())
 }
 
 /// Initialize configuration file
 fn initialize_config(current_dir: &Path, yes: bool, output: &Output) -> Result<()> {
-    output.blank_line();
-    output.step("Configuration Setup");
+    if output.is_verbose() {
+        output.workflow_step(3, 4, "Setting up configuration", "⚙️");
+    }
     
     let config_path = current_dir.join("guardy.yml");
     
@@ -79,16 +96,19 @@ fn initialize_config(current_dir: &Path, yes: bool, output: &Output) -> Result<(
     let config = GuardyConfig::default();
     config.save_to_file(&config_path)?;
     
-    output.success("Configuration file created");
-    output.table_row("Config file", &config_path.display().to_string());
+    output.action_result("Configuration file", "created", true);
+    if output.is_verbose() {
+        output.key_value("Config file:", &config_path.display().to_string(), false);
+    }
     
     Ok(())
 }
 
 /// Install git hooks
 fn install_hooks(current_dir: &Path, yes: bool, output: &Output) -> Result<()> {
-    output.blank_line();
-    output.step("Git Hooks Installation");
+    if output.is_verbose() {
+        output.workflow_step(4, 4, "Installing git hooks", "🪝");
+    }
     
     let hooks_dir = current_dir.join(".git/hooks");
     
@@ -97,6 +117,7 @@ fn install_hooks(current_dir: &Path, yes: bool, output: &Output) -> Result<()> {
     }
     
     let hooks = [("pre-commit", "Pre-commit hook"), ("commit-msg", "Commit message hook"), ("pre-push", "Pre-push hook")];
+    let mut installed_count = 0;
     
     for (hook_name, description) in &hooks {
         let hook_path = hooks_dir.join(hook_name);
@@ -122,7 +143,12 @@ fn install_hooks(current_dir: &Path, yes: bool, output: &Output) -> Result<()> {
             fs::set_permissions(&hook_path, perms)?;
         }
         
-        output.success(&format!("{} installed", description));
+        output.action_result(description, "installed", true);
+        installed_count += 1;
+    }
+    
+    if output.is_verbose() {
+        output.summary_stats("Git hooks installed:", installed_count);
     }
     
     Ok(())
