@@ -9,4 +9,5 @@ pub mod init;
 pub mod mcp;
 pub mod security;
 pub mod status;
+pub mod uninstall;
 pub mod version;
