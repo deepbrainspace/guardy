@@ -4,7 +4,7 @@
 
 use crate::cli::Output;
 use crate::config::GuardyConfig;
-use crate::utils::{get_current_dir, detect_project_type, is_git_repository};
+use crate::utils::{get_current_dir, detect_project_type, FileUtils};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -16,7 +16,7 @@ pub async fn execute(force: bool, output: &Output) -> Result<()> {
     let current_dir = get_current_dir()?;
     
     // Check if we're in a git repository
-    if !is_git_repository(&current_dir) {
+    if !FileUtils::is_git_repository(&current_dir) {
         output.error("Not a git repository");
         if !force && !output.confirm("Initialize git repository first?") {
             output.info("Initialization cancelled");

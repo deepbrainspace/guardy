@@ -4,7 +4,7 @@
 
 use crate::cli::HooksCommands;
 use crate::cli::Output;
-use crate::utils::{get_current_dir, is_git_repository};
+use crate::utils::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
 
@@ -27,7 +27,7 @@ async fn install(force: bool, output: &Output) -> Result<()> {
     let current_dir = get_current_dir()?;
     
     // Check if we're in a git repository
-    if !is_git_repository(&current_dir) {
+    if !FileUtils::is_git_repository(&current_dir) {
         output.error("Not a git repository");
         output.indent("Run 'git init' first");
         return Ok(());
@@ -84,7 +84,7 @@ async fn remove(output: &Output) -> Result<()> {
     let current_dir = get_current_dir()?;
     
     // Check if we're in a git repository
-    if !is_git_repository(&current_dir) {
+    if !FileUtils::is_git_repository(&current_dir) {
         output.error("Not a git repository");
         return Ok(());
     }
@@ -134,7 +134,7 @@ async fn list(output: &Output) -> Result<()> {
     let current_dir = get_current_dir()?;
     
     // Check if we're in a git repository
-    if !is_git_repository(&current_dir) {
+    if !FileUtils::is_git_repository(&current_dir) {
         output.error("Not a git repository");
         return Ok(());
     }
@@ -182,7 +182,7 @@ async fn run(hook: String, output: &Output) -> Result<()> {
     let current_dir = get_current_dir()?;
     
     // Check if we're in a git repository
-    if !is_git_repository(&current_dir) {
+    if !FileUtils::is_git_repository(&current_dir) {
         output.error("Not a git repository");
         return Ok(());
     }

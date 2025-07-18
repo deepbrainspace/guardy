@@ -76,7 +76,8 @@ fn test_patterns_from_config() {
 #[test]
 fn test_secret_scanner_from_config() {
     let config = GuardyConfig::default();
-    let _scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
+    let output = crate::cli::Output::new(false, false);
+    let _scanner = SecretScanner::from_config(&config, &output).expect("Failed to create scanner");
 
     // Scanner should be created successfully
     // Note: Default config has no patterns, so scanner will have empty patterns list
@@ -121,7 +122,8 @@ fn main() {
     ];
     config.security.use_gitignore = false; // Disable for test
 
-    let scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
+    let output = crate::cli::Output::new(false, false);
+    let scanner = SecretScanner::from_config(&config, &output).expect("Failed to create scanner");
 
     let matches = scanner.scan_file(&test_file).expect("Failed to scan file");
 
@@ -163,11 +165,12 @@ fn test_secret_scanner_exclude_patterns() {
     config.security.exclude_patterns = vec!["*.log".to_string()];
     config.security.use_gitignore = false;
 
-    let scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
+    let output = crate::cli::Output::new(false, false);
+    let scanner = SecretScanner::from_config(&config, &output).expect("Failed to create scanner");
 
     // File should be excluded due to .log extension - test via scan_files
 
-    let matches = scanner
+    let (matches, _scanned, _excluded) = scanner
         .scan_files(&[&test_file])
         .expect("Failed to scan files");
     assert_eq!(matches.len(), 0); // Should be excluded
@@ -188,13 +191,14 @@ fn test_secret_scanner_file_filtering() {
     config.security.exclude_patterns = vec!["*.log".to_string()];
     config.security.use_gitignore = false;
 
-    let scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
+    let output = crate::cli::Output::new(false, false);
+    let scanner = SecretScanner::from_config(&config, &output).expect("Failed to create scanner");
 
     // Test scanning files - excluded files should not produce matches
-    let excluded_matches = scanner
+    let (excluded_matches, _scanned1, _excluded1) = scanner
         .scan_files(&[&log_file])
         .expect("Failed to scan excluded files");
-    let included_matches = scanner
+    let (included_matches, _scanned2, _excluded2) = scanner
         .scan_files(&[&rs_file])
         .expect("Failed to scan included files");
 
@@ -283,9 +287,10 @@ fn test_scanner_directory_scan() {
     config.security.exclude_patterns = vec!["*.log".to_string()];
     config.security.use_gitignore = false;
 
-    let scanner = SecretScanner::from_config(&config).expect("Failed to create scanner");
+    let output = crate::cli::Output::new(false, false);
+    let scanner = SecretScanner::from_config(&config, &output).expect("Failed to create scanner");
 
-    let matches = scanner
+    let (matches, _scanned, _excluded) = scanner
         .scan_directory(temp_dir.path())
         .expect("Failed to scan directory");
 

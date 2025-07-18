@@ -68,7 +68,7 @@ async fn run_secret_detection(git: &GitOperations) -> Result<()> {
     );
 
     let scanner = SecretScanner::new()?;
-    let matches = scanner.scan_files(&staged_files)?;
+    let (matches, _, _) = scanner.scan_files(&staged_files)?;
 
     if !matches.is_empty() {
         eprintln!("🚫 Secrets detected in staged files:");
