@@ -40,6 +40,7 @@ thiserror = "1.0"
 console = "0.15"
 indicatif = "0.17"
 colored = "2.1"
+syntect = "5.2.0"
 
 # Security/Pattern Matching
 regex = "1.10"

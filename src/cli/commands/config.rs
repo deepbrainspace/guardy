@@ -8,6 +8,9 @@ use crate::config::GuardyConfig;
 use crate::utils::{get_current_dir, detect_project_type};
 use anyhow::Result;
 use std::fs;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::ThemeSet;
+use syntect::util::as_24_bit_terminal_escaped;
 
 /// Execute config commands
 pub async fn execute(cmd: ConfigCommands, output: &Output) -> Result<()> {
@@ -133,7 +136,15 @@ async fn show(output: &Output) -> Result<()> {
             output.success("Configuration file content:");
             output.blank_line();
             output.separator();
-            println!("{}", content);
+            
+            // Add YAML syntax highlighting if possible
+            if let Some(highlighted) = highlight_yaml(&content) {
+                print!("{}", highlighted);
+            } else {
+                // Fallback to plain text
+                println!("{}", content);
+            }
+            
             output.separator();
             output.blank_line();
             output.table_row("Config file", &config_path.display().to_string());
@@ -145,4 +156,25 @@ async fn show(output: &Output) -> Result<()> {
     }
     
     Ok(())
+}
+
+/// Highlight YAML content using syntect
+fn highlight_yaml(content: &str) -> Option<String> {
+    let syntax_set = SyntaxSet::load_defaults_newlines();
+    let theme_set = ThemeSet::load_defaults();
+    
+    let syntax = syntax_set.find_syntax_by_extension("yml")?;
+    let theme = &theme_set.themes["base16-eighties.dark"];
+    
+    let mut highlighted = String::new();
+    let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
+    
+    for line in content.lines() {
+        let ranges = highlighter.highlight_line(line, &syntax_set).ok()?;
+        let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+        highlighted.push_str(&escaped);
+        highlighted.push('\n');
+    }
+    
+    Some(highlighted)
 }
