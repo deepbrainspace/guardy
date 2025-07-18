@@ -8,6 +8,8 @@ use crate::utils::glob::process_ignore_patterns;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+pub mod languages;
+
 /// Main configuration structure for Guardy
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GuardyConfig {

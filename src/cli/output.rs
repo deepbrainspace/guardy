@@ -4,7 +4,6 @@
 //! modern CLI tools. Includes progress bars, styled messages, and professional symbols.
 
 use console::style;
-use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Write};
 
 /// Output handler for consistent CLI formatting
@@ -46,12 +45,6 @@ impl Output {
         }
     }
 
-    /// Print a verbose message (only if verbose mode is enabled)
-    pub fn verbose(&self, message: &str) {
-        if self.verbose {
-            println!("{} {}", style("ℹ️ ").dim(), style(message).dim());
-        }
-    }
 
     /// Print a verbose step with emoji and styling
     pub fn verbose_step(&self, emoji: &str, message: &str) {
@@ -113,32 +106,7 @@ impl Output {
         }
     }
 
-    /// Create a progress bar
-    pub fn progress_bar(&self, len: u64, message: &str) -> ProgressBar {
-        let pb = ProgressBar::new(len);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}",
-                )
-                .unwrap()
-                .progress_chars("#>-"),
-        );
-        pb.set_message(message.to_string());
-        pb
-    }
 
-    /// Create a spinner for indefinite progress
-    pub fn spinner(&self, message: &str) -> ProgressBar {
-        let pb = ProgressBar::new_spinner();
-        pb.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
-                .unwrap(),
-        );
-        pb.set_message(message.to_string());
-        pb
-    }
 
     /// Print a table row
     pub fn table_row(&self, key: &str, value: &str) {
@@ -261,19 +229,6 @@ impl Output {
         }
     }
 
-    /// Print a progress indicator with consistent styling
-    pub fn progress_indicator(&self, current: usize, total: usize, message: &str) {
-        if !self.quiet {
-            let percentage = if total > 0 { (current * 100) / total } else { 0 };
-            println!("{} {} {}% ({}/{})", 
-                style("►").cyan(),
-                message,
-                style(percentage.to_string()).bold(),
-                current,
-                total
-            );
-        }
-    }
 
     /// Print an action result with consistent styling
     pub fn action_result(&self, action: &str, result: &str, success: bool) {
@@ -348,18 +303,113 @@ impl Output {
         }
     }
 
-    /// Print an interactive menu option
-    pub fn menu_option(&self, key: &str, description: &str, selected: bool) {
+    /// Print a beautiful language header with language-specific icon
+    pub fn language_header(&self, name: &str, description: &str) {
         if !self.quiet {
-            let indicator = if selected { "►" } else { " " };
-            let key_style = if selected { style(key).cyan().bold() } else { style(key).dim() };
-            let desc_style = if selected { style(description).white().bold() } else { style(description).dim() };
-            
+            let icon = match name {
+                // Well-established community icons
+                "Rust" => "🦀",                    // Rust community's beloved crab
+                "Python" => "🐍",                  // Python snake
+                "Go" => "🐹",                      // Go gopher (hamster as closest emoji)
+                "Java" => "☕",                    // Java coffee
+                "PHP" => "🐘",                     // PHP elephant
+                "Ruby" => "🔻",                    // Ruby red diamond
+                "Swift" => "🐦",                   // Swift bird
+                
+                // JavaScript/TypeScript - colors based on their branding
+                "JavaScript/TypeScript" => "🟨",  // Yellow square for JS
+                
+                // Other languages with thematic icons
+                "C#" => "🔷",                      // Blue diamond for Microsoft
+                "C++" => "⚡",                     // Lightning for speed/performance
+                "Kotlin" => "🎯",                  // Target for precision
+                "Scala" => "🌟",                   // Star for functional programming
+                "Elixir" => "🧪",                  // Elixir/potion
+                
+                // Default for unknown languages
+                _ => "🚀",
+            };
             println!("{} {} {}", 
-                style(indicator).cyan().bold(),
-                key_style,
-                desc_style
+                style(icon).green().bold(),
+                style(name).green().bold(),
+                style(format!("• {}", description)).dim()
             );
         }
     }
+
+    /// Print a beautiful tool section with icon
+    pub fn tool_section(&self, icon: &str, title: &str, items: &[&str]) {
+        if !self.quiet && !items.is_empty() {
+            println!("    {} {} {}", 
+                style(icon).cyan().bold(),
+                style(title).cyan().bold(),
+                style(items.join(", ")).white()
+            );
+        }
+    }
+
+    /// Print a package manager with special formatting
+    pub fn package_manager(&self, pm: &str) {
+        if !self.quiet {
+            println!("    {} {} {}", 
+                style("📦").magenta().bold(),
+                style("Package Manager").magenta().bold(),
+                style(pm).white().bold()
+            );
+        }
+    }
+
+    /// Print a beautiful section header with box drawing
+    #[allow(dead_code)]
+    pub fn section_header_box(&self, title: &str) {
+        if !self.quiet {
+            let len = title.len();
+            let border = "─".repeat(len + 4);
+            println!("{}", style(format!("╭{}╮", border)).cyan().dim());
+            println!("{}", style(format!("│  {}  │", title)).cyan().bold());
+            println!("{}", style(format!("╰{}╯", border)).cyan().dim());
+        }
+    }
+
+
+    /// Print a modern CLI banner
+    pub fn banner(&self, title: &str, subtitle: &str) {
+        if !self.quiet {
+            println!();
+            println!("{}", style("━".repeat(60)).blue().dim());
+            println!("{} {}", style("🎯").blue().bold(), style(title).blue().bold());
+            println!("{}", style(subtitle).dim());
+            println!("{}", style("━".repeat(60)).blue().dim());
+            println!();
+        }
+    }
+
+    /// Print a beautiful tree structure
+    pub fn tree_item(&self, is_last: bool, name: &str, value: &str) {
+        if !self.quiet {
+            let connector = if is_last { "└─" } else { "├─" };
+            println!("{} {} {}", 
+                style(connector).dim(),
+                style(name).bold(),
+                style(value).white()
+            );
+        }
+    }
+
+    /// Print a beautiful badge
+    pub fn badge(&self, text: &str, color: &str) {
+        if !self.quiet {
+            let styled_text = match color {
+                "green" => style(format!(" {} ", text)).green().bold(),
+                "blue" => style(format!(" {} ", text)).blue().bold(),
+                "yellow" => style(format!(" {} ", text)).yellow().bold(),
+                "red" => style(format!(" {} ", text)).red().bold(),
+                "magenta" => style(format!(" {} ", text)).magenta().bold(),
+                "cyan" => style(format!(" {} ", text)).cyan().bold(),
+                _ => style(format!(" {} ", text)).white().bold(),
+            };
+            print!("{}", styled_text);
+        }
+    }
+
 }

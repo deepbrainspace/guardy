@@ -4,7 +4,7 @@
 
 use crate::cli::Output;
 use crate::config::GuardyConfig;
-use crate::utils::{get_current_dir, detect_project_type, FileUtils};
+use crate::utils::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -43,15 +43,10 @@ pub async fn execute(force: bool, output: &Output) -> Result<()> {
         }
     }
     
-    // Step 2: Detect project type
+    // Step 2: Initialize configuration
     if output.is_verbose() {
-        output.workflow_step(2, 4, "Detecting project type", "🔍");
+        output.workflow_step(2, 4, "Initializing configuration", "🔧");
     }
-    
-    let project_type = detect_project_type(&current_dir);
-    output.info(&format!("Detected project type: {:?}", project_type));
-    
-    // Initialize configuration
     initialize_config(&current_dir, force, output)?;
     
     // Install git hooks
