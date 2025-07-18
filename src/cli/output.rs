@@ -21,27 +21,27 @@ impl Output {
     /// Print a success message
     pub fn success(&self, message: &str) {
         if !self.quiet {
-            println!("{} {}", style("✔").green(), message);
+            println!("{} {}", style("●").green().bold(), message);
         }
     }
 
     /// Print an error message
     pub fn error(&self, message: &str) {
         // Errors are always shown, even in quiet mode
-        eprintln!("{} {}", style("✖").red(), message);
+        eprintln!("{} {}", style("●").red().bold(), message);
     }
 
     /// Print a warning message
     pub fn warning(&self, message: &str) {
         if !self.quiet {
-            println!("{} {}", style("⚠").yellow(), message);
+            println!("{} {}", style("●").yellow().bold(), message);
         }
     }
 
     /// Print an info message
     pub fn info(&self, message: &str) {
         if !self.quiet {
-            println!("{} {}", style("ℹ️ ").blue(), message);
+            println!("{} {}", style("●").blue().bold(), message);
         }
     }
 
@@ -253,8 +253,28 @@ impl Output {
             let progress = format!("[{}/{}]", current, total);
             println!("{} {} {} {}", 
                 style(progress).cyan().bold(),
-                style(emoji).cyan(),
+                style(format!("{} ", emoji)).cyan(),
                 style(step_name).bold(),
+                if current == total { style("🎉").green() } else { style("").white() }
+            );
+        }
+    }
+
+    /// Print a workflow step with timing
+    pub fn workflow_step_timed(&self, current: usize, total: usize, step_name: &str, emoji: &str, duration: std::time::Duration) {
+        if !self.quiet {
+            let progress = format!("[{}/{}]", current, total);
+            let duration_str = if duration.as_secs() > 0 {
+                format!("{}s", duration.as_secs())
+            } else {
+                format!("{}ms", duration.as_millis())
+            };
+            let timing = format!("[{}]", duration_str);
+            println!("{} {} {} {} {}", 
+                style(progress).cyan().bold(),
+                style(format!("{} ", emoji)).cyan(),
+                style(step_name).bold(),
+                style(timing).dim(),
                 if current == total { style("🎉").green() } else { style("").white() }
             );
         }
@@ -302,6 +322,12 @@ impl Output {
             );
         }
     }
+
+
+
+
+
+
 
     /// Print a beautiful language header with language-specific icon
     pub fn language_header(&self, name: &str, description: &str) {
