@@ -42,14 +42,14 @@ impl Output {
     /// Print an info message
     pub fn info(&self, message: &str) {
         if !self.quiet {
-            println!("{} {}", style("ℹ").blue(), message);
+            println!("{} {}", style("ℹ️").blue(), message);
         }
     }
 
     /// Print a verbose message (only if verbose mode is enabled)
     pub fn verbose(&self, message: &str) {
         if self.verbose {
-            println!("{} {}", style("ℹ").dim(), style(message).dim());
+            println!("{} {}", style("ℹ️").dim(), style(message).dim());
         }
     }
 
