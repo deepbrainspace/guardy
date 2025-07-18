@@ -56,6 +56,8 @@ pub enum Commands {
     Init,
     /// Show system status
     Status,
+    /// Show version information
+    Version,
     /// MCP server commands
     #[command(subcommand)]
     Mcp(McpCommands),
@@ -144,6 +146,7 @@ impl Cli {
         match self.command {
             Some(Commands::Init) => commands::init::execute(self.force, &output).await,
             Some(Commands::Status) => commands::status::execute(&output).await,
+            Some(Commands::Version) => commands::version::execute(&output).await,
             Some(Commands::Mcp(cmd)) => commands::mcp::execute(cmd, &output).await,
             Some(Commands::Hooks(cmd)) => commands::hooks::execute(cmd, self.force, &output).await,
             Some(Commands::Config(cmd)) => commands::config::execute(cmd, &output).await,
