@@ -199,11 +199,6 @@ impl SecretScanner {
         Ok((all_matches, files_scanned, total_excluded))
     }
 
-    /// Check if a file should be scanned based on exclude patterns
-    fn should_scan_file(&self, path: &Path) -> bool {
-        let (should_scan, _) = self.should_scan_file_with_reason(path);
-        should_scan
-    }
 
     /// Check if a file should be scanned and return the reason if excluded
     fn should_scan_file_with_reason(&self, path: &Path) -> (bool, String) {

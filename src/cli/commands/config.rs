@@ -4,13 +4,15 @@
 
 use crate::cli::ConfigCommands;
 use crate::cli::Output;
-use crate::config::{GuardyConfig, ToolsConfig, FormatterConfig, LinterConfig, InstallConfig};
-use crate::utils::{get_current_dir, detect_project_type, ProjectType};
+use crate::config::GuardyConfig;
+use crate::config::languages::{get_language_configs, detect_languages};
+use crate::utils::get_current_dir;
 use anyhow::Result;
 use std::fs;
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::ThemeSet;
 use syntect::util::as_24_bit_terminal_escaped;
+use console::style;
 
 /// Execute config commands
 pub async fn execute(cmd: ConfigCommands, output: &Output) -> Result<()> {
@@ -18,11 +20,13 @@ pub async fn execute(cmd: ConfigCommands, output: &Output) -> Result<()> {
         ConfigCommands::Init => init(output).await,
         ConfigCommands::Validate => validate(output).await,
         ConfigCommands::Show => show(output).await,
+        ConfigCommands::Language { name } => show_language(output, &name).await,
+        ConfigCommands::Languages { all } => show_languages(output, all).await,
     }
 }
 
 async fn init(output: &Output) -> Result<()> {
-    output.header("🔧 Initializing Configuration");
+    output.info("🔧 Initializing Configuration");
     
     let current_dir = get_current_dir()?;
     let config_path = current_dir.join("guardy.yml");
@@ -36,18 +40,21 @@ async fn init(output: &Output) -> Result<()> {
         }
     }
     
-    // Detect project type
-    let project_type = detect_project_type(&current_dir);
-    output.info(&format!("Detected project type: {:?}", project_type));
+    // Detect languages in the project
+    let detected_languages = detect_languages(&current_dir);
+    if !detected_languages.is_empty() {
+        let lang_names: Vec<&str> = detected_languages.iter().map(|(name, _)| name.as_str()).collect();
+        output.info(&format!("❯ Detected languages: {}", lang_names.join(", ")));
+    } else {
+        output.info("❯ No specific languages detected, using generic configuration");
+    }
     
-    // Create project-specific configuration
-    let mut config = GuardyConfig::default();
-    
-    // Add project-specific formatters and linters
-    config.tools = create_project_specific_tools(&project_type);
+    // Create default configuration with examples
+    let lang_names: Vec<String> = detected_languages.iter().map(|(name, _)| name.clone()).collect();
+    let config_content = create_config_with_examples(&lang_names);
     
     // Save configuration
-    config.save_to_file(&config_path)?;
+    fs::write(&config_path, config_content)?;
     
     output.success("Configuration file created successfully");
     output.table_row("Config file", &config_path.display().to_string());
@@ -182,279 +189,265 @@ fn highlight_yaml(content: &str) -> Option<String> {
     Some(highlighted)
 }
 
-/// Create project-specific tools configuration
-fn create_project_specific_tools(project_type: &ProjectType) -> ToolsConfig {
-    let mut tools = ToolsConfig {
-        auto_detect: true,
-        auto_install: false,
-        formatters: Vec::new(),
-        linters: Vec::new(),
-    };
-
-    match project_type {
-        ProjectType::Rust => {
-            // Add Rust formatters
-            tools.formatters.push(FormatterConfig {
-                name: "rustfmt".to_string(),
-                command: "cargo fmt".to_string(),
-                patterns: vec!["**/*.rs".to_string()],
-                check_command: Some("rustfmt --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("rustup component add rustfmt".to_string()),
-                    npm: None,
-                    brew: None,
-                    apt: None,
-                    manual: "Install Rust toolchain: https://rustup.rs/".to_string(),
-                }),
-            });
-            
-            // Add alternative Rust formatter (prettier-please)
-            tools.formatters.push(FormatterConfig {
-                name: "prettier-please".to_string(),
-                command: "prettier-please --write".to_string(),
-                patterns: vec!["**/*.rs".to_string()],
-                check_command: Some("prettier-please --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("cargo install prettier-please".to_string()),
-                    npm: None,
-                    brew: None,
-                    apt: None,
-                    manual: "Install with: cargo install prettier-please".to_string(),
-                }),
-            });
-
-            // Add Rust linters
-            tools.linters.push(LinterConfig {
-                name: "clippy".to_string(),
-                command: "cargo clippy --all-targets --all-features -- -D warnings".to_string(),
-                patterns: vec!["**/*.rs".to_string()],
-                check_command: Some("cargo clippy --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("rustup component add clippy".to_string()),
-                    npm: None,
-                    brew: None,
-                    apt: None,
-                    manual: "Install Rust toolchain: https://rustup.rs/".to_string(),
-                }),
-            });
-        }
-        
-        ProjectType::NodeJs => {
-            // Add JavaScript/TypeScript formatters
-            tools.formatters.push(FormatterConfig {
-                name: "prettier".to_string(),
-                command: "npx prettier --write".to_string(),
-                patterns: vec![
-                    "**/*.js".to_string(),
-                    "**/*.ts".to_string(),
-                    "**/*.jsx".to_string(),
-                    "**/*.tsx".to_string(),
-                    "**/*.json".to_string(),
-                    "**/*.css".to_string(),
-                    "**/*.html".to_string(),
-                    "**/*.md".to_string(),
-                ],
-                check_command: Some("npx prettier --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: Some("npm install -g prettier".to_string()),
-                    brew: Some("brew install prettier".to_string()),
-                    apt: None,
-                    manual: "Install Node.js then run: npm install -g prettier".to_string(),
-                }),
-            });
-            
-            // Add Biome as alternative
-            tools.formatters.push(FormatterConfig {
-                name: "biome".to_string(),
-                command: "biome format --write".to_string(),
-                patterns: vec![
-                    "**/*.js".to_string(),
-                    "**/*.ts".to_string(),
-                    "**/*.jsx".to_string(),
-                    "**/*.tsx".to_string(),
-                    "**/*.json".to_string(),
-                ],
-                check_command: Some("biome --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("cargo install biome".to_string()),
-                    npm: Some("npm install -g @biomejs/biome".to_string()),
-                    brew: None,
-                    apt: None,
-                    manual: "Install with: npm install -g @biomejs/biome".to_string(),
-                }),
-            });
-
-            // Add linters
-            tools.linters.push(LinterConfig {
-                name: "eslint".to_string(),
-                command: "npx eslint".to_string(),
-                patterns: vec![
-                    "**/*.js".to_string(),
-                    "**/*.ts".to_string(),
-                    "**/*.jsx".to_string(),
-                    "**/*.tsx".to_string(),
-                ],
-                check_command: Some("npx eslint --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: Some("npm install -g eslint".to_string()),
-                    brew: None,
-                    apt: None,
-                    manual: "Install Node.js then run: npm install -g eslint".to_string(),
-                }),
-            });
-        }
-        
-        ProjectType::Python => {
-            // Add Python formatters
-            tools.formatters.push(FormatterConfig {
-                name: "black".to_string(),
-                command: "black".to_string(),
-                patterns: vec!["**/*.py".to_string()],
-                check_command: Some("black --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("cargo install black".to_string()),
-                    npm: None,
-                    brew: Some("brew install black".to_string()),
-                    apt: Some("apt install python3-black".to_string()),
-                    manual: "Install with: pip install black".to_string(),
-                }),
-            });
-            
-            // Add Ruff as alternative
-            tools.formatters.push(FormatterConfig {
-                name: "ruff".to_string(),
-                command: "ruff format".to_string(),
-                patterns: vec!["**/*.py".to_string()],
-                check_command: Some("ruff --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("cargo install ruff".to_string()),
-                    npm: None,
-                    brew: Some("brew install ruff".to_string()),
-                    apt: Some("apt install ruff".to_string()),
-                    manual: "Install with: pip install ruff".to_string(),
-                }),
-            });
-
-            // Add linters
-            tools.linters.push(LinterConfig {
-                name: "ruff-lint".to_string(),
-                command: "ruff check".to_string(),
-                patterns: vec!["**/*.py".to_string()],
-                check_command: Some("ruff --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: Some("cargo install ruff".to_string()),
-                    npm: None,
-                    brew: Some("brew install ruff".to_string()),
-                    apt: Some("apt install ruff".to_string()),
-                    manual: "Install with: pip install ruff".to_string(),
-                }),
-            });
-        }
-        
-        ProjectType::Go => {
-            // Add Go formatters
-            tools.formatters.push(FormatterConfig {
-                name: "gofmt".to_string(),
-                command: "gofmt -w".to_string(),
-                patterns: vec!["**/*.go".to_string()],
-                check_command: Some("gofmt -help".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: None,
-                    brew: Some("brew install go".to_string()),
-                    apt: Some("apt install golang-go".to_string()),
-                    manual: "Install Go: https://golang.org/dl/".to_string(),
-                }),
-            });
-
-            // Add linters
-            tools.linters.push(LinterConfig {
-                name: "golangci-lint".to_string(),
-                command: "golangci-lint run".to_string(),
-                patterns: vec!["**/*.go".to_string()],
-                check_command: Some("golangci-lint --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: None,
-                    brew: Some("brew install golangci-lint".to_string()),
-                    apt: None,
-                    manual: "Install: https://golangci-lint.run/usage/install/".to_string(),
-                }),
-            });
-        }
-        
-        ProjectType::NxMonorepo => {
-            // Add formatters for monorepo (usually JavaScript/TypeScript)
-            tools.formatters.push(FormatterConfig {
-                name: "prettier".to_string(),
-                command: "npx prettier --write".to_string(),
-                patterns: vec![
-                    "**/*.js".to_string(),
-                    "**/*.ts".to_string(),
-                    "**/*.jsx".to_string(),
-                    "**/*.tsx".to_string(),
-                    "**/*.json".to_string(),
-                    "**/*.css".to_string(),
-                    "**/*.html".to_string(),
-                    "**/*.md".to_string(),
-                ],
-                check_command: Some("npx prettier --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: Some("npm install -g prettier".to_string()),
-                    brew: Some("brew install prettier".to_string()),
-                    apt: None,
-                    manual: "Install Node.js then run: npm install -g prettier".to_string(),
-                }),
-            });
-
-            // Add linters
-            tools.linters.push(LinterConfig {
-                name: "eslint".to_string(),
-                command: "npx eslint".to_string(),
-                patterns: vec![
-                    "**/*.js".to_string(),
-                    "**/*.ts".to_string(),
-                    "**/*.jsx".to_string(),
-                    "**/*.tsx".to_string(),
-                ],
-                check_command: Some("npx eslint --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: Some("npm install -g eslint".to_string()),
-                    brew: None,
-                    apt: None,
-                    manual: "Install Node.js then run: npm install -g eslint".to_string(),
-                }),
-            });
-        }
-        
-        ProjectType::Generic => {
-            // Add basic formatters that work across many languages
-            tools.formatters.push(FormatterConfig {
-                name: "prettier".to_string(),
-                command: "npx prettier --write".to_string(),
-                patterns: vec![
-                    "**/*.js".to_string(),
-                    "**/*.ts".to_string(),
-                    "**/*.json".to_string(),
-                    "**/*.css".to_string(),
-                    "**/*.html".to_string(),
-                    "**/*.md".to_string(),
-                ],
-                check_command: Some("npx prettier --version".to_string()),
-                install: Some(InstallConfig {
-                    cargo: None,
-                    npm: Some("npm install -g prettier".to_string()),
-                    brew: Some("brew install prettier".to_string()),
-                    apt: None,
-                    manual: "Install Node.js then run: npm install -g prettier".to_string(),
-                }),
-            });
+/// Create configuration file with examples and detected languages
+fn create_config_with_examples(detected_languages: &[String]) -> String {
+    let mut config = String::new();
+    
+    config.push_str("# Guardy Configuration File\n");
+    config.push_str("# Auto-generated with examples\n\n");
+    
+    config.push_str("hooks:\n");
+    config.push_str("  pre-commit:\n");
+    config.push_str("    - format\n");
+    config.push_str("    - lint\n");
+    config.push_str("    - secrets\n\n");
+    
+    config.push_str("security:\n");
+    config.push_str("  secret_detection: true\n\n");
+    
+    config.push_str("tools:\n");
+    config.push_str("  auto_detect: true\n");
+    config.push_str("  auto_install: false\n\n");
+    
+    // Add language-specific override examples
+    config.push_str("# Language-specific overrides (optional)\n");
+    config.push_str("# Uncomment and modify to customize behavior for specific languages\n");
+    config.push_str("#\n");
+    config.push_str("# languages:\n");
+    
+    // Add examples for detected languages
+    for lang in detected_languages {
+        match lang.as_str() {
+            "javascript" => {
+                config.push_str("#   javascript:\n");
+                config.push_str("#     package_manager: pnpm      # Override auto-detected package manager\n");
+                config.push_str("#     formatters:\n");
+                config.push_str("#       - prettier\n");
+                config.push_str("#       - biome\n");
+                config.push_str("#     linters:\n");
+                config.push_str("#       - eslint\n");
+                config.push_str("#       - typescript\n");
+                config.push_str("#\n");
+            }
+            "rust" => {
+                config.push_str("#   rust:\n");
+                config.push_str("#     formatters:\n");
+                config.push_str("#       - rustfmt             # Override default prettyplease\n");
+                config.push_str("#     linters:\n");
+                config.push_str("#       - clippy\n");
+                config.push_str("#\n");
+            }
+            "python" => {
+                config.push_str("#   python:\n");
+                config.push_str("#     package_manager: pip      # Override auto-detected uv\n");
+                config.push_str("#     formatters:\n");
+                config.push_str("#       - black\n");
+                config.push_str("#       - ruff\n");
+                config.push_str("#     linters:\n");
+                config.push_str("#       - ruff\n");
+                config.push_str("#       - mypy\n");
+                config.push_str("#\n");
+            }
+            "go" => {
+                config.push_str("#   go:\n");
+                config.push_str("#     formatters:\n");
+                config.push_str("#       - gofmt\n");
+                config.push_str("#       - goimports\n");
+                config.push_str("#     linters:\n");
+                config.push_str("#       - golangci-lint\n");
+                config.push_str("#\n");
+            }
+            _ => {}
         }
     }
+    
+    // Add manual tool configuration example
+    config.push_str("# Manual tool configuration (for unsupported languages)\n");
+    config.push_str("# formatters:\n");
+    config.push_str("#   - name: \"custom-formatter\"\n");
+    config.push_str("#     command: \"my-formatter --fix\"\n");
+    config.push_str("#     patterns:\n");
+    config.push_str("#       - \"**/*.custom\"\n");
+    config.push_str("#     check_command: \"my-formatter --version\"\n");
+    config.push_str("#     install:\n");
+    config.push_str("#       manual: \"Install from https://example.com\"\n");
+    
+    config
+}
 
-    tools
+/// Show configuration for a specific language
+async fn show_language(output: &Output, language: &str) -> Result<()> {
+    let configs = get_language_configs();
+    let current_dir = get_current_dir()?;
+    
+    // Check if language is supported
+    if let Some(lang_config) = configs.get(language) {
+        // Check if language is detected in current project
+        let detected_languages = detect_languages(&current_dir);
+        let is_detected = detected_languages.iter().any(|(lang, _)| lang == language);
+        
+        output.info(&format!("❯ {} Configuration", lang_config.name));
+        output.blank_line();
+        
+        // Detection status with badge
+        output.info("❯ Detection Status:");
+        if is_detected {
+            output.badge("DETECTED", "green");
+            println!(" Language detected in current project");
+        } else {
+            output.badge("NOT FOUND", "yellow");
+            println!(" Language not detected in current project");
+        }
+        output.blank_line();
+        
+        // Package managers using tree structure
+        output.info("❯ Package Managers:");
+        for (i, pm) in lang_config.package_managers.iter().enumerate() {
+            let is_last = i == lang_config.package_managers.len() - 1;
+            output.tree_item(is_last, pm, "(preference order)");
+        }
+        output.blank_line();
+        
+        // Formatters
+        output.info("❯ Formatters:");
+        for formatter in &lang_config.formatters {
+            output.success(&format!("{}", formatter.name));
+            output.indent(&format!("Command: {}", formatter.command));
+            output.indent(&format!("Check: {}", formatter.check_command));
+            
+            // Show installation options
+            if let Some(npm) = &formatter.install_commands.npm {
+                output.indent(&format!("Install (npm): {}", npm));
+            }
+            if let Some(pnpm) = &formatter.install_commands.pnpm {
+                output.indent(&format!("Install (pnpm): {}", pnpm));
+            }
+            if let Some(cargo) = &formatter.install_commands.cargo {
+                output.indent(&format!("Install (cargo): {}", cargo));
+            }
+            if let Some(brew) = &formatter.install_commands.brew {
+                output.indent(&format!("Install (brew): {}", brew));
+            }
+            output.indent(&format!("Manual: {}", formatter.install_commands.manual));
+            output.blank_line();
+        }
+        
+        // Linters
+        output.info("❯ Linters:");
+        for linter in &lang_config.linters {
+            output.success(&format!("{}", linter.name));
+            output.indent(&format!("Command: {}", linter.command));
+            output.indent(&format!("Check: {}", linter.check_command));
+            
+            // Show installation options
+            if let Some(npm) = &linter.install_commands.npm {
+                output.indent(&format!("Install (npm): {}", npm));
+            }
+            if let Some(pnpm) = &linter.install_commands.pnpm {
+                output.indent(&format!("Install (pnpm): {}", pnpm));
+            }
+            if let Some(cargo) = &linter.install_commands.cargo {
+                output.indent(&format!("Install (cargo): {}", cargo));
+            }
+            if let Some(brew) = &linter.install_commands.brew {
+                output.indent(&format!("Install (brew): {}", brew));
+            }
+            output.indent(&format!("Manual: {}", linter.install_commands.manual));
+            output.blank_line();
+        }
+        
+        // Configuration instructions
+        output.info("❯ Configuration:");
+        output.indent(&format!("Add to .guardy.yml under languages.{} section", language));
+        output.indent("Use 'guardy config init' to generate example configuration");
+        
+    } else {
+        output.error(&format!("Language '{}' is not supported", language));
+        output.blank_line();
+        output.info("❯ Supported languages:");
+        for lang_name in configs.keys() {
+            output.indent(&format!("• {}", lang_name));
+        }
+        output.blank_line();
+        output.info("Run 'guardy config languages' to see all supported languages");
+    }
+    
+    Ok(())
+}
+
+/// Show supported languages
+async fn show_languages(output: &Output, show_all: bool) -> Result<()> {
+    let configs = get_language_configs();
+    let current_dir = get_current_dir()?;
+    let detected_languages = detect_languages(&current_dir);
+    
+    if show_all {
+        output.banner("All Supported Languages", "Complete list of languages supported by Guardy");
+        
+        // Show detected languages first
+        if !detected_languages.is_empty() {
+            println!("{} {}", style("●").green().bold(), style("Detected in Current Project:").bold());
+            for (lang, count) in &detected_languages {
+                if let Some(config) = configs.get(lang) {
+                    let file_text = if *count == 1 { "file" } else { "files" };
+                    output.success(&format!("{} - {} ({} {})", config.name, config.description, count, file_text));
+                }
+            }
+            output.blank_line();
+        }
+        
+        // Show available (non-detected) languages
+        let mut available_languages = Vec::new();
+        for (lang_name, config) in configs {
+            let is_detected = detected_languages.iter().any(|(l, _)| l == &lang_name);
+            if !is_detected {
+                available_languages.push((lang_name, config));
+            }
+        }
+        
+        if !available_languages.is_empty() {
+            println!("{} {}", style("●").white().bold(), style("Supported Languages:").bold());
+            for (_, config) in available_languages {
+                output.list_item(&format!("{} - {}", config.name, config.description));
+            }
+        }
+    } else {
+        // Show only detected languages by default with their tools
+        output.banner("Detected Languages", "Languages and tools found in your project");
+        
+        if !detected_languages.is_empty() {
+            for (lang, count) in &detected_languages {
+                if let Some(config) = configs.get(lang) {
+                    // Language header with file count
+                    let file_text = if *count == 1 { "file" } else { "files" };
+                    let description_with_count = format!("{} ({} {})", config.description, count, file_text);
+                    output.language_header(&config.name, &description_with_count);
+                    
+                    // Show package manager
+                    if !config.package_managers.is_empty() {
+                        output.package_manager(&config.package_managers[0]);
+                    }
+                    
+                    // Show formatters
+                    if !config.formatters.is_empty() {
+                        let formatter_names: Vec<&str> = config.formatters.iter().map(|f| f.name.as_str()).collect();
+                        output.tool_section("🎨", "Formatters", &formatter_names);
+                    }
+                    
+                    // Show linters
+                    if !config.linters.is_empty() {
+                        let linter_names: Vec<&str> = config.linters.iter().map(|l| l.name.as_str()).collect();
+                        output.tool_section("🔍", "Linters", &linter_names);
+                    }
+                    
+                    output.blank_line();
+                }
+            }
+        } else {
+            output.warning("No languages detected in current project");
+            output.info("Run 'guardy config languages --all' to see all supported languages");
+        }
+    }
+    
+    Ok(())
 }

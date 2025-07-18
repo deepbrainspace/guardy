@@ -1,5 +1,75 @@
-# guardy
-Guardy is a Git Workflow Management and Automation Tool written in Rust.
+# Guardy 🛡️
+
+**Intelligent Git Workflows for Modern Developers**
+
+Guardy is a revolutionary MCP-first developer workflow intelligence tool that provides comprehensive language support, automated formatting, security scanning, and Git hook management. Built with Rust for maximum performance and reliability.
+
+## ✨ Key Features
+
+- **🌍 Comprehensive Language Support**: 18+ programming languages with automatic detection
+- **🔧 Smart Formatting**: Auto-detects and configures formatters for your project type
+- **🔒 Security Scanning**: Advanced pattern matching for secrets and vulnerabilities
+- **🪝 Git Hook Management**: Automated pre-commit, commit-msg, and pre-push hooks
+- **📦 Package Manager Integration**: Supports 15+ package managers with intelligent detection
+- **🤖 MCP Integration**: Model Context Protocol support for AI-powered workflows
+- **⚡ High Performance**: Built with Rust for speed and reliability
+
+## 🚀 Supported Languages & Ecosystems
+
+### Programming Languages
+- **Rust** - `prettyplease`, `rustfmt`, `clippy`
+- **JavaScript/TypeScript** - `prettier`, `biome`, `eslint`
+- **Python** - `black`, `ruff`, `ruff-lint`
+- **Go** - `gofmt`, `golangci-lint`
+- **C/C++** - `clang-format`, `clang-tidy`
+- **.NET (C#/F#/VB)** - `dotnet format`, `dotnet analyzers`
+- **PHP** - `php-cs-fixer`, `phpstan`
+- **Ruby** - `rubocop`
+- **Perl** - `perltidy`, `perlcritic`
+- **Elixir** - `mix format`, `credo`
+- **Haskell** - `ormolu`, `hlint`
+- **Kotlin** - `ktlint`
+- **Scala** - `scalafmt`, `scalafix`
+- **Crystal** - `crystal tool format`
+- **Zig** - `zig fmt`
+- **Swift** - `swift-format`, `swiftlint`
+- **Dart** - `dart format`, `dart analyze`
+
+### Package Managers
+- **JavaScript**: npm, pnpm, yarn, bun
+- **Python**: pip, poetry, uv
+- **Rust**: cargo
+- **Go**: go mod
+- **PHP**: composer
+- **Ruby**: gem, bundler
+- **Elixir**: hex, mix
+- **Haskell**: stack, cabal
+- **C/C++**: conan, vcpkg
+- **Scala**: sbt
+- **Crystal**: shards
+- **Zig**: zig build
+- **NX**: nx (monorepo)
+
+### Project Types Auto-Detection
+Guardy automatically detects and configures support for:
+- **Rust** (`Cargo.toml`)
+- **Node.js** (`package.json`)
+- **Python** (`pyproject.toml`, `requirements.txt`, `uv.lock`, `poetry.lock`)
+- **Go** (`go.mod`)
+- **NX Monorepo** (`nx.json`)
+- **.NET** (`*.csproj`, `*.sln`, `global.json`)
+- **PHP** (`composer.json`)
+- **Ruby** (`Gemfile`, `*.gemspec`)
+- **Perl** (`cpanfile`, `Makefile.PL`)
+- **Elixir** (`mix.exs`)
+- **Haskell** (`stack.yaml`, `*.cabal`)
+- **C/C++** (`CMakeLists.txt`, `Makefile`, `conanfile.txt`)
+- **Kotlin** (`build.gradle.kts` + `*.kt` files)
+- **Scala** (`build.sbt`)
+- **Crystal** (`shard.yml`)
+- **Zig** (`build.zig`)
+- **Swift** (`Package.swift`, `*.xcodeproj`)
+- **Dart** (`pubspec.yaml`)
 
 ## Quick Setup
 

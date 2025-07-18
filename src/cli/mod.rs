@@ -118,6 +118,17 @@ pub enum ConfigCommands {
     Validate,
     /// Show current configuration
     Show,
+    /// Show configuration for a specific language
+    Language {
+        /// Language name (e.g., rust, javascript, python, go)
+        name: String,
+    },
+    /// List all supported languages
+    Languages {
+        /// Show all supported languages (not just detected ones)
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 /// Security subcommands

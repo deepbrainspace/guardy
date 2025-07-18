@@ -291,12 +291,12 @@ async fn execute_pre_commit_hook(current_dir: &Path, output: &Output) -> Result<
     
     // 2. Format checking using configured formatters with auto-detection
     if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
-        let tool_manager = ToolManager::new(config.tools.clone(), false); // Don't auto-install during hook
+        let tool_manager = ToolManager::new(config.tools.clone(), config.tools.auto_install); // Use config setting for auto-install
         
         // Auto-detect available tools if enabled
         let mut detected_tools = Vec::new();
         if config.tools.auto_detect {
-            match tool_manager.detect_project_tools(current_dir) {
+            match tool_manager.detect_tools(current_dir) {
                 Ok(tools) => {
                     detected_tools = tools;
                     if !detected_tools.is_empty() {
@@ -318,10 +318,17 @@ async fn execute_pre_commit_hook(current_dir: &Path, output: &Output) -> Result<
                 let mut formatting_errors = Vec::new();
                 
                 for formatter in &config.tools.formatters {
-                    // Check if formatter is available
+                    // Check if formatter is available (with auto-install if enabled)
                     if let Err(e) = tool_manager.ensure_formatter_available(formatter) {
-                        formatting_errors.push(format!("Formatter '{}' not available: {}", formatter.name, e));
+                        if config.tools.auto_install {
+                            formatting_errors.push(format!("Formatter '{}' auto-installation failed: {}", formatter.name, e));
+                        } else {
+                            formatting_errors.push(format!("Formatter '{}' not available: {}", formatter.name, e));
+                        }
                         continue;
+                    } else if config.tools.auto_install {
+                        // Check if it was actually installed during this run
+                        output.info(&format!("✅ Formatter '{}' is available", formatter.name));
                     }
                     
                     // Find files matching formatter patterns
