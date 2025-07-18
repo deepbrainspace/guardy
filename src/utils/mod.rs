@@ -3,6 +3,7 @@
 //! This module provides common utility functions used throughout the application.
 
 pub mod glob;
+pub mod package_manager;
 
 use anyhow::Result;
 use std::path::Path;
