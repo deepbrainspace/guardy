@@ -2,26 +2,18 @@ use anyhow::Result;
 use clap::Parser;
 
 mod cli;
-mod config;
-mod external;
-mod git;
 mod hooks;
-mod shared;
-mod mcp;
+mod git;
 mod security;
+mod external;
+mod config;
+mod mcp;
+mod shared;
 
-use cli::Cli;
+use cli::commands::Cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
-
-    // Parse command line arguments
     let cli = Cli::parse();
-
-    // Execute the command
-    cli.run().await?;
-
-    Ok(())
+    cli.run().await
 }
