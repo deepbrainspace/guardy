@@ -5,8 +5,8 @@
 
 use crate::cli::Output;
 use crate::config::GuardyConfig;
-// use crate::tools::ToolManager;
-use crate::utils::{get_current_dir, FileUtils};
+// use crate::external::ToolManager;
+use crate::shared::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;

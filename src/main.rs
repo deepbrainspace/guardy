@@ -3,12 +3,12 @@ use clap::Parser;
 
 mod cli;
 mod config;
+mod external;
 mod git;
 mod hooks;
+mod shared;
 mod mcp;
 mod security;
-mod tools;
-mod utils;
 
 use cli::Cli;
 

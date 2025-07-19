@@ -29,12 +29,12 @@
 
 pub mod cli;
 pub mod config;
+pub mod external;
 pub mod git;
 pub mod hooks;
+pub mod shared;
 pub mod mcp;
 pub mod security;
-pub mod tools;
-pub mod utils;
 
 pub use cli::{Cli, Output};
 pub use config::GuardyConfig;

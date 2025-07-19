@@ -4,7 +4,7 @@
 
 use super::patterns::patterns_from_config;
 use super::{SecurityMatch, SecurityPattern};
-use crate::utils::glob::build_globset;
+use crate::shared::glob::build_globset;
 use anyhow::{Context, Result};
 use globset::GlobSet;
 use std::fs;

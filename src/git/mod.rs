@@ -3,6 +3,9 @@
 //! This module provides a high-level interface for Git operations using git2.
 //! It handles repository detection, branch operations, and hook management.
 
+pub mod commit;
+pub mod operations;
+
 use anyhow::{Context, Result};
 use git2::{Repository, Status, StatusOptions};
 use std::path::Path;

@@ -3,26 +3,74 @@
 //! This hook validates commit messages according to conventional commit format.
 
 use super::HookContext;
+use crate::cli::Output;
+use crate::git::commit::is_conventional_commit;
 use anyhow::Result;
 use regex::Regex;
 use std::fs;
 
 /// Execute commit-msg hook
-/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
-#[allow(dead_code)]
-pub async fn execute(context: HookContext) -> Result<()> {
-    println!("📝 Validating commit message...");
-
-    if context.args.is_empty() {
-        anyhow::bail!("No commit message file provided");
+pub async fn execute(_context: HookContext) -> Result<()> {
+    let output = Output::new(false, false); // Default to non-verbose, non-quiet
+    let current_dir = std::env::current_dir()?;
+    
+    let step1_start = std::time::Instant::now();
+    
+    // Get commit message from file (usually .git/COMMIT_EDITMSG)
+    let commit_msg_path = current_dir.join(".git/COMMIT_EDITMSG");
+    if !commit_msg_path.exists() {
+        output.warning("No commit message file found, skipping validation");
+        return Ok(());
     }
-
-    let commit_msg_file = &context.args[0];
-    let commit_msg = fs::read_to_string(commit_msg_file)?;
-
-    validate_commit_message(&commit_msg)?;
-
-    println!("✅ Commit message validation passed!");
+    
+    let commit_msg = fs::read_to_string(&commit_msg_path)?;
+    let first_line = commit_msg.lines().next().unwrap_or("").trim();
+    
+    if first_line.is_empty() {
+        anyhow::bail!("Commit message cannot be empty");
+    }
+    
+    // 1. Check conventional commit format
+    if !is_conventional_commit(first_line) {
+        anyhow::bail!(
+            "Commit message must follow conventional commit format\n\
+            Expected format: type(scope): description\n\
+            Examples: feat: add new feature, fix(auth): resolve login issue"
+        );
+    }
+    
+    output.success("Conventional commit format is valid");
+    
+    let step1_duration = step1_start.elapsed();
+    output.workflow_step_timed(1, 3, "Validating commit message format", "📝", step1_duration);
+    
+    let step2_start = std::time::Instant::now();
+    
+    // 2. Check commit message length
+    if first_line.len() > 72 {
+        anyhow::bail!(
+            "Commit message subject line is too long (max 72 characters)\n\
+            Current length: {} characters", first_line.len()
+        );
+    }
+    
+    output.success("Commit message length is appropriate");
+    
+    let step2_duration = step2_start.elapsed();
+    output.workflow_step_timed(2, 3, "Checking commit message length", "📏", step2_duration);
+    
+    let step3_start = std::time::Instant::now();
+    
+    // 3. Check for breaking changes indication
+    if first_line.contains("BREAKING CHANGE") || first_line.contains("!") {
+        output.info("Breaking change detected in commit message");
+    }
+    
+    output.success("Commit message validation passed");
+    
+    let step3_duration = step3_start.elapsed();
+    output.workflow_step_timed(3, 3, "Checking for breaking changes", "⚠️", step3_duration);
+    
     Ok(())
 }
 

@@ -5,7 +5,7 @@
 use crate::cli::McpCommands;
 use crate::cli::Output;
 use crate::config::GuardyConfig;
-use crate::utils::get_current_dir;
+use crate::shared::get_current_dir;
 use anyhow::Result;
 
 /// Execute MCP commands

@@ -1,7 +1,10 @@
-//! Tool management and auto-installation
+//! External tool integration
 //!
-//! This module handles detection, installation, and execution of development tools
+//! This module handles detection, installation, and execution of external development tools
 //! like formatters and linters across different languages and package managers.
+
+pub mod formatters;
+pub mod package_managers;
 
 use crate::config::{FormatterConfig, InstallConfig, ToolsConfig};
 use anyhow::{Context, Result};

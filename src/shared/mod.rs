@@ -9,6 +9,7 @@ use std::path::Path;
 mod tests;
 
 pub mod glob;
+pub mod patterns;
 
 
 /// Get the current working directory
