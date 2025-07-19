@@ -25,7 +25,7 @@ pub async fn execute(cmd: HooksCommands, force: bool, output: &Output) -> Result
         HooksCommands::Run { hook } => {
             let hooks_to_run = match hook {
                 Some(hook_name) => vec![hook_name],
-                None => vec!["pre-commit".to_string(), "commit-msg".to_string(), "pre-push".to_string()],
+                None => vec!["pre-commit".to_string(), "commit-msg".to_string(), "pre-push".to_string(), "post-checkout".to_string()],
             };
             run(hooks_to_run, output).await
         },
@@ -55,6 +55,7 @@ async fn install(force: bool, output: &Output) -> Result<()> {
         ("pre-commit", "Security and formatting checks"),
         ("commit-msg", "Conventional commit validation"),
         ("pre-push", "Final validation before push"),
+        ("post-checkout", "Dependency management automation"),
     ];
     
     output.info("Installing hooks:");
@@ -107,7 +108,7 @@ async fn remove(output: &Output) -> Result<()> {
         return Ok(());
     }
     
-    let hooks = ["pre-commit", "commit-msg", "pre-push"];
+    let hooks = ["pre-commit", "commit-msg", "pre-push", "post-checkout"];
     let mut removed_count = 0;
     
     for hook_name in &hooks {
@@ -156,6 +157,7 @@ async fn list(output: &Output) -> Result<()> {
         ("pre-commit", "Security and formatting checks"),
         ("commit-msg", "Conventional commit validation"),
         ("pre-push", "Final validation before push"),
+        ("post-checkout", "Dependency management automation"),
     ];
     
     output.info("Hook Status:");
@@ -217,9 +219,10 @@ async fn run(hooks: Vec<String>, output: &Output) -> Result<()> {
             "pre-commit" => execute_pre_commit_hook(&current_dir, output).await?,
             "commit-msg" => execute_commit_msg_hook(&current_dir, output).await?,
             "pre-push" => execute_pre_push_hook(&current_dir, output).await?,
+            "post-checkout" => execute_post_checkout_hook(&current_dir, output).await?,
             _ => {
                 output.error(&format!("Unknown hook: {}", hook));
-                output.info("Available hooks: pre-commit, commit-msg, pre-push");
+                output.info("Available hooks: pre-commit, commit-msg, pre-push, post-checkout");
                 return Ok(());
             }
         };
@@ -547,6 +550,150 @@ async fn execute_pre_push_hook(current_dir: &Path, output: &Output) -> Result<bo
     output.workflow_step_timed(3, 3, "Running test suite", "🧪", step3_duration);
     
     Ok(true)
+}
+
+/// Execute post-checkout hook
+async fn execute_post_checkout_hook(current_dir: &Path, output: &Output) -> Result<bool> {
+    let step1_start = std::time::Instant::now();
+    
+    // 1. Check if configuration enables post-checkout dependency management
+    let config_result = GuardyConfig::load_from_file(&current_dir.join("guardy.yml"));
+    let enable_dependency_management = if let Ok(_config) = &config_result {
+        // TODO: Add configuration flag support when config schema is updated
+        // For now, default to enabled
+        true
+    } else {
+        // Default to enabled if no config found
+        true
+    };
+    
+    if !enable_dependency_management {
+        output.success("Post-checkout dependency management is disabled");
+        return Ok(true);
+    }
+    
+    let step1_duration = step1_start.elapsed();
+    output.workflow_step_timed(1, 3, "Checking dependency management settings", "⚙️", step1_duration);
+    
+    let step2_start = std::time::Instant::now();
+    
+    // 2. Detect package files and check if dependencies might have changed
+    let package_files = [
+        "package.json",
+        "pnpm-workspace.yaml", 
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "Cargo.toml",
+        "Cargo.lock",
+        "pyproject.toml",
+        "requirements.txt",
+        "go.mod",
+        "go.sum"
+    ];
+    
+    let mut found_package_files = Vec::new();
+    for file in &package_files {
+        let file_path = current_dir.join(file);
+        if file_path.exists() {
+            found_package_files.push(file.to_string());
+        }
+    }
+    
+    if found_package_files.is_empty() {
+        output.info("No package files detected, skipping dependency management");
+        return Ok(true);
+    }
+    
+    output.success(&format!("Detected package files: {}", found_package_files.join(", ")));
+    
+    let step2_duration = step2_start.elapsed();
+    output.workflow_step_timed(2, 3, "Detecting package files", "📦", step2_duration);
+    
+    let step3_start = std::time::Instant::now();
+    
+    // 3. Check if we should run dependency installation
+    // For now, we'll check if pnpm-lock.yaml exists and run pnpm install
+    // TODO: Add more sophisticated change detection by comparing git HEAD~1
+    let should_install = if current_dir.join("pnpm-lock.yaml").exists() {
+        output.info("pnpm workspace detected, running dependency sync...");
+        true
+    } else if current_dir.join("package-lock.json").exists() {
+        output.info("npm project detected, running dependency sync...");
+        true
+    } else if current_dir.join("yarn.lock").exists() {
+        output.info("Yarn project detected, running dependency sync...");
+        true
+    } else if current_dir.join("Cargo.lock").exists() {
+        output.info("Rust project detected, checking Cargo dependencies...");
+        true
+    } else {
+        output.info("No lockfile detected, skipping automatic dependency installation");
+        false
+    };
+    
+    if should_install {
+        // Run the appropriate package manager
+        let install_result = if current_dir.join("pnpm-lock.yaml").exists() {
+            run_dependency_install("pnpm", &["install"], current_dir, output)
+        } else if current_dir.join("package-lock.json").exists() {
+            run_dependency_install("npm", &["install"], current_dir, output)
+        } else if current_dir.join("yarn.lock").exists() {
+            run_dependency_install("yarn", &["install"], current_dir, output)
+        } else if current_dir.join("Cargo.lock").exists() {
+            run_dependency_install("cargo", &["check"], current_dir, output)
+        } else {
+            Ok(true)
+        };
+        
+        match install_result {
+            Ok(success) => {
+                if success {
+                    output.success("Dependencies synchronized successfully");
+                } else {
+                    output.warning("Dependency synchronization completed with warnings");
+                }
+            }
+            Err(e) => {
+                output.error(&format!("Dependency installation failed: {}", e));
+                output.info("You may need to run the package manager manually");
+                // Don't fail the hook for dependency issues
+            }
+        }
+    } else {
+        output.info("No dependency installation required");
+    }
+    
+    let step3_duration = step3_start.elapsed();
+    output.workflow_step_timed(3, 3, "Managing dependencies", "🔄", step3_duration);
+    
+    Ok(true)
+}
+
+/// Run dependency installation command
+fn run_dependency_install(package_manager: &str, args: &[&str], current_dir: &Path, output: &Output) -> Result<bool> {
+    let mut cmd = Command::new(package_manager);
+    cmd.args(args)
+        .current_dir(current_dir);
+    
+    if output.is_verbose() {
+        output.info(&format!("Running: {} {}", package_manager, args.join(" ")));
+    }
+    
+    let result = cmd.output()?;
+    
+    if output.is_verbose() {
+        if !result.stdout.is_empty() {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            output.info(&format!("Output: {}", stdout));
+        }
+        if !result.stderr.is_empty() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            output.info(&format!("Stderr: {}", stderr));
+        }
+    }
+    
+    Ok(result.status.success())
 }
 
 /// Get list of staged files
