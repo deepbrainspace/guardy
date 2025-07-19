@@ -5,7 +5,7 @@
 use crate::cli::{SecurityCommands, Output};
 use crate::config::GuardyConfig;
 use crate::security::SecretScanner;
-use crate::utils::{get_current_dir, PathUtils, glob::{expand_file_patterns, is_glob_pattern}};
+use crate::shared::{get_current_dir, PathUtils, glob::{expand_file_patterns, is_glob_pattern}};
 use anyhow::Result;
 use std::path::Path;
 

@@ -335,9 +335,9 @@ pub fn detect_languages<P: AsRef<std::path::Path>>(path: P) -> Vec<(String, usiz
         
         for pattern in &config.file_patterns {
             // Use proper glob pattern matching
-            if crate::utils::glob::is_glob_pattern(pattern) {
+            if crate::shared::glob::is_glob_pattern(pattern) {
                 // For glob patterns, count matching files
-                if let Ok(matches) = crate::utils::glob::expand_glob_pattern(pattern, path) {
+                if let Ok(matches) = crate::shared::glob::expand_glob_pattern(pattern, path) {
                     total_files += matches.len();
                 }
             } else {

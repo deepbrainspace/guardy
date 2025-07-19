@@ -5,9 +5,8 @@
 use crate::cli::HooksCommands;
 use crate::cli::Output;
 use crate::config::GuardyConfig;
-use crate::security::SecretScanner;
-use crate::tools::ToolManager;
-use crate::utils::{get_current_dir, FileUtils};
+use crate::hooks::{execute_hook, HookContext};
+use crate::shared::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -214,16 +213,12 @@ async fn run(hooks: Vec<String>, output: &Output) -> Result<()> {
             output.section_header(&format!("Running {} hook", hook));
         }
         
-        // Execute hook based on type
-        let success = match hook.as_str() {
-            "pre-commit" => execute_pre_commit_hook(&current_dir, output).await?,
-            "commit-msg" => execute_commit_msg_hook(&current_dir, output).await?,
-            "pre-push" => execute_pre_push_hook(&current_dir, output).await?,
-            "post-checkout" => execute_post_checkout_hook(&current_dir, output).await?,
-            _ => {
-                output.error(&format!("Unknown hook: {}", hook));
-                output.info("Available hooks: pre-commit, commit-msg, pre-push, post-checkout");
-                return Ok(());
+        // Execute hook using the hooks module
+        let success = match execute_hook_via_module(hook, &current_dir, output).await {
+            Ok(_) => true,
+            Err(e) => {
+                output.error(&format!("Hook '{}' failed: {}", hook, e));
+                false
             }
         };
         
@@ -278,397 +273,26 @@ exec guardy hooks run {}
     Ok(script)
 }
 
-/// Execute pre-commit hook
-async fn execute_pre_commit_hook(current_dir: &Path, output: &Output) -> Result<bool> {
-    let step1_start = std::time::Instant::now();
+/// Execute hook via the hooks module
+async fn execute_hook_via_module(hook_name: &str, current_dir: &std::path::Path) -> Result<()> {
+    // Load configuration
+    let config = GuardyConfig::load_from_file(&current_dir.join("guardy.yml"))
+        .unwrap_or_default();
     
-    // 1. Security scan for secrets
-    if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
-        if config.security.secret_detection {
-            // Individual scanning progress will be shown by success messages
-            
-            // Get staged files
-            let staged_files = get_staged_files(current_dir)?;
-            if !staged_files.is_empty() {
-                let scanner = SecretScanner::from_config(&config, output)?;
-                let mut found_secrets = false;
-                
-                for file in &staged_files {
-                    let file_path = current_dir.join(file);
-                    if let Ok(violations) = scanner.scan_file(&file_path) {
-                        if !violations.is_empty() {
-                            found_secrets = true;
-                            output.clear_line();
-                            output.error(&format!("🚨 Secrets found in {}", file));
-                            for violation in violations {
-                                output.indent(&format!("  {} ({:?})", violation.pattern_name, violation.severity));
-                            }
-                        }
-                    }
-                }
-                
-                if found_secrets {
-                    output.error("Pre-commit hook failed: secrets detected in staged files");
-                    return Ok(false);
-                }
-                
-                output.clear_line();
-                output.success("No secrets found in staged files");
-            } else {
-                output.clear_line();
-                output.info("No staged files to scan");
-            }
-        }
-    }
+    // Create hook context
+    let context = HookContext::new(
+        hook_name.to_string(),
+        config,
+        vec![] // No additional args for now
+    );
     
-    let step1_duration = step1_start.elapsed();
-    output.workflow_step_timed(1, 3, "Running security scans", "🔍", step1_duration);
-    
-    let step2_start = std::time::Instant::now();
-    
-    // 2. Format checking using configured formatters with auto-detection
-    if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
-        let tool_manager = ToolManager::new(config.tools.clone(), config.tools.auto_install); // Use config setting for auto-install
-        
-        // Auto-detect available tools if enabled
-        let mut detected_tools = Vec::new();
-        if config.tools.auto_detect {
-            match tool_manager.detect_tools(current_dir) {
-                Ok(tools) => {
-                    detected_tools = tools;
-                    if !detected_tools.is_empty() {
-                        output.info(&format!("Auto-detected tools: {}", detected_tools.join(", ")));
-                    }
-                }
-                Err(e) => {
-                    output.warning(&format!("Failed to auto-detect tools: {}", e));
-                }
-            }
-        }
-        
-        if !config.tools.formatters.is_empty() {
-            output.info("🏃 Checking code formatting...");
-            
-            // Get staged files for formatting
-            let staged_files = get_staged_files(current_dir)?;
-            if !staged_files.is_empty() {
-                let mut formatting_errors = Vec::new();
-                
-                for formatter in &config.tools.formatters {
-                    // Check if formatter is available (with auto-install if enabled)
-                    if let Err(e) = tool_manager.ensure_formatter_available(formatter) {
-                        if config.tools.auto_install {
-                            formatting_errors.push(format!("Formatter '{}' auto-installation failed: {}", formatter.name, e));
-                        } else {
-                            formatting_errors.push(format!("Formatter '{}' not available: {}", formatter.name, e));
-                        }
-                        continue;
-                    } else if config.tools.auto_install {
-                        // Check if it was actually installed during this run
-                        output.info(&format!("✅ Formatter '{}' is available", formatter.name));
-                    }
-                    
-                    // Find files matching formatter patterns
-                    let matching_files = find_matching_files(&staged_files, &formatter.patterns);
-                    if matching_files.is_empty() {
-                        continue;
-                    }
-                    
-                    // Run formatter in check mode (dry run)
-                    let result = run_formatter_check(&formatter.command, &matching_files, current_dir, output);
-                    match result {
-                        Ok(has_changes) => {
-                            if has_changes {
-                                formatting_errors.push(format!("Files need formatting with {}: {}", formatter.name, matching_files.join(", ")));
-                            }
-                        }
-                        Err(e) => {
-                            formatting_errors.push(format!("Formatter '{}' failed: {}", formatter.name, e));
-                        }
-                    }
-                }
-                
-                if !formatting_errors.is_empty() {
-                    output.clear_line();
-                    output.error("Code formatting issues found:");
-                    for error in &formatting_errors {
-                        output.indent(&format!("  {}", error));
-                    }
-                    output.indent("Run formatters to fix these issues before committing");
-                    return Ok(false);
-                }
-                
-                output.clear_line();
-                output.success("Code formatting checks passed");
-            } else {
-                output.clear_line();
-                output.info("No staged files to format");
-            }
-        } else if config.tools.auto_detect && !detected_tools.is_empty() {
-            output.info("Auto-detection enabled but no formatters configured yet");
-            output.info("Consider adding detected tools to your guardy.yml configuration");
-        } else {
-            output.info("No formatters configured - skipping formatting checks");
-        }
-    } else {
-        output.info("No configuration found - skipping formatting checks");
-    }
-    
-    let step2_duration = step2_start.elapsed();
-    output.workflow_step_timed(2, 3, "Running formatting checks", "🎨", step2_duration);
-    
-    let step3_start = std::time::Instant::now();
-    
-    // 3. Linting validation (placeholder for future linter integration)
-    // Simulate some work (in real implementation, this would be actual linting)
-    std::thread::sleep(std::time::Duration::from_millis(50));
-    
-    output.success("Linting validation passed");
-    
-    let step3_duration = step3_start.elapsed();
-    output.workflow_step_timed(3, 3, "Running linting validation", "🔧", step3_duration);
-    
-    Ok(true)
+    // Execute the hook
+    execute_hook(context).await
 }
 
-/// Execute commit-msg hook
-async fn execute_commit_msg_hook(current_dir: &Path, output: &Output) -> Result<bool> {
-    let step1_start = std::time::Instant::now();
-    
-    // Get commit message from file (usually .git/COMMIT_EDITMSG)
-    let commit_msg_path = current_dir.join(".git/COMMIT_EDITMSG");
-    if !commit_msg_path.exists() {
-        output.warning("No commit message file found, skipping validation");
-        return Ok(true);
-    }
-    
-    let commit_msg = fs::read_to_string(&commit_msg_path)?;
-    let first_line = commit_msg.lines().next().unwrap_or("").trim();
-    
-    if first_line.is_empty() {
-        output.error("Commit message cannot be empty");
-        return Ok(false);
-    }
-    
-    // 1. Check conventional commit format
-    if !is_conventional_commit(first_line) {
-        output.error("Commit message must follow conventional commit format");
-        output.indent("Expected format: type(scope): description");
-        output.indent("Examples: feat: add new feature, fix(auth): resolve login issue");
-        return Ok(false);
-    }
-    
-    output.success("Conventional commit format is valid");
-    
-    let step1_duration = step1_start.elapsed();
-    output.workflow_step_timed(1, 3, "Validating commit message format", "📝", step1_duration);
-    
-    let step2_start = std::time::Instant::now();
-    
-    // 2. Check commit message length
-    if first_line.len() > 72 {
-        output.error("Commit message subject line is too long (max 72 characters)");
-        output.indent(&format!("Current length: {} characters", first_line.len()));
-        return Ok(false);
-    }
-    
-    output.success("Commit message length is appropriate");
-    
-    let step2_duration = step2_start.elapsed();
-    output.workflow_step_timed(2, 3, "Checking commit message length", "📏", step2_duration);
-    
-    let step3_start = std::time::Instant::now();
-    
-    // 3. Check for breaking changes indication
-    if first_line.contains("BREAKING CHANGE") || first_line.contains("!") {
-        output.info("Breaking change detected in commit message");
-    }
-    
-    output.success("Commit message validation passed");
-    
-    let step3_duration = step3_start.elapsed();
-    output.workflow_step_timed(3, 3, "Checking for breaking changes", "⚠️", step3_duration);
-    
-    Ok(true)
-}
 
-/// Execute pre-push hook
-async fn execute_pre_push_hook(current_dir: &Path, output: &Output) -> Result<bool> {
-    let step1_start = std::time::Instant::now();
-    
-    // 1. Final security validation - scan entire repository
-    if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
-        if config.security.secret_detection {
-            let scanner = SecretScanner::from_config(&config, output)?;
-            let (violations, _, _) = scanner.scan_directory(current_dir)?;
-            
-            if !violations.is_empty() {
-                output.error("Security issues found in repository");
-                for violation in &violations {
-                    output.indent(&format!("  {} in {} ({:?})", violation.pattern_name, violation.file_path, violation.severity));
-                }
-                return Ok(false);
-            }
-            
-            output.success("No security issues found");
-        }
-    }
-    
-    let step1_duration = step1_start.elapsed();
-    output.workflow_step_timed(1, 3, "Running final security validation", "🔒", step1_duration);
-    
-    let step2_start = std::time::Instant::now();
-    
-    // 2. Branch protection checks
-    if let Ok(branch) = get_current_branch(current_dir) {
-        if let Ok(config) = GuardyConfig::load_from_file(&current_dir.join("guardy.yml")) {
-            if config.security.protected_branches.contains(&branch) {
-                output.warning(&format!("Pushing to protected branch: {}", branch));
-                output.info("Ensure you have proper permissions and this is intentional");
-            } else {
-                output.success("Branch protection checks passed");
-            }
-        } else {
-            output.success("Branch protection checks passed");
-        }
-    } else {
-        output.success("Branch protection checks passed");
-    }
-    
-    let step2_duration = step2_start.elapsed();
-    output.workflow_step_timed(2, 3, "Checking branch protection", "🛡️", step2_duration);
-    
-    let step3_start = std::time::Instant::now();
-    
-    // 3. Test suite execution (placeholder for future test integration)
-    // Simulate some work (in real implementation, this would be actual test execution)
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    
-    output.success("Test suite passed");
-    
-    let step3_duration = step3_start.elapsed();
-    output.workflow_step_timed(3, 3, "Running test suite", "🧪", step3_duration);
-    
-    Ok(true)
-}
 
-/// Execute post-checkout hook
-async fn execute_post_checkout_hook(current_dir: &Path, output: &Output) -> Result<bool> {
-    let step1_start = std::time::Instant::now();
-    
-    // 1. Check if configuration enables post-checkout dependency management
-    let config_result = GuardyConfig::load_from_file(&current_dir.join("guardy.yml"));
-    let enable_dependency_management = if let Ok(_config) = &config_result {
-        // TODO: Add configuration flag support when config schema is updated
-        // For now, default to enabled
-        true
-    } else {
-        // Default to enabled if no config found
-        true
-    };
-    
-    if !enable_dependency_management {
-        output.success("Post-checkout dependency management is disabled");
-        return Ok(true);
-    }
-    
-    let step1_duration = step1_start.elapsed();
-    output.workflow_step_timed(1, 3, "Checking dependency management settings", "⚙️", step1_duration);
-    
-    let step2_start = std::time::Instant::now();
-    
-    // 2. Detect package files and check if dependencies might have changed
-    let package_files = [
-        "package.json",
-        "pnpm-workspace.yaml", 
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        "Cargo.toml",
-        "Cargo.lock",
-        "pyproject.toml",
-        "requirements.txt",
-        "go.mod",
-        "go.sum"
-    ];
-    
-    let mut found_package_files = Vec::new();
-    for file in &package_files {
-        let file_path = current_dir.join(file);
-        if file_path.exists() {
-            found_package_files.push(file.to_string());
-        }
-    }
-    
-    if found_package_files.is_empty() {
-        output.info("No package files detected, skipping dependency management");
-        return Ok(true);
-    }
-    
-    output.success(&format!("Detected package files: {}", found_package_files.join(", ")));
-    
-    let step2_duration = step2_start.elapsed();
-    output.workflow_step_timed(2, 3, "Detecting package files", "📦", step2_duration);
-    
-    let step3_start = std::time::Instant::now();
-    
-    // 3. Check if we should run dependency installation
-    // For now, we'll check if pnpm-lock.yaml exists and run pnpm install
-    // TODO: Add more sophisticated change detection by comparing git HEAD~1
-    let should_install = if current_dir.join("pnpm-lock.yaml").exists() {
-        output.info("pnpm workspace detected, running dependency sync...");
-        true
-    } else if current_dir.join("package-lock.json").exists() {
-        output.info("npm project detected, running dependency sync...");
-        true
-    } else if current_dir.join("yarn.lock").exists() {
-        output.info("Yarn project detected, running dependency sync...");
-        true
-    } else if current_dir.join("Cargo.lock").exists() {
-        output.info("Rust project detected, checking Cargo dependencies...");
-        true
-    } else {
-        output.info("No lockfile detected, skipping automatic dependency installation");
-        false
-    };
-    
-    if should_install {
-        // Run the appropriate package manager
-        let install_result = if current_dir.join("pnpm-lock.yaml").exists() {
-            run_dependency_install("pnpm", &["install"], current_dir, output)
-        } else if current_dir.join("package-lock.json").exists() {
-            run_dependency_install("npm", &["install"], current_dir, output)
-        } else if current_dir.join("yarn.lock").exists() {
-            run_dependency_install("yarn", &["install"], current_dir, output)
-        } else if current_dir.join("Cargo.lock").exists() {
-            run_dependency_install("cargo", &["check"], current_dir, output)
-        } else {
-            Ok(true)
-        };
-        
-        match install_result {
-            Ok(success) => {
-                if success {
-                    output.success("Dependencies synchronized successfully");
-                } else {
-                    output.warning("Dependency synchronization completed with warnings");
-                }
-            }
-            Err(e) => {
-                output.error(&format!("Dependency installation failed: {}", e));
-                output.info("You may need to run the package manager manually");
-                // Don't fail the hook for dependency issues
-            }
-        }
-    } else {
-        output.info("No dependency installation required");
-    }
-    
-    let step3_duration = step3_start.elapsed();
-    output.workflow_step_timed(3, 3, "Managing dependencies", "🔄", step3_duration);
-    
-    Ok(true)
-}
+
 
 /// Run dependency installation command
 fn run_dependency_install(package_manager: &str, args: &[&str], current_dir: &Path, output: &Output) -> Result<bool> {
@@ -786,6 +410,183 @@ fn glob_match(pattern: &str, file: &str) -> bool {
         regex.is_match(file)
     } else {
         false
+    }
+}
+
+/// Validate lockfiles to ensure dependencies are synchronized
+async fn validate_lockfiles(current_dir: &Path, output: &Output) -> Result<bool> {
+    // Check if configuration enables lockfile validation
+    let config_result = GuardyConfig::load_from_file(&current_dir.join("guardy.yml"));
+    let enable_lockfile_validation = if let Ok(_config) = &config_result {
+        // TODO: Add configuration flag support when config schema is updated
+        // For now, default to enabled
+        true
+    } else {
+        // Default to enabled if no config found
+        true
+    };
+    
+    if !enable_lockfile_validation {
+        output.info("Lockfile validation is disabled");
+        return Ok(true);
+    }
+    
+    // Detect package manager and validate appropriate lockfiles
+    if current_dir.join("pnpm-lock.yaml").exists() {
+        validate_pnpm_lockfile(current_dir, output).await
+    } else if current_dir.join("package-lock.json").exists() {
+        validate_npm_lockfile(current_dir, output).await
+    } else if current_dir.join("yarn.lock").exists() {
+        validate_yarn_lockfile(current_dir, output).await
+    } else if current_dir.join("Cargo.lock").exists() {
+        validate_cargo_lockfile(current_dir, output).await
+    } else {
+        output.info("No lockfile detected, skipping validation");
+        Ok(true)
+    }
+}
+
+/// Validate pnpm lockfile synchronization
+async fn validate_pnpm_lockfile(current_dir: &Path, output: &Output) -> Result<bool> {
+    output.info("Validating pnpm lockfile synchronization...");
+    
+    // Run pnpm install --frozen-lockfile to test if lockfile is in sync
+    let result = Command::new("pnpm")
+        .args(["install", "--frozen-lockfile"])
+        .current_dir(current_dir)
+        .output();
+    
+    match result {
+        Ok(output_result) => {
+            if output_result.status.success() {
+                output.success("pnpm lockfile is synchronized");
+                Ok(true)
+            } else {
+                let stderr = String::from_utf8_lossy(&output_result.stderr);
+                output.error("pnpm lockfile is out of sync");
+                if output.is_verbose() {
+                    output.indent(&format!("Error: {}", stderr));
+                }
+                output.indent("Run 'pnpm install' to synchronize dependencies");
+                Ok(false)
+            }
+        }
+        Err(e) => {
+            output.warning("pnpm command not found or failed to execute");
+            if output.is_verbose() {
+                output.indent(&format!("Error: {}", e));
+            }
+            // Don't fail validation if pnpm is not available
+            Ok(true)
+        }
+    }
+}
+
+/// Validate npm lockfile synchronization
+async fn validate_npm_lockfile(current_dir: &Path, output: &Output) -> Result<bool> {
+    output.info("Validating npm lockfile synchronization...");
+    
+    // Run npm ci to test if lockfile is in sync (npm ci fails if package.json and package-lock.json are out of sync)
+    let result = Command::new("npm")
+        .args(["ci", "--dry-run"])
+        .current_dir(current_dir)
+        .output();
+    
+    match result {
+        Ok(output_result) => {
+            if output_result.status.success() {
+                output.success("npm lockfile is synchronized");
+                Ok(true)
+            } else {
+                let stderr = String::from_utf8_lossy(&output_result.stderr);
+                output.error("npm lockfile is out of sync");
+                if output.is_verbose() {
+                    output.indent(&format!("Error: {}", stderr));
+                }
+                output.indent("Run 'npm install' to synchronize dependencies");
+                Ok(false)
+            }
+        }
+        Err(e) => {
+            output.warning("npm command not found or failed to execute");
+            if output.is_verbose() {
+                output.indent(&format!("Error: {}", e));
+            }
+            // Don't fail validation if npm is not available
+            Ok(true)
+        }
+    }
+}
+
+/// Validate yarn lockfile synchronization
+async fn validate_yarn_lockfile(current_dir: &Path, output: &Output) -> Result<bool> {
+    output.info("Validating yarn lockfile synchronization...");
+    
+    // Run yarn install --frozen-lockfile to test if lockfile is in sync
+    let result = Command::new("yarn")
+        .args(["install", "--frozen-lockfile"])
+        .current_dir(current_dir)
+        .output();
+    
+    match result {
+        Ok(output_result) => {
+            if output_result.status.success() {
+                output.success("yarn lockfile is synchronized");
+                Ok(true)
+            } else {
+                let stderr = String::from_utf8_lossy(&output_result.stderr);
+                output.error("yarn lockfile is out of sync");
+                if output.is_verbose() {
+                    output.indent(&format!("Error: {}", stderr));
+                }
+                output.indent("Run 'yarn install' to synchronize dependencies");
+                Ok(false)
+            }
+        }
+        Err(e) => {
+            output.warning("yarn command not found or failed to execute");
+            if output.is_verbose() {
+                output.indent(&format!("Error: {}", e));
+            }
+            // Don't fail validation if yarn is not available
+            Ok(true)
+        }
+    }
+}
+
+/// Validate Cargo lockfile synchronization
+async fn validate_cargo_lockfile(current_dir: &Path, output: &Output) -> Result<bool> {
+    output.info("Validating Cargo lockfile synchronization...");
+    
+    // Run cargo check --locked to test if Cargo.lock is in sync with Cargo.toml
+    let result = Command::new("cargo")
+        .args(["check", "--locked"])
+        .current_dir(current_dir)
+        .output();
+    
+    match result {
+        Ok(output_result) => {
+            if output_result.status.success() {
+                output.success("Cargo lockfile is synchronized");
+                Ok(true)
+            } else {
+                let stderr = String::from_utf8_lossy(&output_result.stderr);
+                output.error("Cargo lockfile is out of sync");
+                if output.is_verbose() {
+                    output.indent(&format!("Error: {}", stderr));
+                }
+                output.indent("Run 'cargo update' to synchronize dependencies");
+                Ok(false)
+            }
+        }
+        Err(e) => {
+            output.warning("cargo command not found or failed to execute");
+            if output.is_verbose() {
+                output.indent(&format!("Error: {}", e));
+            }
+            // Don't fail validation if cargo is not available
+            Ok(true)
+        }
     }
 }
 

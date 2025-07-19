@@ -7,6 +7,7 @@ use crate::config::GuardyConfig;
 use anyhow::Result;
 
 pub mod commit_msg;
+pub mod post_checkout;
 pub mod pre_commit;
 pub mod pre_push;
 
@@ -59,13 +60,12 @@ impl HookContext {
 }
 
 /// Execute a hook by name
-/// TODO: Remove #[allow(dead_code)] when hook commands are implemented in Phase 1.5
-#[allow(dead_code)]
 pub async fn execute_hook(context: HookContext) -> Result<()> {
     match context.hook_name.as_str() {
         "pre-commit" => pre_commit::execute(context).await,
         "commit-msg" => commit_msg::execute(context).await,
         "pre-push" => pre_push::execute(context).await,
+        "post-checkout" => post_checkout::execute(context).await,
         _ => anyhow::bail!("Unknown hook: {}", context.hook_name),
     }
 }

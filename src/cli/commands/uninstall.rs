@@ -4,7 +4,7 @@
 //! optionally removing the configuration file.
 
 use crate::cli::Output;
-use crate::utils::{get_current_dir, FileUtils};
+use crate::shared::{get_current_dir, FileUtils};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;

@@ -6,7 +6,7 @@ use crate::cli::ConfigCommands;
 use crate::cli::Output;
 use crate::config::GuardyConfig;
 use crate::config::languages::{get_language_configs, detect_languages};
-use crate::utils::get_current_dir;
+use crate::shared::get_current_dir;
 use anyhow::Result;
 use std::fs;
 use syntect::parsing::SyntaxSet;

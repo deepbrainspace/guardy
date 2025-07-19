@@ -4,7 +4,7 @@
 //! from YAML files. It supports project-specific and global configuration.
 
 use anyhow::{Context, Result};
-use crate::utils::glob::process_ignore_patterns;
+use crate::shared::glob::process_ignore_patterns;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
