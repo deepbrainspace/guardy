@@ -1,0 +1,62 @@
+# Default configuration for Guardy
+# This file is embedded in the binary and provides fallback values
+
+[general]
+debug = false
+color = true
+interactive = true
+
+[hooks]
+pre_commit = true
+commit_msg = true
+post_checkout = true
+pre_push = true
+
+[security]
+# Secret detection patterns (regex)
+patterns = [
+    "sk-[a-zA-Z0-9]{48}",           # OpenAI API keys
+    "ghp_[a-zA-Z0-9]{36}",          # GitHub personal access tokens
+    "ey[a-zA-Z0-9]{20,}",           # JWT tokens
+    "['\"'][a-zA-Z0-9+/]{32,}['\"]", # Base64 encoded secrets
+]
+# Files to exclude from secret scanning
+exclude_files = [
+    "*.lock",
+    "*.log", 
+    ".husky/*",
+]
+
+[branch_protection]
+# Protected branches
+protected_branches = ["main", "master", "develop"]
+allow_direct_commits = false
+
+[git_crypt]
+# Git-crypt integration
+enabled = true
+required_files = []  # Files that must be encrypted
+
+[formatting]
+# Code formatting settings
+enabled = true
+command = "nx format:write --uncommitted"
+auto_fix = false  # Whether to auto-stage formatted files
+
+[package_manager]
+# Package manager preferences
+preferred = "pnpm"  # pnpm, npm, yarn
+auto_install = true  # Auto-install on checkout
+
+[mcp]
+# MCP server settings
+port = 8080
+host = "127.0.0.1"
+enabled = false
+tools = ["git-status", "hook-run", "security-scan"]
+
+[external_tools]
+# External tool paths (auto-detected if not specified)
+git_crypt = "git-crypt"
+nx = "nx"
+pnpm = "pnpm"
