@@ -1,5 +1,5 @@
 use std::path::Path;
-use crate::scanner::core::ScannerConfig;
+use crate::scanner::types::ScannerConfig;
 
 /// Handles intelligent test code detection across multiple programming languages
 pub struct TestDetector<'a> {

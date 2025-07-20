@@ -98,14 +98,19 @@ fn setup_logging(verbose: u8, quiet: bool) {
         return;
     }
 
-    let level = match verbose {
-        0 => tracing::Level::INFO,
-        1 => tracing::Level::DEBUG,
-        _ => tracing::Level::TRACE,
-    };
+    // Create filter that suppresses debug from ignore/globset crates appropriately
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            match verbose {
+                0 => tracing_subscriber::EnvFilter::new("warn"),
+                1 => tracing_subscriber::EnvFilter::new("info,ignore=warn,globset=warn"),
+                2 => tracing_subscriber::EnvFilter::new("debug,ignore=warn,globset=warn"), 
+                _ => tracing_subscriber::EnvFilter::new("trace"), // -vvv shows everything including globset
+            }
+        });
 
     tracing_subscriber::fmt()
-        .with_max_level(level)
+        .with_env_filter(filter)
         .with_target(false)
         .init();
 }
