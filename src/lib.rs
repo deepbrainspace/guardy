@@ -3,7 +3,7 @@
 pub mod cli;
 pub mod hooks;
 pub mod git;
-pub mod security;
+pub mod scanner;
 pub mod external;
 pub mod config;
 pub mod mcp;

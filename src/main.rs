@@ -4,7 +4,7 @@ use clap::Parser;
 mod cli;
 mod hooks;
 mod git;
-mod security;
+mod scanner;
 mod external;
 mod config;
 mod mcp;

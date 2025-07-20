@@ -246,6 +246,46 @@ guardy mcp tools
 - `hook-run` - Execute hooks programmatically  
 - `security-scan` - Run security scans on demand
 
+## Module Organization
+
+Guardy follows a clean modular architecture with clear separation of concerns:
+
+```
+src/
+├── config/         # Configuration management (Figment-based)
+│   ├── core.rs     # GuardyConfig struct and loading logic + tests
+│   ├── formats.rs  # Export functionality and syntax highlighting + tests
+│   ├── languages.rs # Language detection + tests
+│   └── README.md   # Config module documentation
+├── scanner/        # Secret detection and file analysis
+│   ├── core.rs     # Main Scanner struct and file processing + tests
+│   ├── patterns.rs # Secret patterns and regex compilation + tests
+│   ├── entropy.rs  # Statistical entropy analysis + tests
+│   ├── ignore_intel.rs # Project type detection + tests
+│   └── README.md   # Scanner module documentation
+├── git/           # Git operations and repository management
+├── cli/           # Command-line interface and output formatting
+├── hooks/         # Git hook implementations
+├── mcp/           # Model Context Protocol server
+└── tests/         # Integration tests (cross-module functionality)
+```
+
+### Test Organization
+
+**✅ Proper Test Structure:**
+- **Unit Tests**: Inline with `#[cfg(test)] mod tests` in each implementation file
+- **Integration Tests**: Separate `/tests/` directory for cross-module functionality
+- **Module Tests**: Specific to the file they test (e.g., config tests in `config/core.rs`)
+
+**❌ Avoid:**
+- Separate `tests.rs` files (use inline tests instead)
+- Tests in `mod.rs` files (routing only)
+- Mixing tests from different modules
+
+**Finding Module Information:**
+- Each module has its own `README.md` with architecture and usage guidelines
+- Check module README for specific test placement and contribution guidelines
+
 ## Development
 
 ### Prerequisites
@@ -259,8 +299,10 @@ cargo build --release
 
 ### Testing
 ```bash
-cargo test
-cargo test --lib config  # Test configuration system
+cargo test                    # Run all tests (unit + integration)
+cargo test --lib config      # Test only config module
+cargo test --lib scanner     # Test only scanner module
+cargo test integration_      # Run only integration tests
 ```
 
 ### Contributing
