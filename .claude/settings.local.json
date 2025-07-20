@@ -13,7 +13,8 @@
       "mcp__gmail__create_label",
       "mcp__gmail__batch_modify_emails",
       "mcp__context7__resolve-library-id",
-      "mcp__context7__get-library-docs"
+      "mcp__context7__get-library-docs",
+      "mcp__Bright_Data__scrape_as_markdown"
     ],
     "deny": []
   }
