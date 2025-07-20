@@ -30,6 +30,7 @@ impl GitRepo {
     }
     
     /// Get list of unstaged modified files
+    /// TODO: Will be used in pre-commit hooks to scan only modified files
     pub fn get_unstaged_files(&self) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
         let mut status_opts = StatusOptions::new();
@@ -55,6 +56,7 @@ impl GitRepo {
     }
     
     /// Get all uncommitted files (staged + unstaged)
+    /// TODO: Will be used in pre-commit hooks for comprehensive scanning
     pub fn get_uncommitted_files(&self) -> Result<Vec<PathBuf>> {
         let mut all_files = self.get_staged_files()?;
         all_files.extend(self.get_unstaged_files()?);
@@ -67,6 +69,7 @@ impl GitRepo {
     }
     
     /// Get files changed between two commits (useful for CI/CD)
+    /// TODO: Will be used in CI/CD pipelines for scanning only changed files
     pub fn get_diff_files(&self, commit1: &str, commit2: &str) -> Result<Vec<PathBuf>> {
         // Get commits
         let commit1_obj = self.repo.revparse_single(commit1)?;
