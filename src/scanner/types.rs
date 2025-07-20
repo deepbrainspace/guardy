@@ -26,6 +26,15 @@ pub struct Warning {
     pub message: String,
 }
 
+/// Result from scanning a single file (used in parallel processing)
+#[derive(Debug)]
+pub struct ScanFileResult {
+    pub matches: Vec<SecretMatch>,
+    pub file_path: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
 /// Result of a scanning operation
 #[derive(Debug)]
 pub struct ScanResult {

@@ -46,6 +46,11 @@ ignore = "0.4.23"         # Gitignore support and file walking
 memoize = "0.4.0"
 lazy_static = "1.5.0"
 
+# Parallelization dependencies
+crossbeam = "0.8"
+rayon = "1.10"
+num_cpus = "1.16"
+
 
 # Additional ripgrep crates to consider for future CLI/output enhancements:
 # grep-cli = "0.1.11"      # CLI utilities (hex escapes, stdin detection, pattern parsing)
