@@ -4,6 +4,8 @@ use ignore::WalkBuilder;
 use crate::config::GuardyConfig;
 use super::entropy::is_likely_secret;
 use super::patterns::SecretPatterns;
+use super::test_detection::TestDetector;
+use globset::{Glob, GlobSet, GlobSetBuilder};
 
 #[derive(Debug, Clone)]
 pub struct SecretMatch {
@@ -58,6 +60,12 @@ pub struct ScannerConfig {
     pub skip_binary_files: bool,
     pub follow_symlinks: bool,
     pub max_file_size_mb: usize,
+    pub ignore_paths: Vec<String>,
+    pub ignore_patterns: Vec<String>,
+    pub ignore_comments: Vec<String>,
+    pub ignore_test_code: bool,
+    pub test_attributes: Vec<String>,
+    pub test_modules: Vec<String>,
 }
 
 impl Default for ScannerConfig {
@@ -68,6 +76,25 @@ impl Default for ScannerConfig {
             skip_binary_files: true,
             follow_symlinks: false,
             max_file_size_mb: 10,
+            ignore_paths: vec![
+                "tests/*".to_string(),
+                "testdata/*".to_string(),
+                "*_test.rs".to_string(),
+                "test_*.rs".to_string(),
+            ],
+            ignore_patterns: vec![
+                "# TEST_SECRET:".to_string(),
+                "DEMO_KEY_".to_string(),
+                "FAKE_".to_string(),
+            ],
+            ignore_comments: vec![
+                "guardy:ignore".to_string(),
+                "guardy:ignore-line".to_string(),
+                "guardy:ignore-next".to_string(),
+            ],
+            ignore_test_code: true,
+            test_attributes: vec![],
+            test_modules: vec![],
         }
     }
 }
@@ -86,7 +113,89 @@ impl Scanner {
         })
     }
     
-    fn parse_scanner_config(config: &GuardyConfig) -> Result<ScannerConfig> {
+    /// Build globset for path ignoring
+    fn build_path_ignorer(&self) -> Result<GlobSet> {
+        let mut builder = GlobSetBuilder::new();
+        
+        for pattern in &self.config.ignore_paths {
+            let glob = Glob::new(pattern)
+                .with_context(|| format!("Invalid glob pattern: {}", pattern))?;
+            builder.add(glob);
+        }
+        
+        builder.build()
+            .with_context(|| "Failed to build path ignore globset")
+    }
+    
+    /// Check if a file path should be ignored
+    fn should_ignore_path(&self, path: &Path) -> Result<bool> {
+        let globset = self.build_path_ignorer()?;
+        Ok(globset.is_match(path))
+    }
+    
+    /// Check if a line contains ignore patterns
+    fn should_ignore_line(&self, line: &str) -> bool {
+        // Check for inline ignore comments
+        for ignore_comment in &self.config.ignore_comments {
+            if line.contains(ignore_comment) {
+                return true;
+            }
+        }
+        
+        // Check for pattern-based ignores
+        for ignore_pattern in &self.config.ignore_patterns {
+            if line.contains(ignore_pattern) {
+                return true;
+            }
+        }
+        
+        // Check for test code patterns (if enabled)
+        if self.is_test_code_line(line) {
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Detect if a line is test code using config patterns
+    fn is_test_code_line(&self, line: &str) -> bool {
+        if !self.config.ignore_test_code {
+            return false;
+        }
+        
+        let trimmed = line.trim();
+        
+        // Check test attributes with glob patterns
+        for pattern in &self.config.test_attributes {
+            if Self::matches_glob_pattern(trimmed, pattern) {
+                return true;
+            }
+        }
+        
+        // Check test module patterns
+        for pattern in &self.config.test_modules {
+            if trimmed.contains(pattern) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Simple glob pattern matching for test attributes
+    fn matches_glob_pattern(text: &str, pattern: &str) -> bool {
+        if pattern.contains('*') {
+            let parts: Vec<&str> = pattern.split('*').collect();
+            if parts.len() == 2 {
+                let prefix = parts[0];
+                let suffix = parts[1];
+                return text.starts_with(prefix) && text.ends_with(suffix);
+            }
+        }
+        text == pattern
+    }
+    
+    pub fn parse_scanner_config(config: &GuardyConfig) -> Result<ScannerConfig> {
         let mut scanner_config = ScannerConfig::default();
         
         // Override defaults with config values if present
@@ -102,7 +211,32 @@ impl Scanner {
             }
         }
         
-        // Config loaded
+        // Load ignore patterns from config
+        if let Ok(ignore_paths) = config.get_vec("scanner.ignore_paths") {
+            scanner_config.ignore_paths = ignore_paths;
+        }
+        
+        if let Ok(ignore_patterns) = config.get_vec("scanner.ignore_patterns") {
+            scanner_config.ignore_patterns = ignore_patterns;
+        }
+        
+        if let Ok(ignore_comments) = config.get_vec("scanner.ignore_comments") {
+            scanner_config.ignore_comments = ignore_comments;
+        }
+        
+        if let Ok(ignore_test_code) = config.get_section("scanner.ignore_test_code") {
+            if let Some(enabled) = ignore_test_code.as_bool() {
+                scanner_config.ignore_test_code = enabled;
+            }
+        }
+        
+        if let Ok(test_attributes) = config.get_vec("scanner.test_attributes") {
+            scanner_config.test_attributes = test_attributes;
+        }
+        
+        if let Ok(test_modules) = config.get_vec("scanner.test_modules") {
+            scanner_config.test_modules = test_modules;
+        }
         
         Ok(scanner_config)
     }
@@ -192,6 +326,11 @@ impl Scanner {
     }
     
     fn scan_single_path(&self, path: &Path) -> Result<Vec<SecretMatch>> {
+        // Check if path should be ignored
+        if self.should_ignore_path(path)? {
+            return Ok(vec![]);
+        }
+        
         // Check file size
         if let Ok(metadata) = std::fs::metadata(path) {
             let size_mb = metadata.len() / (1024 * 1024);
@@ -205,8 +344,31 @@ impl Scanner {
             .with_context(|| format!("Failed to read file: {}", path.display()))?;
         
         let mut matches = Vec::new();
+        let lines: Vec<&str> = content.lines().collect();
         
-        for (line_number, line) in content.lines().enumerate() {
+        // Build ignore ranges for test blocks
+        let detector = TestDetector::new(&self.config);
+        let ignore_ranges = detector.build_ignore_ranges(&lines, path);
+        
+        for (line_number, line) in lines.iter().enumerate() {
+            // Check if this line is in an ignored range
+            if ignore_ranges.iter().any(|range| range.contains(&line_number)) {
+                continue;
+            }
+            
+            // Check for ignore patterns on this line and next line
+            if self.should_ignore_line(line) {
+                continue;
+            }
+            
+            // Check for ignore-next directive on previous line
+            if line_number > 0 {
+                let prev_line = lines[line_number - 1];
+                if prev_line.contains("guardy:ignore-next") {
+                    continue;
+                }
+            }
+            
             let line_matches = self.scan_line(line, path, line_number + 1);
             matches.extend(line_matches);
         }
@@ -326,5 +488,160 @@ FAKE_API_KEY = "test_key_not_real"
         
         // Should scan multiple files
         assert!(result.stats.files_scanned >= 2);
+    }
+    
+    #[test]
+    fn test_rust_test_block_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_blocks.rs");
+        
+        let test_content = r#"
+// Regular code that should be scanned
+const API_KEY = "sk_live_real_secret_should_be_found";
+
+#[test]
+fn test_function() {
+    // This secret should be ignored because it's in a test
+    let secret = "sk_live_test_secret_ignore_me";
+    assert_eq!(1, 1);
+}
+
+// More regular code
+const ANOTHER_KEY = "sk_live_another_real_secret";
+
+#[cfg(test)]
+mod tests {
+    // This entire module should be ignored
+    const TEST_SECRET = "sk_live_module_test_secret";
+    
+    #[test]
+    fn another_test() {
+        let key = "sk_live_nested_test_secret";
+    }
+}
+
+// Back to regular code
+const FINAL_KEY = "sk_live_final_real_secret";
+"#;
+        
+        fs::write(&test_file, test_content).unwrap();
+        
+        let config = create_test_config();
+        let scanner = Scanner::new(&config).unwrap();
+        let result = scanner.scan_file(&test_file).unwrap();
+        
+        // Should only find secrets outside test blocks
+        let found_secrets: Vec<&str> = result.iter()
+            .map(|m| m.matched_text.as_str())
+            .collect();
+        
+        println!("Found secrets: {:?}", found_secrets);
+        
+        // Should find regular secrets but not test secrets
+        assert!(found_secrets.iter().any(|s| s.contains("real_secret_should_be_found")));
+        assert!(found_secrets.iter().any(|s| s.contains("another_real_secret")));  
+        assert!(found_secrets.iter().any(|s| s.contains("final_real_secret")));
+        
+        // Should NOT find test secrets
+        assert!(!found_secrets.iter().any(|s| s.contains("test_secret_ignore_me")));
+        assert!(!found_secrets.iter().any(|s| s.contains("module_test_secret")));
+        assert!(!found_secrets.iter().any(|s| s.contains("nested_test_secret")));
+    }
+    
+    #[test]
+    fn test_typescript_test_block_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_blocks.ts");
+        
+        let test_content = r#"
+// Regular code that should be scanned
+const apiKey = "sk_live_real_typescript_secret";
+
+describe("My test suite", () => {
+    // This entire block should be ignored
+    const testSecret = "sk_live_describe_block_secret";
+    
+    it("should do something", () => {
+        const anotherSecret = "sk_live_it_block_secret";
+        expect(true).toBe(true);
+    });
+    
+    test("another test", () => {
+        const testKey = "sk_live_test_block_secret";
+    });
+});
+
+// Back to regular code
+const finalKey = "sk_live_final_typescript_secret";
+"#;
+        
+        fs::write(&test_file, test_content).unwrap();
+        
+        let config = create_test_config();
+        let scanner = Scanner::new(&config).unwrap();
+        let result = scanner.scan_file(&test_file).unwrap();
+        
+        let found_secrets: Vec<&str> = result.iter()
+            .map(|m| m.matched_text.as_str())
+            .collect();
+        
+        println!("TypeScript found secrets: {:?}", found_secrets);
+        
+        // Should find regular secrets but not test secrets
+        assert!(found_secrets.iter().any(|s| s.contains("real_typescript_secret")));
+        assert!(found_secrets.iter().any(|s| s.contains("final_typescript_secret")));
+        
+        // Should NOT find test secrets (entire describe block ignored)
+        assert!(!found_secrets.iter().any(|s| s.contains("describe_block_secret")));
+        assert!(!found_secrets.iter().any(|s| s.contains("it_block_secret")));
+        assert!(!found_secrets.iter().any(|s| s.contains("test_block_secret")));
+    }
+    
+    #[test]
+    fn test_python_test_block_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_blocks.py");
+        
+        let test_content = r#"
+# Regular code that should be scanned
+api_key = "sk_live_real_python_secret"
+
+def test_function():
+    # This entire function should be ignored
+    secret = "sk_live_test_function_secret"
+    assert True
+
+class TestClass:
+    # This entire class should be ignored
+    def setUp(self):
+        self.secret = "sk_live_test_class_secret"
+    
+    def test_method(self):
+        key = "sk_live_test_method_secret"
+
+# Back to regular code
+final_key = "sk_live_final_python_secret"
+"#;
+        
+        fs::write(&test_file, test_content).unwrap();
+        
+        let config = create_test_config();
+        let scanner = Scanner::new(&config).unwrap();
+        let result = scanner.scan_file(&test_file).unwrap();
+        
+        let found_secrets: Vec<&str> = result.iter()
+            .map(|m| m.matched_text.as_str())
+            .collect();
+        
+        println!("Python found secrets: {:?}", found_secrets);
+        
+        // Should find regular secrets but not test secrets
+        assert!(found_secrets.iter().any(|s| s.contains("real_python_secret")));
+        assert!(found_secrets.iter().any(|s| s.contains("final_python_secret")));
+        
+        // Should NOT find test secrets (entire test function/class ignored)
+        assert!(!found_secrets.iter().any(|s| s.contains("test_function_secret")));
+        assert!(!found_secrets.iter().any(|s| s.contains("test_class_secret")));
+        assert!(!found_secrets.iter().any(|s| s.contains("test_method_secret")));
     }
 }
