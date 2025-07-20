@@ -1,6 +1,6 @@
 [package]
 name = "guardy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Fast, secure git hooks in Rust with MCP server integration"
 license = "MIT"
@@ -36,15 +36,20 @@ uuid = { version = "1.17.0", features = ["v4"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
-# Scanner dependencies (ripgrep ecosystem)
-grep = "0.3.2"
-grep-searcher = "0.1.12"
-grep-regex = "0.1.12"
-ignore = "0.4.23"
+# Scanner dependencies (ripgrep ecosystem) - latest optimized versions
+grep = "0.3.2"            # Meta-crate providing unified interface
+grep-searcher = "0.1.14"  # Fast line-oriented searching with mmap support  
+grep-regex = "0.1.13"     # Optimized regex matching for patterns
+ignore = "0.4.23"         # Gitignore support and file walking
 
 # Entropy analysis dependencies
 memoize = "0.4.0"
 lazy_static = "1.5.0"
+
+
+# Additional ripgrep crates to consider for future CLI/output enhancements:
+# grep-cli = "0.1.11"      # CLI utilities (hex escapes, stdin detection, pattern parsing)
+# grep-printer = "0.2.2"   # Output formatting (human readable, JSON, colors)
 
 [dev-dependencies]
 tempfile = "3.20.0"

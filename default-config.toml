@@ -55,6 +55,63 @@ host = "127.0.0.1"
 enabled = false
 tools = ["git-status", "hook-run", "security-scan"]
 
+[scanner]
+# Scanner ignore mechanisms
+ignore_paths = [
+    # General test directories
+    "tests/*",
+    "testdata/*",
+    "__tests__/*",
+    "test/*",
+    # Rust test files
+    "*_test.rs",
+    "test_*.rs",
+    # Python test files
+    "test_*.py",
+    "*_test.py",
+    # TypeScript/JavaScript test files
+    "*.test.ts",
+    "*.test.js", 
+    "*.spec.ts",
+    "*.spec.js"
+]
+ignore_patterns = [
+    "# TEST_SECRET:",
+    "DEMO_KEY_",
+    "FAKE_"
+]
+ignore_comments = [
+    "guardy:ignore",
+    "guardy:ignore-line", 
+    "guardy:ignore-next"
+]
+# Intelligent test code detection
+ignore_test_code = true
+test_attributes = [
+    # Rust test patterns
+    "#[*test]",
+    "#[bench]",
+    "#[cfg(test)]",
+    # Python test patterns  
+    "def test_*",
+    "class Test*",
+    "@pytest.*",
+    # TypeScript/JavaScript test patterns
+    "it(*",
+    "test(*",
+    "describe(*"
+]
+test_modules = [
+    # Rust
+    "mod tests {",
+    "mod test {",
+    # Python
+    "class Test",
+    # TypeScript/JavaScript  
+    "describe(",
+    "__tests__"
+]
+
 [external_tools]
 # External tool paths (auto-detected if not specified)
 git_crypt = "git-crypt"
