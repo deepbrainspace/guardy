@@ -6,7 +6,6 @@ use regex::bytes::Regex;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
 use memoize::memoize;
-use crate::config::GuardyConfig;
 
 lazy_static::lazy_static! {
     static ref HEX_STRING_REGEX: Regex = Regex::new("^[0-9a-fA-F]{16,}$").unwrap();
@@ -25,20 +24,12 @@ lazy_static::lazy_static! {
 pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
     let probability = calculate_randomness_probability(data);
     
-    // Check if debug mode is enabled via config (env vars handled by figment)
-    let debug = GuardyConfig::load()
-        .and_then(|config| config.get_bool("general.debug"))
-        .unwrap_or(false);
-    
-    if debug {
-        println!("ENTROPY DEBUG: Testing '{}' - prob: {:.2e}, threshold: {:.2e}", 
-                 String::from_utf8_lossy(data), probability, min_threshold);
-    }
+    // Use tracing for debug output instead of loading config every time
+    tracing::trace!("Testing '{}' - prob: {:.2e}, threshold: {:.2e}", 
+                    String::from_utf8_lossy(data), probability, min_threshold);
     
     if probability < min_threshold {
-        if debug {
-            println!("ENTROPY DEBUG: Failed basic threshold check");
-        }
+        tracing::trace!("Failed basic threshold check");
         return false;
     }
     
@@ -52,15 +43,11 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
     }
     
     if !contains_number && probability < min_threshold * 10.0 {
-        if debug {
-            println!("ENTROPY DEBUG: Failed no-numbers threshold check (needs {:.2e})", min_threshold * 10.0);
-        }
+        tracing::trace!("Failed no-numbers threshold check (needs {:.2e})", min_threshold * 10.0);
         return false;
     }
     
-    if debug {
-        println!("ENTROPY DEBUG: Passed all checks - returning true");
-    }
+    tracing::trace!("Passed all checks - returning true");
     true
 }
 

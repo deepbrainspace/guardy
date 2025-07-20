@@ -19,7 +19,7 @@ pub async fn execute(args: RunArgs) -> Result<()> {
     info(&format!("Running {} hook...", args.hook));
     
     // Load configuration
-    let config = GuardyConfig::load()?;
+    let config = GuardyConfig::load(None, None::<&()>)?;
     
     match args.hook.as_str() {
         "pre-commit" => {

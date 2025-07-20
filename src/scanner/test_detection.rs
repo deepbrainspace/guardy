@@ -140,11 +140,11 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
     use crate::config::GuardyConfig;
-    use crate::scanner::core::Scanner;
+    use crate::scanner::Scanner;
     use std::fs;
     
     fn create_test_config() -> GuardyConfig {
-        GuardyConfig::load().unwrap()
+        GuardyConfig::load(None, None::<&()>).unwrap()
     }
     
     fn create_scanner_config() -> ScannerConfig {

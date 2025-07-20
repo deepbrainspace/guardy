@@ -29,7 +29,7 @@ pub async fn execute(_args: StatusArgs) -> Result<()> {
     };
     
     // Check configuration
-    match GuardyConfig::load() {
+    match GuardyConfig::load(None, None::<&()>) {
         Ok(config) => {
             success("✅ Configuration loaded");
             

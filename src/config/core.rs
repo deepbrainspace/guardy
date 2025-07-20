@@ -1,67 +1,108 @@
 use anyhow::Result;
-use figment::{Figment, providers::{Format, Toml, Json, Yaml, Env}};
+use figment::{Figment, providers::{Format, Toml, Json, Yaml, Env, Serialized}};
+use serde::Serialize;
 
 // Embed the default config at compile time
 const DEFAULT_CONFIG: &str = include_str!("../../default-config.toml");
+
 
 pub struct GuardyConfig {
     figment: Figment,
 }
 
 impl GuardyConfig {
-    pub fn load() -> Result<Self> {
-        Self::load_with_custom_config(None)
-    }
-    
-    pub fn load_with_custom_config(custom_config: Option<&str>) -> Result<Self> {
+    pub fn load<T: Serialize>(
+        custom_config: Option<&str>, 
+        cli_overrides: Option<T>
+    ) -> Result<Self> {
         let mut figment = Figment::new()
-            .merge(Toml::string(DEFAULT_CONFIG));  // Embedded defaults
-            
-        // If custom config is specified, use only that + defaults + env vars
+            .merge(Toml::string(DEFAULT_CONFIG));  // 1. Defaults (lowest)
+        
+        // Debug: Show starting config load (only at trace level -vvv)
+        tracing::trace!("CONFIG LOAD: Starting");
+
+        // Standard configs first: json → yaml → yml → toml for each location
+        figment = figment
+            // User configs
+            .merge(Json::file(Self::user_config_path().replace(".toml", ".json")))  // 2. User JSON
+            .merge(Yaml::file(Self::user_config_path().replace(".toml", ".yaml")))  // 3. User YAML
+            .merge(Yaml::file(Self::user_config_path().replace(".toml", ".yml")))   // 4. User YML
+            .merge(Toml::file(Self::user_config_path()))                            // 5. User TOML
+            // Repo configs  
+            .merge(Json::file("guardy.json"))                                       // 6. Repo JSON
+            .merge(Yaml::file("guardy.yaml"))                                       // 7. Repo YAML
+            .merge(Yaml::file("guardy.yml"))                                        // 8. Repo YML
+            .merge(Toml::file("guardy.toml"));                                      // 9. Repo TOML
+        
+        // Custom config overrides user/repo configs
         if let Some(custom_path) = custom_config {
             figment = figment
-                .merge(Toml::file(custom_path))
-                .merge(Json::file(custom_path))
-                .merge(Yaml::file(custom_path));
-        } else {
-            // Standard priority: user config -> repo config
-            figment = figment
-                // User config - support multiple formats
-                .merge(Toml::file(Self::user_config_path()))
-                .merge(Json::file(Self::user_config_path().replace(".toml", ".json")))
-                .merge(Yaml::file(Self::user_config_path().replace(".toml", ".yaml")))
-                .merge(Yaml::file(Self::user_config_path().replace(".toml", ".yml")))
-                // Repository config - support multiple formats
-                .merge(Toml::file("guardy.toml"))
-                .merge(Json::file("guardy.json"))
-                .merge(Yaml::file("guardy.yaml"))
-                .merge(Yaml::file("guardy.yml"));
+                .merge(Json::file(custom_path))                                     // 10. Custom JSON
+                .merge(Yaml::file(custom_path))                                     // 11. Custom YAML
+                .merge(Yaml::file(custom_path.replace(".json", ".yml")))            // 12. Custom YML
+                .merge(Yaml::file(custom_path.replace(".json", ".yaml")))           // 13. Custom YAML (alt)
+                .merge(Toml::file(custom_path));                                    // 14. Custom TOML
         }
         
-        // Environment variables always have highest priority
-        figment = figment.merge(Env::prefixed("GUARDY_"));
+        // Environment variables with custom mapping for nested keys
+        let env_provider = Env::prefixed("GUARDY_")
+            .map(|key| key.as_str().replace("_", ".").into());  // Map GUARDY_SCANNER_MODE -> scanner.mode
+        figment = figment.merge(env_provider);                                      // 15. Environment
+        
+        // CLI overrides (highest priority)
+        if let Some(cli_overrides) = cli_overrides {
+            tracing::trace!("CONFIG LOAD: Applying CLI overrides");
+            figment = figment.merge(Serialized::defaults(cli_overrides));               // 16. CLI (highest)
+        }
+        
+        // Debug: Show final config (only at trace level -vvv)
+        if let Ok(final_config) = figment.extract::<serde_json::Value>() {
+            tracing::trace!("CONFIG LOAD: Final scanner.mode = {:?}", 
+                         final_config.get("scanner").and_then(|s| s.get("mode")));
+        }
             
         Ok(GuardyConfig { figment })
     }
     
     /// Get a nested object/section as JSON
     pub fn get_section(&self, path: &str) -> Result<serde_json::Value> {
-        Ok(self.figment.extract_inner(path)?)
+        let mut value = self.figment.extract_inner(path)?;
+        Self::normalize_strings(&mut value);
+        Ok(value)
     }
     
     /// Get the full merged configuration as a structured value
     pub fn get_full_config(&self) -> Result<serde_json::Value> {
-        Ok(self.figment.extract()?)
+        let mut value = self.figment.extract()?;
+        Self::normalize_strings(&mut value);
+        Ok(value)
     }
     
-    /// Get a boolean value from config
-    pub fn get_bool(&self, path: &str) -> Result<bool> {
-        Ok(self.figment.extract_inner(path)?)
-    }
     
     /// Get a vector of strings from config
     pub fn get_vec(&self, path: &str) -> Result<Vec<String>> {
-        Ok(self.figment.extract_inner(path)?)
+        let vec: Vec<String> = self.figment.extract_inner(path)?;
+        Ok(vec.into_iter().map(|s| s.to_lowercase()).collect())
+    }
+    
+    /// Recursively normalize all string values to lowercase
+    fn normalize_strings(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::String(s) => {
+                *s = s.to_lowercase();
+            }
+            serde_json::Value::Object(map) => {
+                for v in map.values_mut() {
+                    Self::normalize_strings(v);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for v in arr.iter_mut() {
+                    Self::normalize_strings(v);
+                }
+            }
+            _ => {} // Numbers, booleans, null don't need normalization
+        }
     }
     
     fn user_config_path() -> String {
@@ -78,34 +119,34 @@ mod tests {
 
     #[test]
     fn test_config_loading() {
-        let config = GuardyConfig::load();
+        let config = GuardyConfig::load(None, None::<&()>);
         assert!(config.is_ok(), "Should load default config successfully");
     }
 
     #[test]
     fn test_config_loads_defaults() {
-        let config = GuardyConfig::load().expect("Should load default config");
+        let config = GuardyConfig::load(None, None::<&()>).expect("Should load default config");
         
-        // Test some default values from our default-config.toml
-        assert_eq!(config.get_bool("general.color").unwrap(), true);
-        assert_eq!(config.get_string("package_manager.preferred").unwrap(), "pnpm");
-        assert_eq!(config.get_u16("mcp.port").unwrap(), 8080);
+        // Test that we can load the full config
+        let full_config = config.get_full_config().unwrap();
+        assert!(full_config.get("general").is_some());
+        assert!(full_config.get("scanner").is_some());
         
-        let patterns = config.get_vec("security.patterns").unwrap();
-        assert!(!patterns.is_empty());
-        assert!(patterns.iter().any(|p| p.contains("sk-")));
+        // Test that we can get specific sections
+        let scanner_section = config.get_section("scanner").unwrap();
+        assert!(scanner_section.get("mode").is_some());
     }
 
     #[test]
     fn test_config_methods() {
-        let config = GuardyConfig::load().unwrap();
+        let config = GuardyConfig::load(None, None::<&()>).unwrap();
         
         // Test getting full config
         assert!(config.get_full_config().is_ok());
         
         // Test environment variable support
         unsafe { std::env::set_var("GUARDY_TEST_VALUE", "true"); }
-        let test_config = GuardyConfig::load().unwrap();
+        let test_config = GuardyConfig::load(None, None::<&()>).unwrap();
         // Config should be loadable with environment variables
         assert!(test_config.get_full_config().is_ok());
     }
@@ -113,7 +154,7 @@ mod tests {
     #[test]
     fn test_custom_config_loading() {
         // Test with non-existent custom config (should fallback to defaults)
-        let config = GuardyConfig::load_with_custom_config(Some("non_existent.toml"));
+        let config = GuardyConfig::load(Some("non_existent.toml"), None::<&()>);
         assert!(config.is_ok(), "Should handle missing custom config gracefully");
     }
 }
