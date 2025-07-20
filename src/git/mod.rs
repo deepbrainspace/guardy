@@ -30,4 +30,8 @@ impl GitRepo {
     pub fn workdir(&self) -> Option<&Path> {
         self.repo.workdir()
     }
+    
+    pub fn git_dir(&self) -> &Path {
+        self.repo.path()
+    }
 }

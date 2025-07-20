@@ -1,6 +1,6 @@
 # Scanner Module
 
-Secret detection and file content analysis using pattern matching and entropy analysis.
+Comprehensive secret detection and file content analysis using pattern matching, entropy analysis, and intelligent filtering. Detects 40+ types of secrets including private keys, API tokens, database credentials, and more.
 
 ## Architecture
 
@@ -23,8 +23,9 @@ src/scanner/
 - **Tests**: Scanner creation, file scanning, directory scanning, scan statistics
 
 ### `patterns.rs`
-- **Purpose**: Secret pattern definitions and regex management
-- **Contains**: `SecretPatterns`, `SecretPattern`, predefined patterns for modern APIs
+- **Purpose**: Secret pattern definitions and regex management  
+- **Contains**: `SecretPatterns`, `SecretPattern`, 40+ predefined patterns for comprehensive secret detection
+- **Built-in Detection**: Private keys (SSH, PGP, RSA, etc.), API keys (OpenAI, GitHub, AWS, etc.), database credentials, JWT tokens
 - **Tests**: Pattern compilation, pattern matching, coverage of AI/cloud service patterns
 
 ### `entropy.rs`
@@ -196,6 +197,44 @@ test_attributes = [
 - **CLI**: Provides scan results for command-line output
 - **MCP**: Exposes scanning capabilities via MCP server interface
 
+## Supported Secret Types
+
+The scanner includes 40+ built-in patterns for comprehensive secret detection:
+
+### Private Keys & Certificates
+- SSH private keys (RSA, DSA, EC, OpenSSH, SSH2)
+- PGP/GPG private keys (`-----BEGIN PGP PRIVATE KEY BLOCK-----`)
+- PKCS private keys (`-----BEGIN PRIVATE KEY-----`)
+- PuTTY private keys (`PuTTY-User-Key-File-2`)
+- Age encryption keys (`AGE-SECRET-KEY-1...`)
+
+### Cloud Provider Credentials
+- **AWS**: Access keys (`AKIA...`), secret keys, session tokens
+- **Azure**: Client secrets, storage keys (`AccountKey=...`)
+- **Google Cloud**: API keys (`AIzaSy...`), service account keys
+
+### API Keys & Tokens
+- **AI/ML**: OpenAI (`sk-proj-...`, `sk-...`), Anthropic Claude (`sk-ant-api...`), Hugging Face (`hf_...`), Cohere (`co....`), Replicate (`r8_...`), Mistral (UUID format)
+- **Development**: GitHub (`ghp_...`, `gho_...`), GitLab (`glpat-...`), npm (`npm_...`)
+- **Services**: Slack (`xox[aboprs]-...`), SendGrid (`SG....`), Twilio (`AC...`, `SK...`), Mailchimp, Stripe (`[rs]k_live_...`), Square
+- **JWT/JWE**: JSON Web Tokens (`eyJ...`)
+
+### Database Credentials
+- MongoDB connection strings (`mongodb://user:pass@host`)
+- PostgreSQL connection strings (`postgres://user:pass@host`)
+- MySQL connection strings (`mysql://user:pass@host`)
+
+### Generic Detection
+- **Context-based patterns**: High-entropy strings near keywords like "password", "token", "key", "secret", "api"
+- **URL credentials**: `https://user:pass@host` patterns
+- **Custom configurable patterns**: Add your own regex patterns via configuration
+
+### Pattern Matching Strategy
+1. **Specific patterns**: Known formats for popular services (high precision)
+2. **Generic context patterns**: Detect unknown secrets using contextual keywords + high entropy
+3. **Entropy analysis**: Statistical validation of randomness for suspected secrets
+4. **Intelligent filtering**: Skip test code, demo data, and false positives
+
 ## Usage Examples
 
 ```rust
@@ -208,10 +247,21 @@ let scanner = Scanner::new(&config)?;
 
 // Scan individual file
 let matches = scanner.scan_file(&path)?;
+for secret_match in matches {
+    println!("Found {} at {}:{}", 
+        secret_match.secret_type,
+        secret_match.file_path, 
+        secret_match.line_number);
+}
 
-// Scan directory
+// Scan directory with full results
 let result = scanner.scan_directory(&dir_path)?;
 println!("Found {} secrets in {} files", 
     result.stats.total_matches, 
     result.stats.files_scanned);
+
+// CLI usage examples
+// guardy scan src/ --stats
+// guardy scan config.json --include-binary  
+// guardy scan . --max-file-size 50
 ```

@@ -2,19 +2,104 @@ use anyhow::Result;
 use regex::Regex;
 use crate::config::GuardyConfig;
 
+/// A secret detection pattern with regex and metadata
+/// 
+/// Each pattern represents a specific type of secret that can be detected,
+/// including API keys, private keys, database credentials, and more.
 #[derive(Debug, Clone)]
 pub struct SecretPattern {
+    /// Human-readable name for the pattern (e.g., "GitHub Token")
     pub name: String,
+    /// Compiled regex for pattern matching
     pub regex: Regex,
+    /// Detailed description of what this pattern detects
     pub description: String,
 }
 
+/// Collection of secret detection patterns
+/// 
+/// Contains 40+ built-in patterns for comprehensive secret detection including:
+/// - **Private keys**: SSH, PGP, RSA, EC, OpenSSH, PuTTY, Age encryption keys
+/// - **API keys**: OpenAI, GitHub, AWS, Azure, Google Cloud, and 20+ more services
+/// - **Database credentials**: MongoDB, PostgreSQL, MySQL connection strings
+/// - **Generic detection**: Context-based patterns for unknown secrets
+/// 
+/// # Built-in Pattern Categories
+/// 
+/// ## Private Keys & Certificates (7 patterns)
+/// - SSH private keys (RSA, DSA, EC, OpenSSH, SSH2)
+/// - PGP/GPG private keys (armored format)
+/// - PKCS private keys (standard format)
+/// - PuTTY private keys (all versions)
+/// - Age encryption keys (modern file encryption)
+/// 
+/// ## Cloud Provider Credentials (5 patterns)
+/// - **AWS**: Access keys, secret keys, session tokens
+/// - **Azure**: Client secrets, storage keys
+/// - **Google Cloud**: API keys, service account keys
+/// 
+/// ## API Keys & Tokens (20+ patterns)
+/// - **AI/ML**: OpenAI, Anthropic Claude, Hugging Face, Cohere, Replicate, Mistral
+/// - **Development**: GitHub, GitLab, npm tokens
+/// - **Services**: Slack, SendGrid, Twilio, Mailchimp, Stripe, Square
+/// - **JWT/JWE**: JSON Web Tokens and encryption
+/// 
+/// ## Database Credentials (3 patterns)
+/// - MongoDB connection strings with embedded credentials
+/// - PostgreSQL connection strings with embedded credentials
+/// - MySQL connection strings with embedded credentials
+/// 
+/// ## Generic Detection (1 pattern)
+/// - Context-based: High-entropy strings near keywords like "password", "token", "key"
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use guardy::scanner::patterns::SecretPatterns;
+/// use guardy::config::GuardyConfig;
+/// 
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let config = GuardyConfig::load()?;
+/// let patterns = SecretPatterns::new(&config)?;
+/// println!("Loaded {} secret detection patterns", patterns.pattern_count());
+/// 
+/// // List all pattern names
+/// for name in patterns.get_pattern_names() {
+///     println!("- {}", name);
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SecretPatterns {
+    /// Vector of all loaded patterns (built-in + custom)
     pub patterns: Vec<SecretPattern>,
 }
 
 impl SecretPatterns {
+    /// Create a new SecretPatterns collection with built-in and custom patterns
+    /// 
+    /// Loads 40+ built-in patterns plus any custom patterns defined in configuration.
+    /// Built-in patterns cover private keys, API tokens, database credentials, and more.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `config` - Guardy configuration containing optional custom patterns
+    /// 
+    /// # Returns
+    /// 
+    /// A SecretPatterns instance with all compiled regex patterns ready for scanning
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use guardy::scanner::patterns::SecretPatterns;
+    /// use guardy::config::GuardyConfig;
+    /// 
+    /// let config = GuardyConfig::load()?;
+    /// let patterns = SecretPatterns::new(&config)?;
+    /// println!("Ready to scan with {} patterns", patterns.pattern_count());
+    /// ```
     pub fn new(config: &GuardyConfig) -> Result<Self> {
         let mut patterns = Vec::new();
         
@@ -48,6 +133,24 @@ impl SecretPatterns {
     
     /// Predefined secret patterns extracted from ripsecrets
     /// These patterns are designed to work with entropy analysis
+    /// Load all built-in secret detection patterns
+    /// 
+    /// Returns a comprehensive collection of 40+ patterns covering:
+    /// - Private keys (SSH, PGP, RSA, EC, etc.)
+    /// - API keys (OpenAI, GitHub, AWS, Azure, etc.) 
+    /// - Database credentials (MongoDB, PostgreSQL, MySQL)
+    /// - Generic high-entropy secrets with context keywords
+    /// 
+    /// Each pattern includes a compiled regex, descriptive name, and detailed description.
+    /// Patterns are based on real-world secret formats from popular services and tools.
+    /// 
+    /// # Returns
+    /// 
+    /// Vector of SecretPattern instances with compiled regexes ready for matching
+    /// 
+    /// # Errors
+    /// 
+    /// Returns error if any regex pattern fails to compile (should never happen with tested patterns)
     fn predefined_patterns() -> Result<Vec<SecretPattern>> {
         let patterns = vec![
             // URLs with credentials
@@ -172,7 +275,7 @@ impl SecretPatterns {
             // PuTTY private key
             SecretPattern {
                 name: "PuTTY Private Key".to_string(),
-                regex: Regex::new(r"PuTTY-User-Key-File-2")?,
+                regex: Regex::new(r"PuTTY-User-Key-File-\d+")?,
                 description: "PuTTY private key files".to_string(),
             },
             
@@ -319,10 +422,51 @@ impl SecretPatterns {
         Ok(patterns)
     }
     
+    /// Get the total number of loaded patterns
+    /// 
+    /// Returns the count of all patterns including both built-in and custom patterns.
+    /// 
+    /// # Returns
+    /// 
+    /// The total number of patterns available for scanning
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use guardy::scanner::patterns::SecretPatterns;
+    /// use guardy::config::GuardyConfig;
+    /// 
+    /// let config = GuardyConfig::load()?;
+    /// let patterns = SecretPatterns::new(&config)?;
+    /// println!("Scanner has {} patterns loaded", patterns.pattern_count());
+    /// ```
     pub fn pattern_count(&self) -> usize {
         self.patterns.len()
     }
     
+    /// Get the names of all loaded patterns
+    /// 
+    /// Returns a vector of pattern names for debugging, logging, or display purposes.
+    /// Useful for configuration validation and troubleshooting.
+    /// 
+    /// # Returns
+    /// 
+    /// Vector of string references containing all pattern names
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use guardy::scanner::patterns::SecretPatterns;
+    /// use guardy::config::GuardyConfig;
+    /// 
+    /// let config = GuardyConfig::load()?;
+    /// let patterns = SecretPatterns::new(&config)?;
+    /// 
+    /// println!("Available patterns:");
+    /// for name in patterns.get_pattern_names() {
+    ///     println!("  - {}", name);
+    /// }
+    /// ```
     pub fn get_pattern_names(&self) -> Vec<&str> {
         self.patterns.iter().map(|p| p.name.as_str()).collect()
     }

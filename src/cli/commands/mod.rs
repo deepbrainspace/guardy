@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 pub mod install;
 pub mod run;
+pub mod scan;
 pub mod config;
 pub mod status;
 pub mod mcp;
@@ -44,6 +45,8 @@ pub enum Commands {
     Install(install::InstallArgs),
     /// Manually execute a specific hook for testing
     Run(run::RunArgs),
+    /// Scan files or directories for secrets
+    Scan(scan::ScanArgs),
     /// Configuration management
     Config(config::ConfigArgs),
     /// Show current installation and configuration status
@@ -70,6 +73,7 @@ impl Cli {
         match self.command {
             Some(Commands::Install(args)) => install::execute(args).await,
             Some(Commands::Run(args)) => run::execute(args).await,
+            Some(Commands::Scan(args)) => scan::execute(args).await,
             Some(Commands::Config(args)) => config::execute(args).await,
             Some(Commands::Status(args)) => status::execute(args).await,
             Some(Commands::Uninstall(args)) => uninstall::execute(args).await,
