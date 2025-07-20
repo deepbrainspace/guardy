@@ -24,14 +24,119 @@ pub struct ScanArgs {
     /// Show statistics after scanning
     #[arg(long)]
     pub stats: bool,
+    
+    /// Follow symbolic links
+    #[arg(long)]
+    pub follow_symlinks: bool,
+    
+    /// Disable entropy analysis (faster but less accurate)
+    #[arg(long)]
+    pub no_entropy: bool,
+    
+    /// Set entropy threshold (default: 0.00001)
+    #[arg(long)]
+    pub entropy_threshold: Option<f64>,
+    
+    /// Disable intelligent test code detection
+    #[arg(long)]
+    pub no_ignore_tests: bool,
+    
+    /// Additional patterns to ignore (regex)
+    #[arg(long, value_delimiter = ',')]
+    pub ignore_patterns: Vec<String>,
+    
+    /// Additional paths to ignore (glob patterns)
+    #[arg(long, value_delimiter = ',')]
+    pub ignore_paths: Vec<String>,
+    
+    /// Additional comment patterns to ignore
+    #[arg(long, value_delimiter = ',')]
+    pub ignore_comments: Vec<String>,
+    
+    /// Custom secret patterns to add (regex)
+    #[arg(long, value_delimiter = ',')]
+    pub custom_patterns: Vec<String>,
+    
+    /// Output format
+    #[arg(long, default_value = "text")]
+    pub format: OutputFormat,
+    
+    /// Only count matches, don't show details
+    #[arg(long)]
+    pub count_only: bool,
+    
+    /// Show matched text content (potentially sensitive)
+    #[arg(long)]
+    pub show_content: bool,
+}
+
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum OutputFormat {
+    /// Human-readable text output
+    Text,
+    /// JSON format
+    Json,
+    /// CSV format
+    Csv,
+    /// Simple list of files with secrets
+    Files,
 }
 
 pub async fn execute(args: ScanArgs) -> Result<()> {
-    // Load configuration
+    use crate::scanner::patterns::SecretPatterns;
+    use regex::Regex;
+    
+    // Load base configuration
     let config = GuardyConfig::load()?;
     
-    // Create scanner
-    let scanner = Scanner::new(&config)?;
+    // Create custom scanner config based on CLI args
+    let mut scanner_config = Scanner::parse_scanner_config(&config)?;
+    
+    // Apply CLI overrides
+    if args.include_binary {
+        scanner_config.skip_binary_files = false;
+    }
+    
+    scanner_config.max_file_size_mb = args.max_file_size;
+    scanner_config.follow_symlinks = args.follow_symlinks;
+    
+    if args.no_entropy {
+        scanner_config.enable_entropy_analysis = false;
+    }
+    
+    if let Some(threshold) = args.entropy_threshold {
+        scanner_config.min_entropy_threshold = threshold;
+    }
+    
+    if args.no_ignore_tests {
+        scanner_config.ignore_test_code = false;
+    }
+    
+    // Add additional ignore patterns
+    scanner_config.ignore_patterns.extend(args.ignore_patterns.clone());
+    scanner_config.ignore_paths.extend(args.ignore_paths.clone());
+    scanner_config.ignore_comments.extend(args.ignore_comments.clone());
+    
+    // Load patterns and add custom ones
+    let mut patterns = SecretPatterns::new(&config)?;
+    
+    for custom_pattern in &args.custom_patterns {
+        match Regex::new(&custom_pattern) {
+            Ok(regex) => {
+                patterns.patterns.push(crate::scanner::patterns::SecretPattern {
+                    name: "Custom Pattern".to_string(),
+                    regex,
+                    description: "User-defined pattern".to_string(),
+                });
+            }
+            Err(e) => {
+                output::warning(&format!("Invalid custom pattern '{}': {}", custom_pattern, e));
+            }
+        }
+    }
+    
+    // Create scanner with custom config
+    let scanner = Scanner::with_config(patterns, scanner_config)?;
     
     output::info("Starting security scan...");
     let start_time = Instant::now();
@@ -41,20 +146,30 @@ pub async fn execute(args: ScanArgs) -> Result<()> {
         // Default to current directory
         vec![PathBuf::from(".")]
     } else {
-        args.paths
+        args.paths.clone()
     };
     
-    // Scan all paths
-    let mut all_results = Vec::new();
+    // Scan all paths and collect detailed results
+    let mut all_scan_results = Vec::new();
     for path in &scan_paths {
         if path.is_file() {
             let matches = scanner.scan_file(path)?;
-            for secret_match in matches {
-                all_results.push(secret_match);
+            if !matches.is_empty() {
+                // Create a mini scan result for this file
+                all_scan_results.push(crate::scanner::core::ScanResult {
+                    matches,
+                    stats: crate::scanner::core::ScanStats {
+                        files_scanned: 1,
+                        files_skipped: 0,
+                        total_matches: 0, // Will be updated below
+                        scan_duration_ms: 0,
+                    },
+                    warnings: Vec::new(),
+                });
             }
         } else if path.is_dir() {
             let scan_result = scanner.scan_directory(path)?;
-            all_results.extend(scan_result.matches);
+            all_scan_results.push(scan_result);
         } else {
             output::warning(&format!("Path not found: {}", path.display()));
         }
@@ -62,24 +177,77 @@ pub async fn execute(args: ScanArgs) -> Result<()> {
     
     let elapsed = start_time.elapsed();
     
-    // Print results
-    if all_results.is_empty() {
+    // Aggregate results
+    let all_matches: Vec<_> = all_scan_results.iter().flat_map(|r| r.matches.iter()).collect();
+    let total_files: usize = all_scan_results.iter().map(|r| r.stats.files_scanned).sum();
+    let total_skipped: usize = all_scan_results.iter().map(|r| r.stats.files_skipped).sum();
+    
+    // Handle count-only mode
+    if args.count_only {
+        println!("{}", all_matches.len());
+        if !all_matches.is_empty() {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    
+    // Handle different output formats
+    match args.format {
+        OutputFormat::Json => {
+            print_json_results(&all_matches, total_files, total_skipped, elapsed)?;
+        }
+        OutputFormat::Csv => {
+            print_csv_results(&all_matches)?;
+        }
+        OutputFormat::Files => {
+            print_files_only(&all_matches);
+        }
+        OutputFormat::Text => {
+            print_text_results(&all_matches, total_files, total_skipped, elapsed, &args)?;
+        }
+    }
+    
+    // Exit with error code if secrets found
+    if !all_matches.is_empty() {
+        std::process::exit(1);
+    }
+    
+    Ok(())
+}
+
+fn print_text_results(
+    matches: &[&crate::scanner::core::SecretMatch], 
+    total_files: usize, 
+    total_skipped: usize, 
+    elapsed: std::time::Duration,
+    args: &ScanArgs
+) -> Result<()> {
+    if matches.is_empty() {
         output::success("No secrets detected!");
-    } else {
-        println!();
-        for secret_match in &all_results {
-            println!(
-                "{} {} {}",
-                console::style("📄").blue(),
-                console::style(format!("{}:{}", secret_match.file_path, secret_match.line_number)).cyan().bold(),
-                console::style(format!("[{}]", secret_match.secret_type)).red().bold()
-            );
+        return Ok(());
+    }
+
+    println!();
+    for secret_match in matches {
+        println!(
+            "{} {} {}",
+            console::style("📄").blue(),
+            console::style(format!("{}:{}", secret_match.file_path, secret_match.line_number)).cyan().bold(),
+            console::style(format!("[{}]", secret_match.secret_type)).red().bold()
+        );
+        
+        if args.show_content {
+            println!("  Content: {}", console::style(secret_match.line_content.trim()).dim());
+            if !secret_match.matched_text.is_empty() {
+                println!("  Matched: {}", console::style(&secret_match.matched_text).red().bold());
+            }
+        } else {
             println!("  {}", console::style(secret_match.line_content.trim()).dim());
         }
-        
-        println!();
-        output::warning(&format!("Found {} potential secrets!", all_results.len()));
     }
+    
+    println!();
+    output::warning(&format!("Found {} potential secrets!", matches.len()));
     
     // Print statistics if requested
     if args.stats {
@@ -87,15 +255,68 @@ pub async fn execute(args: ScanArgs) -> Result<()> {
         println!("{} {}", 
                 console::style("📊").green().bold(), 
                 console::style("Scan Statistics").green().bold());
-        println!("  Paths scanned: {}", console::style(scan_paths.len()).cyan());
-        println!("  Secrets found: {}", console::style(all_results.len()).cyan());
+        println!("  Files scanned: {}", console::style(total_files).cyan());
+        if total_skipped > 0 {
+            println!("  Files skipped: {}", console::style(total_skipped).cyan());
+        }
+        println!("  Secrets found: {}", console::style(matches.len()).cyan());
         println!("  Scan time: {}ms", console::style(elapsed.as_millis()).cyan());
     }
     
-    // Exit with error code if secrets found
-    if !all_results.is_empty() {
-        std::process::exit(1);
+    Ok(())
+}
+
+fn print_json_results(
+    matches: &[&crate::scanner::core::SecretMatch], 
+    total_files: usize, 
+    total_skipped: usize, 
+    elapsed: std::time::Duration
+) -> Result<()> {
+    use serde_json::json;
+    
+    let results = json!({
+        "results": matches.iter().map(|m| json!({
+            "file": m.file_path,
+            "line": m.line_number,
+            "type": m.secret_type,
+            "content": m.line_content.trim(),
+            "matched_text": m.matched_text,
+            "start_pos": m.start_pos,
+            "end_pos": m.end_pos
+        })).collect::<Vec<_>>(),
+        "statistics": {
+            "files_scanned": total_files,
+            "files_skipped": total_skipped,
+            "secrets_found": matches.len(),
+            "scan_duration_ms": elapsed.as_millis()
+        }
+    });
+    
+    println!("{}", serde_json::to_string_pretty(&results)?);
+    Ok(())
+}
+
+fn print_csv_results(matches: &[&crate::scanner::core::SecretMatch]) -> Result<()> {
+    println!("file,line,type,content");
+    for secret_match in matches {
+        println!(
+            "{},{},{},\"{}\"",
+            secret_match.file_path,
+            secret_match.line_number,
+            secret_match.secret_type,
+            secret_match.line_content.trim().replace('"', "\"\"")
+        );
+    }
+    Ok(())
+}
+
+fn print_files_only(matches: &[&crate::scanner::core::SecretMatch]) {
+    let mut files: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for secret_match in matches {
+        files.insert(&secret_match.file_path);
     }
     
-    Ok(())
+    for file in files {
+        println!("{}", file);
+    }
 }
