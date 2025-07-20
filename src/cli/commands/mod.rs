@@ -73,7 +73,7 @@ impl Cli {
         match self.command {
             Some(Commands::Install(args)) => install::execute(args).await,
             Some(Commands::Run(args)) => run::execute(args).await,
-            Some(Commands::Scan(args)) => scan::execute(args).await,
+            Some(Commands::Scan(args)) => scan::execute(args, self.verbose).await,
             Some(Commands::Config(args)) => config::execute(args).await,
             Some(Commands::Status(args)) => status::execute(args).await,
             Some(Commands::Uninstall(args)) => uninstall::execute(args).await,

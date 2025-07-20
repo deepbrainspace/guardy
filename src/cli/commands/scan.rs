@@ -68,6 +68,11 @@ pub struct ScanArgs {
     /// Show matched text content (potentially sensitive)
     #[arg(long)]
     pub show_content: bool,
+    
+    /// List all available secret detection patterns and exit
+    #[arg(long)]
+    pub list_patterns: bool,
+    
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -82,7 +87,7 @@ pub enum OutputFormat {
     Files,
 }
 
-pub async fn execute(args: ScanArgs) -> Result<()> {
+pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
     use crate::scanner::patterns::SecretPatterns;
     use regex::Regex;
     
@@ -119,6 +124,24 @@ pub async fn execute(args: ScanArgs) -> Result<()> {
     
     // Load patterns and add custom ones
     let mut patterns = SecretPatterns::new(&config)?;
+    
+    // Handle --list-patterns flag
+    if args.list_patterns {
+        println!("Available Secret Detection Patterns ({} total):", patterns.pattern_count());
+        println!();
+        
+        for pattern in &patterns.patterns {
+            if verbose_level > 0 {
+                println!("📋 {} - {}", 
+                    console::style(&pattern.name).cyan().bold(),
+                    console::style(&pattern.description).dim()
+                );
+            } else {
+                println!("  - {}", pattern.name);
+            }
+        }
+        return Ok(());
+    }
     
     for custom_pattern in &args.custom_patterns {
         match Regex::new(&custom_pattern) {
@@ -203,7 +226,7 @@ pub async fn execute(args: ScanArgs) -> Result<()> {
             print_files_only(&all_matches);
         }
         OutputFormat::Text => {
-            print_text_results(&all_matches, total_files, total_skipped, elapsed, &args)?;
+            print_text_results(&all_matches, total_files, total_skipped, elapsed, &args, verbose_level)?;
         }
     }
     
@@ -220,7 +243,8 @@ fn print_text_results(
     total_files: usize, 
     total_skipped: usize, 
     elapsed: std::time::Duration,
-    args: &ScanArgs
+    args: &ScanArgs,
+    verbose_level: u8
 ) -> Result<()> {
     if matches.is_empty() {
         output::success("No secrets detected!");
@@ -236,13 +260,18 @@ fn print_text_results(
             console::style(format!("[{}]", secret_match.secret_type)).red().bold()
         );
         
-        if args.show_content {
+        if verbose_level > 0 {
+            println!("  📋 {}", console::style(&secret_match.pattern_description).dim());
+        }
+        
+        if args.show_content || verbose_level > 0 {
             println!("  Content: {}", console::style(secret_match.line_content.trim()).dim());
             if !secret_match.matched_text.is_empty() {
                 println!("  Matched: {}", console::style(&secret_match.matched_text).red().bold());
             }
         } else {
-            println!("  {}", console::style(secret_match.line_content.trim()).dim());
+            // Hide the actual secret content for security - just show file location
+            println!("  {}", console::style("[Content hidden - use -v or --show-content to reveal]").dim());
         }
     }
     

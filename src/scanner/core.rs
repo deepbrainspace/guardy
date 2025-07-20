@@ -16,6 +16,7 @@ pub struct SecretMatch {
     pub start_pos: usize,
     pub end_pos: usize,
     pub secret_type: String,
+    pub pattern_description: String,
 }
 
 #[derive(Debug, Default)]
@@ -34,10 +35,7 @@ pub struct Warning {
 
 #[derive(Debug)]
 pub enum WarningCategory {
-    GitignoreMismatch,
-    BinaryFileSkipped,
     PermissionDenied,
-    UnknownFileType,
 }
 
 #[derive(Debug)]
@@ -420,6 +418,7 @@ impl Scanner {
                     start_pos: regex_match.start(),
                     end_pos: regex_match.end(),
                     secret_type: pattern.name.clone(),
+                    pattern_description: pattern.description.clone(),
                 });
             }
         }

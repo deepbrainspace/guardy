@@ -59,16 +59,6 @@ impl GuardyConfig {
         Ok(self.figment.extract_inner(path)?)
     }
     
-    /// Get a string value from config
-    pub fn get_string(&self, path: &str) -> Result<String> {
-        Ok(self.figment.extract_inner(path)?)
-    }
-    
-    /// Get a u16 value from config
-    pub fn get_u16(&self, path: &str) -> Result<u16> {
-        Ok(self.figment.extract_inner(path)?)
-    }
-    
     /// Get a vector of strings from config
     pub fn get_vec(&self, path: &str) -> Result<Vec<String>> {
         Ok(self.figment.extract_inner(path)?)

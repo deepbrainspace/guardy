@@ -16,19 +16,10 @@ impl GitRepo {
         Ok(GitRepo { repo })
     }
     
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let repo = Repository::open(path)?;
-        Ok(GitRepo { repo })
-    }
-    
     pub fn current_branch(&self) -> Result<String> {
         let head = self.repo.head()?;
         let shorthand = head.shorthand().unwrap_or("HEAD");
         Ok(shorthand.to_string())
-    }
-    
-    pub fn workdir(&self) -> Option<&Path> {
-        self.repo.workdir()
     }
     
     pub fn git_dir(&self) -> &Path {
