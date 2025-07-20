@@ -8,6 +8,7 @@ pub struct SecretMatch {
     pub start_pos: usize,
     pub end_pos: usize,
     pub secret_type: String,
+    pub pattern_description: String,
 }
 
 /// Statistics from a scanning operation
@@ -23,16 +24,6 @@ pub struct ScanStats {
 #[derive(Debug)]
 pub struct Warning {
     pub message: String,
-    pub category: WarningCategory,
-}
-
-/// Categories of warnings that can occur during scanning
-#[derive(Debug)]
-pub enum WarningCategory {
-    GitignoreMismatch,
-    BinaryFileSkipped,
-    PermissionDenied,
-    UnknownFileType,
 }
 
 /// Result of a scanning operation
@@ -51,6 +42,12 @@ pub struct ScannerConfig {
     pub skip_binary_files: bool,
     pub follow_symlinks: bool,
     pub max_file_size_mb: usize,
+    pub ignore_paths: Vec<String>,
+    pub ignore_patterns: Vec<String>,
+    pub ignore_comments: Vec<String>,
+    pub ignore_test_code: bool,
+    pub test_attributes: Vec<String>,
+    pub test_modules: Vec<String>,
 }
 
 impl Default for ScannerConfig {
@@ -61,6 +58,36 @@ impl Default for ScannerConfig {
             skip_binary_files: true,
             follow_symlinks: false,
             max_file_size_mb: 10,
+            ignore_paths: vec![
+                "tests/*".to_string(),
+                "testdata/*".to_string(),
+                "*_test.rs".to_string(),
+                "test_*.rs".to_string(),
+            ],
+            ignore_patterns: vec![
+                "# TEST_SECRET:".to_string(),
+                "DEMO_KEY_".to_string(),
+                "FAKE_".to_string(),
+            ],
+            ignore_comments: vec![
+                "guardy:ignore".to_string(),
+                "guardy:ignore-line".to_string(),
+                "guardy:ignore-next".to_string(),
+            ],
+            ignore_test_code: true,
+            test_attributes: vec![],
+            test_modules: vec![],
         }
     }
 }
+
+/// Main scanner struct - handles secret detection across files and directories
+/// 
+/// NOTE: All scanner-related types should be defined in types.rs, not here.
+/// This keeps the type definitions modular and the implementation focused.
+#[derive(Clone)]
+pub struct Scanner {
+    pub(crate) patterns: super::patterns::SecretPatterns,
+    pub(crate) config: ScannerConfig,
+}
+

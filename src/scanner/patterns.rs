@@ -444,32 +444,6 @@ impl SecretPatterns {
         self.patterns.len()
     }
     
-    /// Get the names of all loaded patterns
-    /// 
-    /// Returns a vector of pattern names for debugging, logging, or display purposes.
-    /// Useful for configuration validation and troubleshooting.
-    /// 
-    /// # Returns
-    /// 
-    /// Vector of string references containing all pattern names
-    /// 
-    /// # Example
-    /// 
-    /// ```rust
-    /// use guardy::scanner::patterns::SecretPatterns;
-    /// use guardy::config::GuardyConfig;
-    /// 
-    /// let config = GuardyConfig::load()?;
-    /// let patterns = SecretPatterns::new(&config)?;
-    /// 
-    /// println!("Available patterns:");
-    /// for name in patterns.get_pattern_names() {
-    ///     println!("  - {}", name);
-    /// }
-    /// ```
-    pub fn get_pattern_names(&self) -> Vec<&str> {
-        self.patterns.iter().map(|p| p.name.as_str()).collect()
-    }
 }
 
 #[cfg(test)]

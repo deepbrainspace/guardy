@@ -34,7 +34,7 @@ which = "8.0.0"
 rmcp = { version = "0.3.0", features = ["server"] }
 uuid = { version = "1.17.0", features = ["v4"] }
 tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 # Scanner dependencies (ripgrep ecosystem) - latest optimized versions
 grep = "0.3.2"            # Meta-crate providing unified interface

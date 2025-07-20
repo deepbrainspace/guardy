@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::scanner::core::Scanner;
+use crate::scanner::Scanner;
 
 #[derive(Args)]
 pub struct ScanArgs {
@@ -179,9 +179,9 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
             let matches = scanner.scan_file(path)?;
             if !matches.is_empty() {
                 // Create a mini scan result for this file
-                all_scan_results.push(crate::scanner::core::ScanResult {
+                all_scan_results.push(crate::scanner::types::ScanResult {
                     matches,
-                    stats: crate::scanner::core::ScanStats {
+                    stats: crate::scanner::types::ScanStats {
                         files_scanned: 1,
                         files_skipped: 0,
                         total_matches: 0, // Will be updated below
@@ -226,7 +226,8 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
             print_files_only(&all_matches);
         }
         OutputFormat::Text => {
-            print_text_results(&all_matches, total_files, total_skipped, elapsed, &args, verbose_level)?;
+            let all_warnings: Vec<_> = all_scan_results.iter().flat_map(|r| r.warnings.iter()).collect();
+            print_text_results(&all_matches, total_files, total_skipped, elapsed, &args, verbose_level, &all_warnings)?;
         }
     }
     
@@ -239,15 +240,34 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
 }
 
 fn print_text_results(
-    matches: &[&crate::scanner::core::SecretMatch], 
+    matches: &[&crate::scanner::types::SecretMatch], 
     total_files: usize, 
     total_skipped: usize, 
     elapsed: std::time::Duration,
     args: &ScanArgs,
-    verbose_level: u8
+    verbose_level: u8,
+    warnings: &[&crate::scanner::types::Warning]
 ) -> Result<()> {
     if matches.is_empty() {
         output::success("No secrets detected!");
+        
+        // Print statistics if requested
+        if args.stats {
+            println!();
+            println!("{} {}", 
+                    console::style("📊").green().bold(), 
+                    console::style("Scan Statistics").green().bold());
+            println!("  Files scanned: {}", console::style(total_files).cyan());
+            if total_skipped > 0 {
+                println!("  Files skipped: {}", console::style(total_skipped).cyan());
+            }
+            println!("  Secrets found: {}", console::style(0).cyan());
+            println!("  Scan time: {}ms", console::style(elapsed.as_millis()).cyan());
+            if !warnings.is_empty() {
+                println!("  Warnings: {}", console::style(warnings.len()).yellow());
+            }
+        }
+        
         return Ok(());
     }
 
@@ -278,6 +298,14 @@ fn print_text_results(
     println!();
     output::warning(&format!("Found {} potential secrets!", matches.len()));
     
+    // Print warnings from scan results
+    if !warnings.is_empty() {
+        println!();
+        for warning in warnings {
+            output::warning(&warning.message);
+        }
+    }
+    
     // Print statistics if requested
     if args.stats {
         println!();
@@ -290,13 +318,16 @@ fn print_text_results(
         }
         println!("  Secrets found: {}", console::style(matches.len()).cyan());
         println!("  Scan time: {}ms", console::style(elapsed.as_millis()).cyan());
+        if !warnings.is_empty() {
+            println!("  Warnings: {}", console::style(warnings.len()).yellow());
+        }
     }
     
     Ok(())
 }
 
 fn print_json_results(
-    matches: &[&crate::scanner::core::SecretMatch], 
+    matches: &[&crate::scanner::types::SecretMatch], 
     total_files: usize, 
     total_skipped: usize, 
     elapsed: std::time::Duration
@@ -325,7 +356,7 @@ fn print_json_results(
     Ok(())
 }
 
-fn print_csv_results(matches: &[&crate::scanner::core::SecretMatch]) -> Result<()> {
+fn print_csv_results(matches: &[&crate::scanner::types::SecretMatch]) -> Result<()> {
     println!("file,line,type,content");
     for secret_match in matches {
         println!(
@@ -339,7 +370,7 @@ fn print_csv_results(matches: &[&crate::scanner::core::SecretMatch]) -> Result<(
     Ok(())
 }
 
-fn print_files_only(matches: &[&crate::scanner::core::SecretMatch]) {
+fn print_files_only(matches: &[&crate::scanner::types::SecretMatch]) {
     let mut files: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for secret_match in matches {
         files.insert(&secret_match.file_path);
@@ -349,3 +380,4 @@ fn print_files_only(matches: &[&crate::scanner::core::SecretMatch]) {
         println!("{}", file);
     }
 }
+

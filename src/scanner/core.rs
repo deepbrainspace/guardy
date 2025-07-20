@@ -5,97 +5,15 @@ use crate::config::GuardyConfig;
 use super::entropy::is_likely_secret;
 use super::patterns::SecretPatterns;
 use super::test_detection::TestDetector;
+use super::types::{SecretMatch, ScanStats, Warning, ScanResult, Scanner, ScannerConfig};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
-#[derive(Debug, Clone)]
-pub struct SecretMatch {
-    pub file_path: String,
-    pub line_number: usize,
-    pub line_content: String,
-    pub matched_text: String,
-    pub start_pos: usize,
-    pub end_pos: usize,
-    pub secret_type: String,
-    pub pattern_description: String,
-}
 
-#[derive(Debug, Default)]
-pub struct ScanStats {
-    pub files_scanned: usize,
-    pub files_skipped: usize,
-    pub total_matches: usize,
-    pub scan_duration_ms: u64,
-}
-
-#[derive(Debug)]
-pub struct Warning {
-    pub message: String,
-    pub category: WarningCategory,
-}
-
-#[derive(Debug)]
-pub enum WarningCategory {
-    PermissionDenied,
-}
-
-#[derive(Debug)]
-pub struct ScanResult {
-    pub matches: Vec<SecretMatch>,
-    pub stats: ScanStats,
-    pub warnings: Vec<Warning>,
-}
-
-#[derive(Clone)]
-pub struct Scanner {
-    patterns: SecretPatterns,
-    config: ScannerConfig,
-}
-
-#[derive(Debug, Clone)]
-pub struct ScannerConfig {
-    pub enable_entropy_analysis: bool,
-    pub min_entropy_threshold: f64,
-    pub skip_binary_files: bool,
-    pub follow_symlinks: bool,
-    pub max_file_size_mb: usize,
-    pub ignore_paths: Vec<String>,
-    pub ignore_patterns: Vec<String>,
-    pub ignore_comments: Vec<String>,
-    pub ignore_test_code: bool,
-    pub test_attributes: Vec<String>,
-    pub test_modules: Vec<String>,
-}
-
-impl Default for ScannerConfig {
-    fn default() -> Self {
-        Self {
-            enable_entropy_analysis: true,
-            min_entropy_threshold: 1.0 / 1e5,
-            skip_binary_files: true,
-            follow_symlinks: false,
-            max_file_size_mb: 10,
-            ignore_paths: vec![
-                "tests/*".to_string(),
-                "testdata/*".to_string(),
-                "*_test.rs".to_string(),
-                "test_*.rs".to_string(),
-            ],
-            ignore_patterns: vec![
-                "# TEST_SECRET:".to_string(),
-                "DEMO_KEY_".to_string(),
-                "FAKE_".to_string(),
-            ],
-            ignore_comments: vec![
-                "guardy:ignore".to_string(),
-                "guardy:ignore-line".to_string(),
-                "guardy:ignore-next".to_string(),
-            ],
-            ignore_test_code: true,
-            test_attributes: vec![],
-            test_modules: vec![],
-        }
-    }
-}
+// ============================================================================
+// IMPORTANT: All scanner types should be defined in types.rs, not here!
+// This keeps the codebase modular and prevents type duplication.
+// Only implement behavior (impl blocks) in this file.
+// ============================================================================
 
 impl Scanner {
     pub fn new(config: &GuardyConfig) -> Result<Self> {
@@ -252,7 +170,7 @@ impl Scanner {
         let start_time = std::time::Instant::now();
         let mut all_matches = Vec::new();
         let mut stats = ScanStats::default();
-        let mut warnings = Vec::new();
+        let mut warnings: Vec<Warning> = Vec::new();
         
         for path in paths {
             match self.scan_single_path(path) {
@@ -265,7 +183,6 @@ impl Scanner {
                     stats.files_skipped += 1;
                     warnings.push(Warning {
                         message: format!("Failed to scan {}: {}", path.display(), e),
-                        category: WarningCategory::PermissionDenied,
                     });
                 }
             }
@@ -285,16 +202,215 @@ impl Scanner {
         let start_time = std::time::Instant::now();
         let mut all_matches = Vec::new();
         let mut stats = ScanStats::default();
-        let mut warnings = Vec::new();
+        let mut warnings: Vec<Warning> = Vec::new();
         
-        let walker = WalkBuilder::new(path)
+        // Build intelligent walker that respects .gitignore AND skips directories that should be ignored
+        let mut builder = WalkBuilder::new(path);
+        builder
             .follow_links(self.config.follow_symlinks)
-            .build();
+            .git_ignore(true)        // Respect .gitignore files
+            .git_global(true)        // Respect global gitignore
+            .git_exclude(true)       // Respect .git/info/exclude
+            .hidden(false)           // Don't ignore hidden files by default
+            .parents(true);          // Check parent directories for .gitignore
+            
+        // Add intelligent skipping for directories that SHOULD be ignored based on project type
+        builder.filter_entry(|entry| {
+            if let Some(file_name) = entry.file_name().to_str() {
+                // Skip directories that should always be ignored for security/performance
+                !matches!(file_name,
+                    // Rust build artifacts
+                    "target" |
+                    // Node.js dependencies and build artifacts  
+                    "node_modules" | "dist" | "build" | ".next" | ".nuxt" |
+                    // Python artifacts
+                    "__pycache__" | ".pytest_cache" | "venv" | ".venv" | "env" | ".env" |
+                    // Go artifacts
+                    "vendor" |
+                    // Java artifacts  
+                    "out" |
+                    // Generic build/cache directories
+                    "cache" | ".cache" | "tmp" | ".tmp" | "temp" | ".temp" |
+                    // Version control
+                    ".git" | ".svn" | ".hg" |
+                    // IDE directories
+                    ".vscode" | ".idea" | ".vs" |
+                    // Coverage reports
+                    "coverage" | ".nyc_output"
+                )
+            } else {
+                true
+            }
+        });
         
+        let walker = builder.build();
+        
+        // Count total files for progress indication
+        let mut file_count = 0;
+        let mut processed_count = 0;
+        
+        // First pass: count files for progress reporting
+        println!("📊 Analyzing directory structure...");
+        let mut count_builder = WalkBuilder::new(path);
+        count_builder
+            .follow_links(self.config.follow_symlinks)
+            .git_ignore(true)
+            .git_global(true)  
+            .git_exclude(true)
+            .hidden(false)
+            .parents(true);
+            
+        // Apply the same intelligent filtering for counting
+        count_builder.filter_entry(|entry| {
+            if let Some(file_name) = entry.file_name().to_str() {
+                !matches!(file_name,
+                    "target" | "node_modules" | "dist" | "build" | ".next" | ".nuxt" |
+                    "__pycache__" | ".pytest_cache" | "venv" | ".venv" | "env" | ".env" |
+                    "vendor" | "out" | "cache" | ".cache" | "tmp" | ".tmp" | "temp" | ".temp" |
+                    ".git" | ".svn" | ".hg" | ".vscode" | ".idea" | ".vs" | "coverage" | ".nyc_output"
+                )
+            } else {
+                true
+            }
+        });
+        
+        let count_walker = count_builder.build();
+            
+        for entry in count_walker {
+            if let Ok(entry) = entry {
+                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    file_count += 1;
+                }
+            }
+        }
+        
+        println!("🔍 Scanning {} files...", file_count);
+        
+        // Check which directories actually exist and analyze their gitignore status
+        let mut properly_ignored = Vec::new();
+        let mut needs_gitignore = Vec::new();
+        
+        // Helper function to check if a pattern exists in gitignore
+        let check_gitignore_pattern = |pattern: &str| -> bool {
+            if let Ok(gitignore_content) = std::fs::read_to_string(path.join(".gitignore")) {
+                gitignore_content.lines()
+                    .map(|line| line.trim())
+                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                    .any(|line| line == pattern || line == pattern.trim_end_matches('/'))
+            } else {
+                false
+            }
+        };
+        
+        // Check for Rust directories
+        if path.join("target").exists() {
+            if check_gitignore_pattern("target/") || check_gitignore_pattern("target") {
+                properly_ignored.push(("target/", "Rust build directory"));
+            } else {
+                needs_gitignore.push(("target/", "Rust build directory"));
+            }
+        }
+        
+        // Check for Node.js directories
+        if path.join("node_modules").exists() {
+            if check_gitignore_pattern("node_modules/") || check_gitignore_pattern("node_modules") {
+                properly_ignored.push(("node_modules/", "Node.js dependencies"));
+            } else {
+                needs_gitignore.push(("node_modules/", "Node.js dependencies"));
+            }
+        }
+        if path.join("dist").exists() {
+            if check_gitignore_pattern("dist/") || check_gitignore_pattern("dist") {
+                properly_ignored.push(("dist/", "Build output directory"));
+            } else {
+                needs_gitignore.push(("dist/", "Build output directory"));
+            }
+        }
+        if path.join("build").exists() {
+            if check_gitignore_pattern("build/") || check_gitignore_pattern("build") {
+                properly_ignored.push(("build/", "Build output directory"));
+            } else {
+                needs_gitignore.push(("build/", "Build output directory"));
+            }
+        }
+        
+        // Check for Python directories
+        if path.join("__pycache__").exists() {
+            if check_gitignore_pattern("__pycache__/") || check_gitignore_pattern("__pycache__") {
+                properly_ignored.push(("__pycache__/", "Python cache directory"));
+            } else {
+                needs_gitignore.push(("__pycache__/", "Python cache directory"));
+            }
+        }
+        if path.join("venv").exists() {
+            if check_gitignore_pattern("venv/") || check_gitignore_pattern("venv") {
+                properly_ignored.push(("venv/", "Python virtual environment"));
+            } else {
+                needs_gitignore.push(("venv/", "Python virtual environment"));
+            }
+        }
+        if path.join(".venv").exists() {
+            if check_gitignore_pattern(".venv/") || check_gitignore_pattern(".venv") {
+                properly_ignored.push((".venv/", "Python virtual environment"));
+            } else {
+                needs_gitignore.push((".venv/", "Python virtual environment"));
+            }
+        }
+        
+        // Check for Go directories
+        if path.join("vendor").exists() {
+            if check_gitignore_pattern("vendor/") || check_gitignore_pattern("vendor") {
+                properly_ignored.push(("vendor/", "Go dependencies"));
+            } else {
+                needs_gitignore.push(("vendor/", "Go dependencies"));
+            }
+        }
+        
+        // Show status of discovered directories
+        if !properly_ignored.is_empty() || !needs_gitignore.is_empty() {
+            let total_dirs = properly_ignored.len() + needs_gitignore.len();
+            println!("📁 Discovered {} director{}:", 
+                     total_dirs, 
+                     if total_dirs == 1 { "y" } else { "ies" });
+            
+            // Show properly ignored directories
+            for (dir, description) in &properly_ignored {
+                println!("   ✅ {} ({})", 
+                    console::style(dir).green(),
+                    console::style(description).dim()
+                );
+            }
+            
+            // Show directories that need gitignore rules
+            for (dir, description) in &needs_gitignore {
+                println!("   ⚠️  {} ({})", 
+                    console::style(dir).yellow(),
+                    console::style(description).dim()
+                );
+            }
+            
+            // Only show gitignore recommendations for directories that need them
+            if !needs_gitignore.is_empty() {
+                let patterns: Vec<&str> = needs_gitignore.iter().map(|(dir, _)| *dir).collect();
+                println!("💡 Consider adding to .gitignore: {}", 
+                         console::style(patterns.join(", ")).cyan());
+            }
+        }
+        
+        // Second pass: actual scanning with progress
         for entry in walker {
             match entry {
                 Ok(entry) => {
                     if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                        processed_count += 1;
+                        
+                        // Show progress every 50 files or for large scans
+                        if processed_count % 50 == 0 || file_count > 500 {
+                            let progress = (processed_count as f64 / file_count as f64 * 100.0) as u32;
+                            print!("\r⏳ Progress: {}/{} files ({}%)", processed_count, file_count, progress);
+                            std::io::Write::flush(&mut std::io::stdout()).ok();
+                        }
+                        
                         match self.scan_single_path(entry.path()) {
                             Ok(mut matches) => {
                                 stats.files_scanned += 1;
@@ -310,13 +426,25 @@ impl Scanner {
                 Err(e) => {
                     warnings.push(Warning {
                         message: format!("Walk error: {}", e),
-                        category: WarningCategory::PermissionDenied,
                     });
                 }
             }
         }
         
-        stats.scan_duration_ms = start_time.elapsed().as_millis() as u64;
+        // Clear progress line
+        if file_count > 0 {
+            print!("\r");
+            std::io::Write::flush(&mut std::io::stdout()).ok();
+        }
+        
+        let scan_duration = start_time.elapsed();
+        stats.scan_duration_ms = scan_duration.as_millis() as u64;
+        
+        // Show timing summary
+        println!("⏱️  Scan completed in {:.2}s ({} files scanned, {} matches found)", 
+                 scan_duration.as_secs_f64(), 
+                 stats.files_scanned, 
+                 stats.total_matches);
         
         Ok(ScanResult {
             matches: all_matches,
