@@ -223,12 +223,14 @@ impl Scanner {
         // Parse processing mode settings
         if let Ok(mode_str) = config.get_section("scanner.mode") {
             if let Some(mode) = mode_str.as_str() {
+                tracing::trace!("SCANNER CONFIG: Parsing mode from config: '{}'", mode);
                 scanner_config.mode = match mode {
                     "sequential" => super::types::ScanMode::Sequential,
                     "parallel" => super::types::ScanMode::Parallel,
                     "auto" => super::types::ScanMode::Auto,
                     _ => super::types::ScanMode::Auto, // Default fallback
                 };
+                tracing::trace!("SCANNER CONFIG: Set mode to: {:?}", scanner_config.mode);
             }
         }
         
@@ -636,7 +638,7 @@ mod tests {
     use crate::config::GuardyConfig;
     
     fn create_test_config() -> GuardyConfig {
-        GuardyConfig::load().unwrap()
+        GuardyConfig::load(None, None::<&()>).unwrap()
     }
     
     #[test]

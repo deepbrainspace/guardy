@@ -37,7 +37,7 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
         },
         ConfigCommand::Show { format } => {
             info("Loading merged configuration...");
-            let config = GuardyConfig::load()?;
+            let config = GuardyConfig::load(None, None::<&()>)?;
             
             let format_enum = match format.to_lowercase().as_str() {
                 "json" => ConfigFormat::Json,
@@ -56,7 +56,7 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
         },
         ConfigCommand::Get { key } => {
             info(&format!("Getting {}", key));
-            let config = GuardyConfig::load()?;
+            let config = GuardyConfig::load(None, None::<&()>)?;
             
             // First try to get as a section/object
             if let Ok(section_val) = config.get_section(&key) {
@@ -93,7 +93,7 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
         },
         ConfigCommand::Validate => {
             info("Validating configuration...");
-            let _config = GuardyConfig::load()?;  // This will fail if config is invalid
+            let _config = GuardyConfig::load(None, None::<&()>)?;  // This will fail if config is invalid
             success("Configuration is valid!");
         },
     }

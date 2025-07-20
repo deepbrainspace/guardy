@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn test_config_export_formats() {
-        let config = GuardyConfig::load().unwrap();
+        let config = GuardyConfig::load(None, None::<&()>).unwrap();
         
         // Test JSON export
         let json_output = config.export_config(ConfigFormat::Json);
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_syntax_highlighting() {
-        let config = GuardyConfig::load().unwrap();
+        let config = GuardyConfig::load(None, None::<&()>).unwrap();
         
         // Test highlighted export (should fallback to plain text in non-TTY)
         let highlighted = config.export_config_highlighted(ConfigFormat::Json);

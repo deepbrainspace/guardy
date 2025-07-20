@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use serde::Serialize;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -7,7 +8,7 @@ use crate::cli::output;
 use crate::config::GuardyConfig;
 use crate::scanner::{Scanner, types::ScanMode};
 
-#[derive(Args)]
+#[derive(Args, Serialize)]
 pub struct ScanArgs {
     /// Files or directories to scan
     #[arg(value_name = "PATH")]
@@ -74,12 +75,13 @@ pub struct ScanArgs {
     pub list_patterns: bool,
     
     /// Processing mode: auto (smart default), parallel, or sequential
-    #[arg(long, value_enum, default_value = "auto")]
-    pub mode: ScanMode,
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ScanMode>,
     
 }
 
-#[derive(Clone, Debug, clap::ValueEnum)]
+#[derive(Clone, Debug, clap::ValueEnum, serde::Serialize)]
 pub enum OutputFormat {
     /// Human-readable text output
     Text,
@@ -95,8 +97,23 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
     use crate::scanner::patterns::SecretPatterns;
     use regex::Regex;
     
-    // Load base configuration
-    let config = GuardyConfig::load()?;
+    // Create scanner-specific config overrides
+    let scanner_overrides = serde_json::json!({
+        "scanner": {
+            "mode": args.mode,
+            "max_file_size_mb": args.max_file_size,
+            "follow_symlinks": args.follow_symlinks,
+            "enable_entropy_analysis": !args.no_entropy,
+            "min_entropy_threshold": args.entropy_threshold,
+            "ignore_test_code": !args.no_ignore_tests,
+            "ignore_patterns": args.ignore_patterns,
+            "ignore_paths": args.ignore_paths,
+            "ignore_comments": args.ignore_comments
+        }
+    });
+    
+    // Load configuration with custom overrides
+    let config = GuardyConfig::load(None, Some(scanner_overrides))?;
     
     // Create custom scanner config based on CLI args
     let mut scanner_config = Scanner::parse_scanner_config(&config)?;
@@ -195,12 +212,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
                 });
             }
         } else if path.is_dir() {
-            // Override scanner config mode with CLI parameter
-            let mut scanner_config = scanner.config.clone();
-            scanner_config.mode = args.mode.clone();
-            let scanner_with_mode = Scanner::with_config(scanner.patterns.clone(), scanner_config)?;
-            
-            let scan_result = scanner_with_mode.scan_directory_smart(path)?;
+            let scan_result = scanner.scan_directory_smart(path)?;
             all_scan_results.push(scan_result);
         } else {
             output::warning(&format!("Path not found: {}", path.display()));

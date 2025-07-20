@@ -39,7 +39,7 @@ pub async fn execute(args: InstallArgs) -> Result<()> {
     }
     
     // Parse guardy.toml configuration
-    let _config = GuardyConfig::load()?;
+    let _config = GuardyConfig::load(None, None::<&()>)?;
     
     if args.force {
         warning("Force mode enabled - will overwrite existing hooks");
