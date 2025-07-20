@@ -113,6 +113,13 @@ impl Scanner {
         })
     }
     
+    pub fn with_config(patterns: SecretPatterns, config: ScannerConfig) -> Result<Self> {
+        Ok(Scanner {
+            patterns,
+            config,
+        })
+    }
+    
     /// Build globset for path ignoring
     fn build_path_ignorer(&self) -> Result<GlobSet> {
         let mut builder = GlobSetBuilder::new();
