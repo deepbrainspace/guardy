@@ -26,6 +26,7 @@ impl Scanner {
         Ok(Scanner {
             patterns,
             config: scanner_config,
+            cached_path_ignorer: std::sync::OnceLock::new(),
         })
     }
     
@@ -33,6 +34,7 @@ impl Scanner {
         Ok(Scanner {
             patterns,
             config,
+            cached_path_ignorer: std::sync::OnceLock::new(),
         })
     }
     
@@ -52,8 +54,15 @@ impl Scanner {
     
     /// Check if a file path should be ignored
     fn should_ignore_path(&self, path: &Path) -> Result<bool> {
-        let globset = self.build_path_ignorer()?;
-        Ok(globset.is_match(path))
+        // Build and cache the GlobSet on first use, preserving errors
+        let globset_result = self.cached_path_ignorer.get_or_init(|| {
+            self.build_path_ignorer().map_err(|e| e.to_string())
+        });
+        
+        match globset_result {
+            Ok(globset) => Ok(globset.is_match(path)),
+            Err(e) => Err(anyhow::anyhow!("Failed to build path ignorer: {}", e)),
+        }
     }
     
     /// Check if a line contains ignore patterns

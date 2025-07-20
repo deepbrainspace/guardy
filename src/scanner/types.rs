@@ -89,5 +89,7 @@ impl Default for ScannerConfig {
 pub struct Scanner {
     pub(crate) patterns: super::patterns::SecretPatterns,
     pub(crate) config: ScannerConfig,
+    /// Cached GlobSet for path ignoring - built once and reused
+    pub(crate) cached_path_ignorer: std::sync::OnceLock<Result<globset::GlobSet, String>>,
 }
 
