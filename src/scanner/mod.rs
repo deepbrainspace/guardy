@@ -1,5 +1,6 @@
 pub mod core;
 pub mod entropy;
+pub mod parallel;
 pub mod patterns;
 pub mod test_detection;
 pub mod types;

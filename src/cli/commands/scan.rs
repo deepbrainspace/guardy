@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::scanner::Scanner;
+use crate::scanner::{Scanner, types::ScanMode};
 
 #[derive(Args)]
 pub struct ScanArgs {
@@ -73,9 +73,9 @@ pub struct ScanArgs {
     #[arg(long)]
     pub list_patterns: bool,
     
-    /// Enable parallel processing for faster scanning (3-8x speedup)
-    #[arg(long)]
-    pub parallel: bool,
+    /// Processing mode: auto (smart default), parallel, or sequential
+    #[arg(long, value_enum, default_value = "auto")]
+    pub mode: ScanMode,
     
 }
 
@@ -195,11 +195,12 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
                 });
             }
         } else if path.is_dir() {
-            let scan_result = if args.parallel {
-                scanner.scan_directory_parallel(path)?
-            } else {
-                scanner.scan_directory(path)?
-            };
+            // Override scanner config mode with CLI parameter
+            let mut scanner_config = scanner.config.clone();
+            scanner_config.mode = args.mode.clone();
+            let scanner_with_mode = Scanner::with_config(scanner.patterns.clone(), scanner_config)?;
+            
+            let scan_result = scanner_with_mode.scan_directory_smart(path)?;
             all_scan_results.push(scan_result);
         } else {
             output::warning(&format!("Path not found: {}", path.display()));
