@@ -140,6 +140,8 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
     use crate::config::GuardyConfig;
+    use crate::scanner::core::Scanner;
+    use std::fs;
     
     fn create_test_config() -> GuardyConfig {
         GuardyConfig::load().unwrap()
@@ -147,7 +149,7 @@ mod tests {
     
     fn create_scanner_config() -> ScannerConfig {
         let config = create_test_config();
-        crate::scanner::core::Scanner::parse_scanner_config(&config).unwrap()
+        Scanner::parse_scanner_config(&config).unwrap()
     }
     
     #[test] 
@@ -225,5 +227,155 @@ mod tests {
         // Should ignore lines 2-5 (the test function including empty line)
         assert_eq!(ranges.len(), 1);
         assert_eq!(ranges[0], 2..6);
+    }
+    
+    // Integration tests that test full scanner + test detection
+    #[test]
+    fn test_rust_integration_test_block_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_blocks.rs");
+        
+        let test_content = r#"
+// Regular code that should be scanned
+const API_KEY = "***REMOVED***";
+
+#[test]
+fn test_function() {
+    // This secret should be ignored because it's in a test
+    let secret = "***REMOVED***";
+    assert_eq!(1, 1);
+}
+
+// More regular code
+const ANOTHER_KEY = "***REMOVED***";
+
+#[cfg(test)]
+mod tests {
+    // This entire module should be ignored
+    const TEST_SECRET = "***REMOVED***";
+    
+    #[test]
+    fn another_test() {
+        let key = "***REMOVED***";
+    }
+}
+
+// Back to regular code
+const FINAL_KEY = "***REMOVED***";
+"#;
+        
+        fs::write(&test_file, test_content).unwrap();
+        
+        let config = create_test_config();
+        let scanner = Scanner::new(&config).unwrap();
+        let result = scanner.scan_file(&test_file).unwrap();
+        
+        // Should only find secrets outside test blocks
+        let found_secrets: Vec<&str> = result.iter()
+            .map(|m| m.matched_text.as_str())
+            .collect();
+        
+        // Should find regular secrets but not test secrets
+        assert!(found_secrets.iter().any(|s| s.contains("4eC39HqLyjWDarjtT1zdp7dcGGTJ8XA5B9r2F3mQ")));
+        assert!(found_secrets.iter().any(|s| s.contains("5xZ8jM3nK7qW2rT9vY4uL6pS1dF0hC8gA5bE3iO7")));  
+        assert!(found_secrets.iter().any(|s| s.contains("8jL5nQ2tY9vX6rB1mF4sK7dA0cG3hE6iO9pZ2wU")));
+        
+        // Should NOT find test secrets
+        assert!(!found_secrets.iter().any(|s| s.contains("7nX2mK9qY8dP5vL3wR6tF4uN8hG2cV1sA0eB7iO9")));
+        assert!(!found_secrets.iter().any(|s| s.contains("9rB4mN7qX2sT6vY1uL8pF5dH0cG3kA9bE7iO2wZ")));
+        assert!(!found_secrets.iter().any(|s| s.contains("3mQ6nR9tY2vL5xZ8jK1sF4dC7gA0bE9hO6pW3uN")));
+    }
+    
+    #[test]
+    fn test_typescript_integration_test_block_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_blocks.ts");
+        
+        let test_content = r#"
+// Regular code that should be scanned
+const apiKey = "***REMOVED***";
+
+describe("My test suite", () => {
+    // This entire block should be ignored
+    const testSecret = "***REMOVED***";
+    
+    it("should do something", () => {
+        const anotherSecret = "***REMOVED***";
+        expect(true).toBe(true);
+    });
+    
+    test("another test", () => {
+        const testKey = "***REMOVED***";
+    });
+});
+
+// Back to regular code
+const finalKey = "***REMOVED***";
+"#;
+        
+        fs::write(&test_file, test_content).unwrap();
+        
+        let config = create_test_config();
+        let scanner = Scanner::new(&config).unwrap();
+        let result = scanner.scan_file(&test_file).unwrap();
+        
+        let found_secrets: Vec<&str> = result.iter()
+            .map(|m| m.matched_text.as_str())
+            .collect();
+        
+        // Should find regular secrets but not test secrets
+        assert!(found_secrets.iter().any(|s| s.contains("2xK8mQ5nR9tY6vL3zJ7dF0hC4gA1bE8iO5pW2uN")));
+        assert!(found_secrets.iter().any(|s| s.contains("3sH6mQ9tY2vX5rB8jL1nF4dK7cA0gE3hO6pZ9wU")));
+        
+        // Should NOT find test secrets (entire describe block ignored)
+        assert!(!found_secrets.iter().any(|s| s.contains("7qB4nX2sT9vY1uL8pF5dH0cG6kA3bE9hO2pZ5wU")));
+        assert!(!found_secrets.iter().any(|s| s.contains("4mL7nQ0tY3vX6rB9mF2sK5dA8cG1hE4iO7pZ0wU")));
+        assert!(!found_secrets.iter().any(|s| s.contains("6jN9qR2tY5vL8xZ1mK4sF7dC0gA3hE6iO9pW2uN")));
+    }
+    
+    #[test]
+    fn test_python_integration_test_block_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_blocks.py");
+        
+        let test_content = r#"
+# Regular code that should be scanned
+api_key = "***REMOVED***"
+
+def test_function():
+    # This entire function should be ignored
+    secret = "***REMOVED***"
+    assert True
+
+class TestClass:
+    # This entire class should be ignored
+    def setUp(self):
+        self.secret = "***REMOVED***"
+    
+    def test_method(self):
+        key = "***REMOVED***"
+
+# Back to regular code
+final_key = "***REMOVED***"
+"#;
+        
+        fs::write(&test_file, test_content).unwrap();
+        
+        let config = create_test_config();
+        let scanner = Scanner::new(&config).unwrap();
+        let result = scanner.scan_file(&test_file).unwrap();
+        
+        let found_secrets: Vec<&str> = result.iter()
+            .map(|m| m.matched_text.as_str())
+            .collect();
+        
+        // Should find regular secrets but not test secrets
+        assert!(found_secrets.iter().any(|s| s.contains("9rB4mN7qX2sT6vY1uL8pF5dH0cG3kA9bE7iO2wZ")));
+        assert!(found_secrets.iter().any(|s| s.contains("4eC39HqLyjWDarjtT1zdp7dcGGTJ8XA5B9r2F3mQ")));
+        
+        // Should NOT find test secrets (entire test function/class ignored)
+        assert!(!found_secrets.iter().any(|s| s.contains("5xZ8jM3nK7qW2rT9vY4uL6pS1dF0hC8gA5bE3iO7")));
+        assert!(!found_secrets.iter().any(|s| s.contains("2mQ6nR9tY7vL5xZ8jK1sF4dC7gA0bE9hO6pW3uN")));
+        assert!(!found_secrets.iter().any(|s| s.contains("8jL5nQ2tY9vX6rB1mF4sK7dA0cG3hE6iO9pZ2wU")));
     }
 }
