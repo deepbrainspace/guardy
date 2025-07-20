@@ -9,7 +9,7 @@ Guardy provides native Rust implementations of git hooks with security scanning,
 ## Features
 
 - 🚀 **Native Rust Performance** - Faster than bash equivalents
-- 🔒 **Security Scanning** - Secret detection with configurable patterns
+- 🔒 **Comprehensive Security Scanning** - Detects 40+ types of secrets and credentials
 - 🎨 **Code Formatting** - Automatic formatting with NX integration
 - 🔧 **Git-crypt Support** - Encrypted file handling
 - 🤖 **MCP Server** - Model Context Protocol integration for AI tools
@@ -22,6 +22,9 @@ Guardy provides native Rust implementations of git hooks with security scanning,
 # Install hooks in your repository
 guardy install
 
+# Scan files for secrets
+guardy scan src/ --stats
+
 # Check installation status
 guardy status
 
@@ -30,6 +33,55 @@ guardy run pre-commit
 
 # Start MCP server for AI integration
 guardy mcp start
+```
+
+## Security Scanning
+
+Guardy includes comprehensive secret detection with 40+ built-in patterns:
+
+### Private Keys & Certificates
+- SSH private keys (RSA, DSA, EC, OpenSSH, SSH2)
+- PGP/GPG private keys
+- PKCS private keys
+- PuTTY private keys
+- Age encryption keys
+
+### Cloud Provider Credentials
+- **AWS**: Access keys, secret keys, session tokens
+- **Azure**: Client secrets, storage keys
+- **Google Cloud**: API keys, service account keys
+
+### API Keys & Tokens
+- **AI/ML**: OpenAI, Anthropic Claude, Hugging Face, Cohere, Replicate, Mistral
+- **Development**: GitHub, GitLab, npm tokens
+- **Services**: Slack, SendGrid, Twilio, Mailchimp, Stripe, Square
+- **JWT/JWE**: JSON Web Tokens and encryption
+
+### Database Credentials
+- MongoDB connection strings
+- PostgreSQL connection strings  
+- MySQL connection strings
+- Redis connection URLs
+
+### Generic Detection
+- Context-based secret detection (high-entropy strings near keywords like "password", "token", "key")
+- URL credentials (`https://user:pass@host`)
+- Custom configurable patterns
+
+### Usage Examples
+
+```bash
+# Scan current directory
+guardy scan
+
+# Scan specific files with statistics
+guardy scan src/ config/ --stats
+
+# Include binary files in scan
+guardy scan --include-binary
+
+# Set custom file size limit
+guardy scan --max-file-size 50
 ```
 
 ## Configuration
