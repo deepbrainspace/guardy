@@ -56,6 +56,12 @@ enabled = false
 tools = ["git-status", "hook-run", "security-scan"]
 
 [scanner]
+# Processing mode settings
+mode = "auto"               # "auto", "parallel", or "sequential" (auto = smart default)
+max_threads = 0             # 0 = auto-detect (75% of CPU cores), or specify exact number  
+thread_percentage = 75      # Percentage of CPU cores to use (1-100)
+min_files_for_parallel = 50 # Minimum files before auto mode uses parallel processing
+
 # Scanner ignore mechanisms
 ignore_paths = [
     # General test directories

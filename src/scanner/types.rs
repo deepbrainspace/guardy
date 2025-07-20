@@ -43,6 +43,23 @@ pub struct ScanResult {
     pub warnings: Vec<Warning>,
 }
 
+/// Scanning mode for determining parallelization strategy
+#[derive(Debug, Clone, PartialEq, clap::ValueEnum)]
+pub enum ScanMode {
+    /// Always use sequential processing
+    Sequential,
+    /// Always use parallel processing
+    Parallel,
+    /// Automatically choose based on file count (smart default)
+    Auto,
+}
+
+impl Default for ScanMode {
+    fn default() -> Self {
+        ScanMode::Auto
+    }
+}
+
 /// Configuration for the scanner
 #[derive(Debug, Clone)]
 pub struct ScannerConfig {
@@ -57,6 +74,11 @@ pub struct ScannerConfig {
     pub ignore_test_code: bool,
     pub test_attributes: Vec<String>,
     pub test_modules: Vec<String>,
+    // Processing mode settings
+    pub mode: ScanMode,
+    pub max_threads: usize,
+    pub thread_percentage: u8,
+    pub min_files_for_parallel: usize,
 }
 
 impl Default for ScannerConfig {
@@ -86,6 +108,11 @@ impl Default for ScannerConfig {
             ignore_test_code: true,
             test_attributes: vec![],
             test_modules: vec![],
+            // Processing mode defaults
+            mode: ScanMode::Auto,
+            max_threads: 0, // 0 = auto-detect
+            thread_percentage: 75,
+            min_files_for_parallel: 50,
         }
     }
 }
