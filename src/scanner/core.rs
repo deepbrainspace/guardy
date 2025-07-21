@@ -194,7 +194,10 @@ impl Scanner {
         
         // Load ignore patterns from config
         if let Ok(ignore_paths) = config.get_vec("scanner.ignore_paths") {
+            println!("DEBUG: Loaded ignore_paths from config: {:?}", ignore_paths);
             scanner_config.ignore_paths = ignore_paths;
+        } else {
+            println!("DEBUG: No ignore_paths found in config, using defaults: {:?}", scanner_config.ignore_paths);
         }
         
         if let Ok(ignore_patterns) = config.get_vec("scanner.ignore_patterns") {
@@ -327,6 +330,35 @@ impl Scanner {
         self.scan_single_path(path)
     }
     
+    /// Scan a large file using streaming approach to minimize memory usage
+    fn scan_file_streaming(&self, path: &Path) -> Result<Vec<SecretMatch>> {
+        use std::io::{BufRead, BufReader};
+        use std::fs::File;
+        
+        let file = File::open(path)
+            .with_context(|| format!("Failed to open file: {}", path.display()))?;
+        let reader = BufReader::new(file);
+        let mut matches = Vec::new();
+        
+        // Note: For large files, we sacrifice some test detection features 
+        // (which require full file analysis) for memory efficiency
+        for (line_number, line_result) in reader.lines().enumerate() {
+            let line = line_result
+                .with_context(|| format!("Failed to read line {} in file: {}", line_number + 1, path.display()))?;
+            
+            // Skip ignored lines
+            if self.should_ignore_line(&line) {
+                continue;
+            }
+            
+            // Scan this line for secrets
+            let line_matches = self.scan_line(&line, path, line_number + 1);
+            matches.extend(line_matches);
+        }
+        
+        Ok(matches)
+    }
+
     pub(crate) fn scan_single_path(&self, path: &Path) -> Result<Vec<SecretMatch>> {
         // Check if path should be ignored
         if self.should_ignore_path(path)? {
@@ -341,11 +373,24 @@ impl Scanner {
             }
         }
         
-        // Read file content
+        // Read file content - use streaming for large files
+        const STREAMING_THRESHOLD_MB: u64 = 5; // Stream files larger than 5MB
+        let mut matches = Vec::new();
+        
+        // Check file size to decide on reading strategy
+        if let Ok(metadata) = std::fs::metadata(path) {
+            let size_mb = metadata.len() / (1024 * 1024);
+            
+            if size_mb > STREAMING_THRESHOLD_MB {
+                // Use streaming approach for large files
+                return self.scan_file_streaming(path);
+            }
+        }
+        
+        // Use in-memory approach for small files (original behavior)
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read file: {}", path.display()))?;
         
-        let mut matches = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
         
         // Build ignore ranges for test blocks
@@ -431,7 +476,7 @@ impl Scanner {
         }
         
         Some(SecretMatch {
-            file_path: file_path.to_string_lossy().to_string(),
+            file_path: file_path.to_string_lossy().into_owned(),
             line_number,
             line_content: line.to_string(),
             matched_text: matched_text.to_string(),
