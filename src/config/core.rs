@@ -36,12 +36,26 @@ impl GuardyConfig {
         
         // Custom config overrides user/repo configs
         if let Some(custom_path) = custom_config {
-            figment = figment
-                .merge(Json::file(custom_path))                                     // 10. Custom JSON
-                .merge(Yaml::file(custom_path))                                     // 11. Custom YAML
-                .merge(Yaml::file(custom_path.replace(".json", ".yml")))            // 12. Custom YML
-                .merge(Yaml::file(custom_path.replace(".json", ".yaml")))           // 13. Custom YAML (alt)
-                .merge(Toml::file(custom_path));                                    // 14. Custom TOML
+            println!("DEBUG: Loading custom config from: {}", custom_path);
+            figment = figment.merge(super::smart_load::auto(custom_path));          // 14. Custom (auto format)
+            
+            // Debug: Try to read the file directly
+            if let Ok(content) = std::fs::read_to_string(custom_path) {
+                println!("DEBUG: Custom config file content: {}", content);
+            }
+            
+            // Debug: Check what figment extracted after loading custom config
+            match figment.extract::<serde_json::Value>() {
+                Ok(extracted) => {
+                    println!("DEBUG: Figment extracted after custom config: {}", serde_json::to_string_pretty(&extracted).unwrap_or_else(|_| "Failed to serialize".to_string()));
+                },
+                Err(e) => {
+                    println!("DEBUG: Figment extract failed: {:?}", e);
+                    println!("DEBUG: Figment error kind: {:?}", e.kind);
+                    println!("DEBUG: Figment error path: {:?}", e.path);
+                    println!("DEBUG: Figment profile: {:?}", e.profile);
+                }
+            }
         }
         
         // Environment variables with custom mapping for nested keys
@@ -49,10 +63,11 @@ impl GuardyConfig {
             .map(|key| key.as_str().replace("_", ".").into());  // Map GUARDY_SCANNER_MODE -> scanner.mode
         figment = figment.merge(env_provider);                                      // 15. Environment
         
-        // CLI overrides (highest priority)
+        // CLI overrides (highest priority) - filter out empty arrays first
         if let Some(cli_overrides) = cli_overrides {
             tracing::trace!("CONFIG LOAD: Applying CLI overrides");
-            figment = figment.merge(Serialized::defaults(cli_overrides));               // 16. CLI (highest)
+            let filtered_overrides = super::overrides::filter_empty_arrays(cli_overrides);
+            figment = figment.merge(Serialized::defaults(filtered_overrides));               // 16. CLI (highest)
         }
         
         // Debug: Show final config (only at trace level -vvv)

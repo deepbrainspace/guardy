@@ -93,7 +93,7 @@ pub enum OutputFormat {
     Files,
 }
 
-pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
+pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str>) -> Result<()> {
     use crate::scanner::patterns::SecretPatterns;
     use regex::Regex;
     
@@ -113,7 +113,8 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
     });
     
     // Load configuration with custom overrides
-    let config = GuardyConfig::load(None, Some(scanner_overrides))?;
+    println!("DEBUG: Scan execute received config_path: {:?}", config_path);
+    let config = GuardyConfig::load(config_path, Some(scanner_overrides))?;
     
     // Create custom scanner config based on CLI args
     let mut scanner_config = Scanner::parse_scanner_config(&config)?;

@@ -1,0 +1,9 @@
+{
+  "scanner": {
+    "ignore_paths": [
+      "**/.git_disabled/**",
+      "*/.git_disabled/*",
+      ".git_disabled/**"
+    ]
+  }
+}
