@@ -110,31 +110,10 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             "ignore_paths": args.ignore_paths,
             "ignore_comments": args.ignore_comments
         }
-    });g 
-    // Apply CLI overrides
-    if args.include_binary {
-        scanner_config.skip_binary_files = false;
-    }
+    });
     
-    scanner_config.max_file_size_mb = args.max_file_size;
-    scanner_config.follow_symlinks = args.follow_symlinks;
-    
-    if args.no_entropy {
-        scanner_config.enable_entropy_analysis = false;
-    }
-    
-    if let Some(threshold) = args.entropy_threshold {
-        scanner_config.min_entropy_threshold = threshold;
-    }
-    
-    if args.no_ignore_tests {
-        scanner_config.ignore_test_code = false;
-    }
-    
-    // Add additional ignore patterns
-    scanner_config.ignore_patterns.extend(args.ignore_patterns.clone());
-    scanner_config.ignore_paths.extend(args.ignore_paths.clone());
-    scanner_config.ignore_comments.extend(args.ignore_comments.clone());
+    // Load configuration with CLI overrides
+    let config = GuardyConfig::load(config_path, Some(scanner_overrides))?;
     
     // Load patterns and add custom ones
     let mut patterns = SecretPatterns::new(&config)?;
@@ -172,7 +151,10 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         }
     }
     
-    // Create scanner with custom config
+    // Extract scanner config using the proper parsing method
+    let scanner_config = Scanner::parse_scanner_config(&config)?;
+    
+    // Create scanner with loaded config
     let scanner = Scanner::with_config(patterns, scanner_config)?;
     
     output::info("Starting security scan...");
