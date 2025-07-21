@@ -1,5 +1,7 @@
 use anyhow::{Result, Context};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use crate::parallel::ExecutionStrategy;
 use ignore::WalkBuilder;
 use crate::config::GuardyConfig;
 use super::entropy::is_likely_secret;
@@ -312,104 +314,12 @@ impl Scanner {
         builder
     }
 
-    /// Analyze directories and their gitignore status, displaying results to user
-    pub(crate) fn analyze_and_display_directories(&self, path: &Path) {
-        let directory_handler = super::directory::DirectoryHandler::default();
-        let analysis = directory_handler.analyze_directories(path);
-        analysis.display();
-    }
 
-    /// Scan a directory recursively
-    pub fn scan_directory(&self, path: &Path) -> Result<ScanResult> {
-        let start_time = std::time::Instant::now();
-        let mut all_matches = Vec::new();
-        let mut stats = ScanStats::default();
-        let mut warnings: Vec<Warning> = Vec::new();
-        
-        let walker = self.build_directory_walker(path).build();
-        
-        // Fast file counting for progress tracking
-        let mut processed_count = 0;
-        let file_count = self.fast_count_files(path)?;
-        
-        println!("🔍 Scanning {} files...", file_count);
-        
-        // Analyze directories and their gitignore status
-        self.analyze_and_display_directories(path);
-        
-        // Single-pass scanning with real-time granular progress
-        for entry in walker {
-            match entry {
-                Ok(entry) => {
-                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
-                        processed_count += 1;
-                        
-                        // Show granular progress with total count
-                        print!("\r⏳ Progress: {}/{} files ({:.1}%)", 
-                               processed_count, file_count, 
-                               (processed_count as f64 / file_count as f64 * 100.0));
-                        std::io::Write::flush(&mut std::io::stdout()).ok();
-                        
-                        match self.scan_single_path(entry.path()) {
-                            Ok(mut matches) => {
-                                stats.files_scanned += 1;
-                                stats.total_matches += matches.len();
-                                all_matches.append(&mut matches);
-                            }
-                            Err(_) => {
-                                stats.files_skipped += 1;
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    warnings.push(Warning {
-                        message: format!("Walk error: {}", e),
-                    });
-                }
-            }
-        }
-        
-        // Clear progress line
-        if processed_count > 0 {
-            print!("\r");
-            std::io::Write::flush(&mut std::io::stdout()).ok();
-        }
-        
-        let scan_duration = start_time.elapsed();
-        stats.scan_duration_ms = scan_duration.as_millis() as u64;
-        
-        // Show timing summary
-        println!("⏱️  Scan completed in {:.2}s ({} files scanned, {} matches found)", 
-                 scan_duration.as_secs_f64(), 
-                 stats.files_scanned, 
-                 stats.total_matches);
-        
-        Ok(ScanResult {
-            matches: all_matches,
-            stats,
-            warnings,
-        })
-    }
-    
-    /// Smart scan dispatcher that chooses optimal scanning strategy
-    /// based on configuration and workload characteristics
-    pub fn scan_directory_smart(&self, path: &Path) -> Result<ScanResult> {
-        // Fast file count to determine strategy
-        let file_count = self.fast_count_files(path)?;
-        
-        // Determine scanning strategy based on mode and file count
-        let use_parallel = match &self.config.mode {
-            super::types::ScanMode::Sequential => false,
-            super::types::ScanMode::Parallel => true,
-            super::types::ScanMode::Auto => file_count >= self.config.min_files_for_parallel,
-        };
-        
-        if use_parallel {
-            self.scan_directory_parallel(path)
-        } else {
-            self.scan_directory(path)
-        }
+    /// Scan a directory recursively with optional execution strategy
+    /// By default uses smart mode (auto-detects parallel vs sequential)
+    pub fn scan_directory(&self, path: &Path, strategy: Option<ExecutionStrategy>) -> Result<ScanResult> {
+        let directory_handler = super::directory::DirectoryHandler::default();
+        directory_handler.scan(Arc::new(self.clone()), path, strategy)
     }
     
     /// Scan a single file
@@ -596,7 +506,7 @@ FAKE_API_KEY = "test_key_not_real"
         
         let config = create_test_config();
         let scanner = Scanner::new(&config).unwrap();
-        let result = scanner.scan_directory(temp_dir.path()).unwrap();
+        let result = scanner.scan_directory(temp_dir.path(), None).unwrap();
         
         // Should scan multiple files
         assert!(result.stats.files_scanned >= 2);

@@ -9,6 +9,7 @@ mod external;
 mod config;
 mod mcp;
 mod shared;
+mod parallel;
 
 use cli::commands::Cli;
 
