@@ -1,5 +1,5 @@
 use figment::{Figment, providers::{Format, Json}};
-use guardy_figment_providers::{SmartFormat, SkipEmpty, NestedEnv};
+use guardy_figment_providers::{Universal, SkipEmpty, NestedEnv};
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -36,8 +36,8 @@ host = "production"
 port = 3306"#;
     
     let figment = Figment::new()
-        .merge(SmartFormat::string(json_content))    // Should detect JSON
-        .merge(SmartFormat::string(toml_content));   // Should detect TOML and override
+        .merge(Universal::string(json_content))    // Should detect JSON
+        .merge(Universal::string(toml_content));   // Should detect TOML and override
     
     let config: TestConfig = figment.extract().expect("Failed to extract config");
     
@@ -58,7 +58,7 @@ database:
   port: 8080
 "#;
     
-    let figment = Figment::new().merge(SmartFormat::string(yaml_content));
+    let figment = Figment::new().merge(Universal::string(yaml_content));
     let config: TestConfig = figment.extract().expect("Failed to extract YAML config");
     
     assert_eq!(config.name, "yaml-app");
@@ -70,7 +70,7 @@ database:
 #[test]
 fn test_smartformat_empty_content_fallback() {
     // Empty content should default to TOML and not crash
-    let figment = Figment::new().merge(SmartFormat::string(""));
+    let figment = Figment::new().merge(Universal::string(""));
     
     // Should not panic - empty TOML is valid (results in empty config)
     let result = figment.extract::<serde_json::Value>();
@@ -283,7 +283,7 @@ fn test_all_three_providers_together() {
     };
     
     let figment = Figment::new()
-        .merge(SmartFormat::string(toml_config))  // 1. Base config (auto-detects TOML)
+        .merge(Universal::string(toml_config))  // 1. Base config (auto-detects TOML)
         .merge(NestedEnv::prefixed("APP_"))       // 2. Environment overrides  
         .merge(SkipEmpty::new(cli_args));         // 3. CLI overrides (empty filtered)
     

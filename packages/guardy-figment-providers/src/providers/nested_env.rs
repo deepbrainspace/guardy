@@ -124,12 +124,18 @@ impl Provider for NestedEnv {
                 continue;
             }
             
-            // Remove prefix and split into path components
+            // Remove prefix and split only on first underscore for top-level nesting
             let key_without_prefix = &key[self.prefix.len()..];
-            let path_parts: Vec<&str> = key_without_prefix
-                .split(&self.separator)
-                .filter(|part| !part.is_empty())
-                .collect();
+            let path_parts: Vec<&str> = if let Some(first_underscore) = key_without_prefix.find(&self.separator) {
+                // Split only on the first underscore: SCANNER_IGNORE_PATHS_ADD -> ["SCANNER", "IGNORE_PATHS_ADD"] 
+                vec![
+                    &key_without_prefix[..first_underscore],
+                    &key_without_prefix[first_underscore + self.separator.len()..]
+                ]
+            } else {
+                // No underscore found, use the whole key
+                vec![key_without_prefix]
+            };
             
             if path_parts.is_empty() {
                 continue;
@@ -156,27 +162,68 @@ fn collect_env_vars(prefix: &str) -> HashMap<String, String> {
 /// Parse environment variable value into appropriate Figment value type
 fn parse_env_value(value: &str) -> Result<Value, Error> {
     let tag = Tag::Default;
+    let trimmed = value.trim();
     
-    // Try to parse as different types in order of specificity
+    // Try to parse as JSON (arrays and objects)
+    if (trimmed.starts_with('[') && trimmed.ends_with(']')) || 
+       (trimmed.starts_with('{') && trimmed.ends_with('}')) {
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            return json_value_to_figment_value(json_val);
+        }
+    }
     
     // Boolean values
-    match value.to_lowercase().as_str() {
+    match trimmed.to_lowercase().as_str() {
         "true" | "yes" | "1" | "on" => return Ok(Value::Bool(tag, true)),
         "false" | "no" | "0" | "off" => return Ok(Value::Bool(tag, false)),
         _ => {}
     }
     
     // Numeric values
-    if let Ok(int_val) = value.parse::<i64>() {
+    if let Ok(int_val) = trimmed.parse::<i64>() {
         return Ok(Value::Num(tag, int_val.into()));
     }
     
-    if let Ok(float_val) = value.parse::<f64>() {
+    if let Ok(float_val) = trimmed.parse::<f64>() {
         return Ok(Value::Num(tag, figment::value::Num::F64(float_val)));
     }
     
     // Default to string
     Ok(Value::String(tag, value.to_string()))
+}
+
+/// Convert serde_json::Value to figment::Value
+fn json_value_to_figment_value(json_val: serde_json::Value) -> Result<Value, Error> {
+    let tag = Tag::Default;
+    
+    match json_val {
+        serde_json::Value::Null => Ok(Value::String(tag, "null".to_string())),
+        serde_json::Value::Bool(b) => Ok(Value::Bool(tag, b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Ok(Value::Num(tag, i.into()))
+            } else if let Some(f) = n.as_f64() {
+                Ok(Value::Num(tag, figment::value::Num::F64(f)))
+            } else {
+                Ok(Value::String(tag, n.to_string()))
+            }
+        }
+        serde_json::Value::String(s) => Ok(Value::String(tag, s)),
+        serde_json::Value::Array(arr) => {
+            let mut figment_array = Vec::new();
+            for item in arr {
+                figment_array.push(json_value_to_figment_value(item)?);
+            }
+            Ok(Value::Array(tag, figment_array))
+        }
+        serde_json::Value::Object(obj) => {
+            let mut figment_dict = Dict::new();
+            for (key, value) in obj {
+                figment_dict.insert(key.into(), json_value_to_figment_value(value)?);
+            }
+            Ok(Value::Dict(tag, figment_dict))
+        }
+    }
 }
 
 /// Insert a value into a nested dictionary structure using path components
