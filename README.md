@@ -13,7 +13,7 @@ Guardy provides native Rust implementations of git hooks with security scanning,
 - 🎨 **Code Formatting** - Automatic formatting with NX integration
 - 🔧 **Git-crypt Support** - Encrypted file handling
 - 🤖 **MCP Server** - Model Context Protocol integration for AI tools
-- ⚙️ **Flexible Configuration** - Multiple format support (TOML, JSON, YAML, Environment Variables)
+- ⚙️ **Advanced Configuration** - Smart format detection, empty value filtering, nested environment variables
 - 🌊 **Professional CLI** - Claude Code-style output with symbols and colors
 
 ## Quick Start
@@ -86,17 +86,25 @@ guardy scan --max-file-size 50
 
 ## Configuration
 
-Guardy supports flexible configuration through multiple formats and sources with automatic merging:
+Guardy features an advanced configuration system with **smart format detection**, **empty value filtering**, and **nested environment variables**:
+
+### Enhanced Configuration Features
+- 🎯 **Smart Format Detection** - No file extensions needed, auto-detects JSON/YAML/TOML from content
+- 🚫 **Empty Value Filtering** - CLI empty values don't override config files  
+- 🌳 **Nested Environment Variables** - `GUARDY_SCANNER_MODE` → `scanner.mode`
+- 🔄 **Intelligent Merging** - Advanced priority system with proper value preservation
 
 ### Configuration Priority (highest to lowest)
-1. **Environment Variables** - `GUARDY_*` prefixed variables
-2. **Repository Config** - Project-specific settings
-3. **User Config** - Personal defaults  
-4. **Built-in Defaults** - Embedded fallback values
+1. **CLI Overrides** - Command line arguments (filtered for empty values)
+2. **Environment Variables** - `GUARDY_*` prefixed with automatic nesting
+3. **Custom Config** - Via `--config` flag (format auto-detected)
+4. **Repository Config** - Project-specific settings (format auto-detected)
+5. **User Config** - `~/.config/guardy/config.*` (format auto-detected)  
+6. **Built-in Defaults** - Embedded fallback values
 
 ### Supported Configuration Formats
 
-You can use any of these formats for your configuration:
+All formats are **automatically detected** - no file extensions required:
 
 #### Repository Level (project-specific)
 - `guardy.toml` ⭐ **Recommended**
@@ -340,20 +348,61 @@ src/
 
 ## Development
 
+### Monorepo Structure
+
+This project uses a Cargo workspace with multiple packages:
+
+```
+guardy/
+├── packages/
+│   ├── guardy/                          # Main application
+│   │   ├── src/                         # Core guardy implementation
+│   │   └── Cargo.toml                   # Package dependencies
+│   └── guardy-figment-providers/        # Custom Figment providers  
+│       ├── src/                         # SmartFormat, SkipEmpty, NestedEnv
+│       ├── tests/                       # Comprehensive provider tests
+│       └── README.md                    # Provider documentation
+├── Cargo.toml                           # Workspace root
+└── target/                              # Shared build artifacts
+```
+
+### Custom Figment Providers Package
+
+The `guardy-figment-providers` package contains reusable configuration providers:
+- **Independently testable** with 18 comprehensive tests
+- **Reusable** across other Rust projects
+- **Well-documented** with examples and usage patterns
+- **Future crates.io distribution** ready
+
 ### Prerequisites
 - Rust 1.70+ (uses 2024 edition)
 - Git 2.0+
 
 ### Building
 ```bash
+# Build entire workspace
 cargo build --release
+
+# Build specific package
+cargo build -p guardy --release
+cargo build -p guardy-figment-providers --release
 ```
 
 ### Testing
 ```bash
-cargo test                    # Run all tests (unit + integration)
+# Test entire workspace
+cargo test
+
+# Test specific package  
+cargo test -p guardy-figment-providers
+cargo test -p guardy
+
+# Test specific provider
+cargo test -p guardy-figment-providers smart_format
+
+# Test specific modules
 cargo test --lib config      # Test only config module
-cargo test --lib scanner     # Test only scanner module
+cargo test --lib scanner     # Test only scanner module  
 cargo test integration_      # Run only integration tests
 ```
 
