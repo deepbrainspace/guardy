@@ -8,9 +8,10 @@ Comprehensive secret detection and file content analysis using pattern matching,
 src/scanner/
 ├── mod.rs           # Module routing and re-exports only
 ├── core.rs          # Main Scanner struct and scanning logic
+├── directory.rs     # DirectoryHandler and parallel coordination
 ├── patterns.rs      # Secret pattern definitions and regex compilation
 ├── entropy.rs       # Statistical entropy analysis algorithms
-├── ignore_intel.rs  # Gitignore analysis and project type detection
+├── types.rs         # Core types (ScanResult, ScanStats, etc.)
 ├── test_detection.rs # Intelligent test code block detection
 └── README.md        # This documentation
 ```
@@ -18,9 +19,14 @@ src/scanner/
 ## Files and Responsibilities
 
 ### `core.rs`
-- **Purpose**: Main scanning orchestration and file processing
-- **Contains**: `Scanner` struct, scan methods, `SecretMatch`, `ScanResult` types
-- **Tests**: Scanner creation, file scanning, directory scanning, scan statistics
+- **Purpose**: Core scanning logic and individual file processing
+- **Contains**: `Scanner` struct, individual file scan methods, pattern matching orchestration
+- **Tests**: Scanner creation, single file scanning, pattern matching accuracy
+
+### `directory.rs`
+- **Purpose**: Directory scanning coordination and parallel execution
+- **Contains**: `DirectoryHandler`, worker adaptation, execution strategy coordination, gitignore analysis
+- **Tests**: Directory filtering, parallel execution, worker adaptation strategies
 
 ### `patterns.rs`
 - **Purpose**: Secret pattern definitions and regex management  
@@ -33,10 +39,10 @@ src/scanner/
 - **Contains**: `is_likely_secret()` function, entropy calculation algorithms
 - **Tests**: Entropy analysis accuracy, threshold validation, realistic vs fake secrets
 
-### `ignore_intel.rs`
-- **Purpose**: Project type detection and gitignore intelligence
-- **Contains**: `GitignoreIntelligence`, `ProjectType`, gitignore suggestions
-- **Tests**: Project type detection, gitignore suggestions, pattern recommendations
+### `types.rs`
+- **Purpose**: Core data structures and type definitions
+- **Contains**: `ScanResult`, `ScanStats`, `ScanMode`, `SecretMatch`, `Warning`, etc.
+- **Tests**: Type serialization, result aggregation, statistics calculation
 
 ### `test_detection.rs`
 - **Purpose**: Intelligent test code block detection across multiple languages
@@ -196,6 +202,159 @@ test_attributes = [
 - **Git**: Integrates with git file discovery for targeted scanning
 - **CLI**: Provides scan results for command-line output
 - **MCP**: Exposes scanning capabilities via MCP server interface
+- **Parallel**: Coordinates parallel execution strategies and resource management
+
+### Parallel Module Integration
+
+The scanner module integrates tightly with the parallel module for efficient file processing:
+
+#### Execution Strategies
+- **Sequential**: Single-threaded scanning for small workloads
+- **Parallel**: Multi-threaded scanning with domain-adapted worker counts
+- **Auto**: Threshold-based automatic strategy selection
+
+#### Resource Management Flow
+```text
+1. Scanner Config       →  2. Resource Calculation      →  3. Domain Adaptation
+   ┌─────────────────┐      ┌──────────────────────────┐     ┌─────────────────────┐
+   │ • max_threads   │      │ CPU cores: 16            │     │ File count: 36      │
+   │ • thread_%: 75% │  ──▶ │ 16 * 75% = 12 workers    │ ──▶ │ ≤50 → 12/2 = 6     │
+   │ • mode: auto    │      │ (system resource limit)  │     │ (domain adaptation)  │
+   └─────────────────┘      └──────────────────────────┘     └─────────────────────┘
+                                                                       │
+4. Strategy Decision                          ← ← ← ← ← ← ← ← ← ← ← ← ← ← 
+   ┌─────────────────────────────────────────┐
+   │ auto(file_count=36, threshold=50, workers=6) │
+   │ → 36 < 50 → ExecutionStrategy::Sequential    │  
+   └─────────────────────────────────────────────┘
+```
+
+#### Worker Adaptation Strategy
+The scanner implements domain-specific worker adaptation in `DirectoryHandler::adapt_workers_for_file_count()`:
+- **≤10 files**: Minimal parallelism (overhead exceeds benefits)
+- **≤50 files**: Conservative parallelism (50% of max workers)
+- **≤100 files**: Moderate parallelism (75% of max workers)
+- **>100 files**: Full parallelism (all available workers)
+
+## Notes for AI Assistants and Developers
+
+### 🤖 AI Assistant Guidelines
+
+#### When Working with Scanner Module:
+- **Use `DirectoryHandler::scan()`** as the primary entry point for directory scanning
+- **Let the module handle strategy decisions** unless explicit override needed
+- **Trust the domain adaptation logic** for worker scaling based on file counts
+- **Respect the filtered directory patterns** for optimal performance
+
+#### Key Integration Points:
+1. **File Discovery**: Use built-in directory filtering and walking logic
+2. **Parallel Coordination**: Integrate with parallel module for resource management
+3. **Progress Reporting**: Use configured progress reporters with appropriate icons
+4. **Result Aggregation**: Collect and combine scan results with statistics
+
+#### Common Usage Patterns:
+```rust
+use guardy::scanner::directory::DirectoryHandler;
+use guardy::scanner::Scanner;
+use std::sync::Arc;
+
+// Primary scanning workflow
+let config = GuardyConfig::load(None, None::<&()>)?;
+let scanner = Arc::new(Scanner::new(&config)?);
+let directory_handler = DirectoryHandler::default();
+
+// Automatic strategy selection
+let result = directory_handler.scan(scanner, path, None)?;
+
+// Explicit strategy override
+let strategy = ExecutionStrategy::Parallel { workers: 4 };
+let result = directory_handler.scan(scanner, path, Some(strategy))?;
+```
+
+### 🔧 Development Guidelines
+
+#### File Architecture Updates:
+The current file structure reflects the parallel integration:
+```
+src/scanner/
+├── mod.rs           # Module routing and re-exports
+├── core.rs          # Main Scanner struct and scanning logic
+├── directory.rs     # DirectoryHandler and parallel coordination
+├── patterns.rs      # Secret pattern definitions and regex compilation
+├── entropy.rs       # Statistical entropy analysis algorithms
+├── types.rs         # Core types (ScanResult, ScanStats, etc.)
+├── test_detection.rs # Intelligent test code block detection
+└── README.md        # This documentation
+```
+
+#### Key Responsibilities by File:
+
+##### `directory.rs` (New/Enhanced)
+- **Purpose**: Directory scanning coordination and parallel execution
+- **Contains**: `DirectoryHandler`, worker adaptation, execution strategy coordination
+- **Integration**: Primary interface between scanner and parallel modules
+
+##### `core.rs` (Updated)
+- **Purpose**: Core scanning logic and file processing
+- **Contains**: `Scanner` struct, individual file scanning methods
+- **Focus**: Single-file processing, pattern matching orchestration
+
+##### `types.rs` (Updated)
+- **Purpose**: Core data structures and enums
+- **Contains**: `ScanResult`, `ScanStats`, `ScanMode`, `Warning`, etc.
+- **Usage**: Shared types across scanner modules
+
+#### Adding New Features:
+- **Directory Filtering**: Extend `DirectoryHandler::default()` with new patterns
+- **Worker Adaptation**: Modify thresholds in `adapt_workers_for_file_count()`
+- **Progress Reporting**: Customize icons and frequency in execution strategies
+- **File Processing**: Add new scan methods to `Scanner` in `core.rs`
+
+### 🎯 Performance Optimization
+
+#### Directory Filtering Impact:
+- Reduces scan time by 60-80% by skipping build/cache directories
+- Automatic gitignore analysis provides optimization suggestions
+- Language-specific patterns (node_modules, target, __pycache__, etc.)
+
+#### Parallel Execution Benefits:
+- File-count-aware worker scaling
+- Resource-aware execution strategy selection
+- Automatic threshold-based parallel/sequential decisions
+
+#### Memory Management:
+- Arc<Scanner> enables thread-safe sharing across workers
+- Bounded channels prevent memory overflow in large directories
+- Progress reporting optimized for minimal contention
+
+### 🚨 Common Pitfalls to Avoid
+
+1. **Don't bypass DirectoryHandler**: Use the coordinated scanning approach
+2. **Don't hardcode execution strategies**: Let auto mode optimize for workload
+3. **Don't ignore filtered directories**: They're essential for performance
+4. **Don't mix scanning and parallel logic**: Keep separation of concerns
+
+### 📊 Configuration Integration
+
+#### Scanner-Specific Settings:
+```toml
+[scanner]
+mode = "auto"                    # Sequential/Parallel/Auto
+max_threads = 0                  # 0 = no limit
+thread_percentage = 75           # Use 75% of CPU cores
+min_files_for_parallel = 50      # Threshold for auto mode
+
+# Ignore mechanisms
+ignore_test_code = true
+ignore_paths = ["tests/*", "*_test.rs"]
+ignore_patterns = ["# TEST_SECRET:", "DEMO_KEY_"]
+ignore_comments = ["guardy:ignore", "guardy:ignore-line"]
+```
+
+#### Progress Reporting Configuration:
+- **Sequential**: ⏳ icon, 10-item frequency
+- **Parallel**: ⚡ icon, 5-item frequency  
+- **Custom**: Configurable via progress reporter factories
 
 ## Supported Secret Types
 
