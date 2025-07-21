@@ -212,7 +212,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8) -> Result<()> {
                 });
             }
         } else if path.is_dir() {
-            let scan_result = scanner.scan_directory_smart(path)?;
+            let scan_result = scanner.scan_directory(path, None)?;
             all_scan_results.push(scan_result);
         } else {
             output::warning(&format!("Path not found: {}", path.display()));

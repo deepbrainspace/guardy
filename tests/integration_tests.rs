@@ -89,7 +89,7 @@ GITHUB_TOKEN=ghp_wJbFxR9mK3qL7sP2vN8dH5zC4gY6tA1e
     assert!(!result2.is_empty(), "Should detect secrets in .json file");
     
     // Test scanning directory
-    let dir_result = scanner.scan_directory(temp_dir.path())?;
+    let dir_result = scanner.scan_directory(temp_dir.path(), None)?;
     assert!(dir_result.stats.files_scanned >= 2, "Should scan both test files");
     assert!(dir_result.stats.total_matches > 0, "Should find secrets in test files");
     
