@@ -45,7 +45,9 @@ impl Scanner {
     pub(crate) fn fast_count_files(&self, path: &Path) -> Result<usize> {
         use std::fs;
         
-        fn count_files_recursive(dir: &Path, config: &ScannerConfig) -> Result<usize> {
+        let directory_handler = super::directory::DirectoryHandler::default();
+        
+        fn count_files_recursive(dir: &Path, config: &ScannerConfig, directory_handler: &super::directory::DirectoryHandler) -> Result<usize> {
             let mut count = 0;
             
             if let Ok(entries) = fs::read_dir(dir) {
@@ -63,15 +65,10 @@ impl Scanner {
                             count += 1; // Count if we can't get metadata
                         }
                     } else if path.is_dir() {
-                        // Skip common build/cache directories for performance
+                        // Skip directories using shared filter logic
                         if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
-                            if !matches!(dir_name,
-                                "target" | "node_modules" | "dist" | "build" | ".next" | ".nuxt" |
-                                "__pycache__" | ".pytest_cache" | "venv" | ".venv" | "env" | ".env" |
-                                "vendor" | "out" | "cache" | ".cache" | "tmp" | ".tmp" | "temp" | ".temp" |
-                                ".git" | ".svn" | ".hg" | ".vscode" | ".idea" | ".vs" | "coverage" | ".nyc_output"
-                            ) {
-                                count += count_files_recursive(&path, config)?;
+                            if !directory_handler.should_filter_directory(dir_name) {
+                                count += count_files_recursive(&path, config, directory_handler)?;
                             }
                         }
                     }
@@ -84,7 +81,7 @@ impl Scanner {
         if path.is_file() {
             Ok(1)
         } else {
-            count_files_recursive(path, &self.config)
+            count_files_recursive(path, &self.config, &directory_handler)
         }
     }
 
@@ -290,14 +287,8 @@ impl Scanner {
         })
     }
     
-    /// Scan a directory recursively
-    pub fn scan_directory(&self, path: &Path) -> Result<ScanResult> {
-        let start_time = std::time::Instant::now();
-        let mut all_matches = Vec::new();
-        let mut stats = ScanStats::default();
-        let mut warnings: Vec<Warning> = Vec::new();
-        
-        // Build intelligent walker that respects .gitignore AND skips directories that should be ignored
+    /// Build a WalkBuilder with common directory filtering logic
+    pub(crate) fn build_directory_walker(&self, path: &Path) -> WalkBuilder {
         let mut builder = WalkBuilder::new(path);
         builder
             .follow_links(self.config.follow_symlinks)
@@ -307,36 +298,35 @@ impl Scanner {
             .hidden(false)           // Don't ignore hidden files by default
             .parents(true);          // Check parent directories for .gitignore
             
-        // Add intelligent skipping for directories that SHOULD be ignored based on project type
-        builder.filter_entry(|entry| {
+        // Use shared directory handler for consistent filtering logic
+        let directory_handler = super::directory::DirectoryHandler::default();
+        builder.filter_entry(move |entry| {
             if let Some(file_name) = entry.file_name().to_str() {
                 // Skip directories that should always be ignored for security/performance
-                !matches!(file_name,
-                    // Rust build artifacts
-                    "target" |
-                    // Node.js dependencies and build artifacts  
-                    "node_modules" | "dist" | "build" | ".next" | ".nuxt" |
-                    // Python artifacts
-                    "__pycache__" | ".pytest_cache" | "venv" | ".venv" | "env" | ".env" |
-                    // Go artifacts
-                    "vendor" |
-                    // Java artifacts  
-                    "out" |
-                    // Generic build/cache directories
-                    "cache" | ".cache" | "tmp" | ".tmp" | "temp" | ".temp" |
-                    // Version control
-                    ".git" | ".svn" | ".hg" |
-                    // IDE directories
-                    ".vscode" | ".idea" | ".vs" |
-                    // Coverage reports
-                    "coverage" | ".nyc_output"
-                )
+                !directory_handler.should_filter_directory(file_name)
             } else {
                 true
             }
         });
         
-        let walker = builder.build();
+        builder
+    }
+
+    /// Analyze directories and their gitignore status, displaying results to user
+    pub(crate) fn analyze_and_display_directories(&self, path: &Path) {
+        let directory_handler = super::directory::DirectoryHandler::default();
+        let analysis = directory_handler.analyze_directories(path);
+        analysis.display();
+    }
+
+    /// Scan a directory recursively
+    pub fn scan_directory(&self, path: &Path) -> Result<ScanResult> {
+        let start_time = std::time::Instant::now();
+        let mut all_matches = Vec::new();
+        let mut stats = ScanStats::default();
+        let mut warnings: Vec<Warning> = Vec::new();
+        
+        let walker = self.build_directory_walker(path).build();
         
         // Fast file counting for progress tracking
         let mut processed_count = 0;
@@ -344,116 +334,8 @@ impl Scanner {
         
         println!("🔍 Scanning {} files...", file_count);
         
-        // Check which directories actually exist and analyze their gitignore status
-        let mut properly_ignored = Vec::new();
-        let mut needs_gitignore = Vec::new();
-        
-        // Helper function to check if a pattern exists in gitignore
-        let check_gitignore_pattern = |pattern: &str| -> bool {
-            if let Ok(gitignore_content) = std::fs::read_to_string(path.join(".gitignore")) {
-                gitignore_content.lines()
-                    .map(|line| line.trim())
-                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                    .any(|line| line == pattern || line == pattern.trim_end_matches('/'))
-            } else {
-                false
-            }
-        };
-        
-        // Check for Rust directories
-        if path.join("target").exists() {
-            if check_gitignore_pattern("target/") || check_gitignore_pattern("target") {
-                properly_ignored.push(("target/", "Rust build directory"));
-            } else {
-                needs_gitignore.push(("target/", "Rust build directory"));
-            }
-        }
-        
-        // Check for Node.js directories
-        if path.join("node_modules").exists() {
-            if check_gitignore_pattern("node_modules/") || check_gitignore_pattern("node_modules") {
-                properly_ignored.push(("node_modules/", "Node.js dependencies"));
-            } else {
-                needs_gitignore.push(("node_modules/", "Node.js dependencies"));
-            }
-        }
-        if path.join("dist").exists() {
-            if check_gitignore_pattern("dist/") || check_gitignore_pattern("dist") {
-                properly_ignored.push(("dist/", "Build output directory"));
-            } else {
-                needs_gitignore.push(("dist/", "Build output directory"));
-            }
-        }
-        if path.join("build").exists() {
-            if check_gitignore_pattern("build/") || check_gitignore_pattern("build") {
-                properly_ignored.push(("build/", "Build output directory"));
-            } else {
-                needs_gitignore.push(("build/", "Build output directory"));
-            }
-        }
-        
-        // Check for Python directories
-        if path.join("__pycache__").exists() {
-            if check_gitignore_pattern("__pycache__/") || check_gitignore_pattern("__pycache__") {
-                properly_ignored.push(("__pycache__/", "Python cache directory"));
-            } else {
-                needs_gitignore.push(("__pycache__/", "Python cache directory"));
-            }
-        }
-        if path.join("venv").exists() {
-            if check_gitignore_pattern("venv/") || check_gitignore_pattern("venv") {
-                properly_ignored.push(("venv/", "Python virtual environment"));
-            } else {
-                needs_gitignore.push(("venv/", "Python virtual environment"));
-            }
-        }
-        if path.join(".venv").exists() {
-            if check_gitignore_pattern(".venv/") || check_gitignore_pattern(".venv") {
-                properly_ignored.push((".venv/", "Python virtual environment"));
-            } else {
-                needs_gitignore.push((".venv/", "Python virtual environment"));
-            }
-        }
-        
-        // Check for Go directories
-        if path.join("vendor").exists() {
-            if check_gitignore_pattern("vendor/") || check_gitignore_pattern("vendor") {
-                properly_ignored.push(("vendor/", "Go dependencies"));
-            } else {
-                needs_gitignore.push(("vendor/", "Go dependencies"));
-            }
-        }
-        
-        // Show status of discovered directories
-        if !properly_ignored.is_empty() || !needs_gitignore.is_empty() {
-            let total_dirs = properly_ignored.len() + needs_gitignore.len();
-            println!("📁 Discovered {} director{}:", 
-                     total_dirs, 
-                     if total_dirs == 1 { "y" } else { "ies" });
-            
-            // Show properly ignored directories
-            for (dir, description) in &properly_ignored {
-                println!("   ✅ {} ({})", 
-                    console::style(dir).green(),
-                    console::style(description).dim()
-                );
-            }
-            
-            // Show directories that need gitignore rules
-            for (dir, description) in &needs_gitignore {
-                println!("   ⚠️  {} ({})", 
-                    console::style(dir).yellow(),
-                    console::style(description).dim()
-                );
-            }
-            
-            // Only show gitignore recommendations for directories that need them
-            if !needs_gitignore.is_empty() {
-                let patterns: Vec<&str> = needs_gitignore.iter().map(|(dir, _)| *dir).collect();
-                println!("💡 Consider adding to .gitignore: {}", 
-                         console::style(patterns.join(", ")).cyan());
-            }
-        }
+        // Analyze directories and their gitignore status
+        self.analyze_and_display_directories(path);
         
         // Single-pass scanning with real-time granular progress
         for entry in walker {
