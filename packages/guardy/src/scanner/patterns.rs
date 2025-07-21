@@ -284,47 +284,47 @@ impl SecretPatterns {
                 description: "Age encryption secret keys".to_string(),
             },
             
-            // Private key headers
+            // Private key patterns - exclude documentation contexts
             SecretPattern {
                 name: "DSA Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN DSA PRIVATE KEY-{5}")?,
-                description: "DSA private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN DSA PRIVATE KEY-{5}$")?,
+                description: "DSA private key headers (full line match)".to_string(),
             },
             
             SecretPattern {
                 name: "EC Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN EC PRIVATE KEY-{5}")?,
-                description: "Elliptic Curve private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN EC PRIVATE KEY-{5}$")?,
+                description: "Elliptic Curve private key headers (full line match)".to_string(),
             },
             
             SecretPattern {
                 name: "OpenSSH Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN OPENSSH PRIVATE KEY-{5}")?,
-                description: "OpenSSH private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN OPENSSH PRIVATE KEY-{5}$")?,
+                description: "OpenSSH private key headers (full line match)".to_string(),
             },
             
             SecretPattern {
                 name: "PGP Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN PGP PRIVATE KEY BLOCK-{5}")?,
-                description: "PGP private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN PGP PRIVATE KEY BLOCK-{5}$")?,
+                description: "PGP private key headers (full line match)".to_string(),
             },
             
             SecretPattern {
                 name: "PKCS Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN PRIVATE KEY-{5}")?,
-                description: "PKCS#8 private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN PRIVATE KEY-{5}$")?,
+                description: "PKCS#8 private key headers (full line match)".to_string(),
             },
             
             SecretPattern {
                 name: "RSA Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN RSA PRIVATE KEY-{5}")?,
-                description: "RSA private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN RSA PRIVATE KEY-{5}$")?,
+                description: "RSA private key headers (full line match)".to_string(),
             },
             
             SecretPattern {
                 name: "SSH2 Encrypted Private Key".to_string(),
-                regex: Regex::new(r"-{5}BEGIN SSH2 ENCRYPTED PRIVATE KEY-{5}")?,
-                description: "SSH2 encrypted private key headers".to_string(),
+                regex: Regex::new(r"^-{5}BEGIN SSH2 ENCRYPTED PRIVATE KEY-{5}$")?,
+                description: "SSH2 encrypted private key headers (full line match)".to_string(),
             },
             
             // Modern AI API Keys (2024-2025)

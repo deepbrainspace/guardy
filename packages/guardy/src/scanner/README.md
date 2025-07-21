@@ -362,26 +362,26 @@ The scanner includes 40+ built-in patterns for comprehensive secret detection:
 
 ### Private Keys & Certificates
 - SSH private keys (RSA, DSA, EC, OpenSSH, SSH2)
-- PGP/GPG private keys (`-----BEGIN PGP PRIVATE KEY BLOCK-----`)
-- PKCS private keys (`-----BEGIN PRIVATE KEY-----`)
-- PuTTY private keys (`PuTTY-User-Key-File-2`)
-- Age encryption keys (`AGE-SECRET-KEY-1...`)
+- PGP/GPG private keys (armored format)
+- PKCS private keys (standard format)
+- PuTTY private keys (all versions)
+- Age encryption keys (modern file encryption)
 
 ### Cloud Provider Credentials
-- **AWS**: Access keys (`AKIA...`), secret keys, session tokens
-- **Azure**: Client secrets, storage keys (`AccountKey=...`)
-- **Google Cloud**: API keys (`AIzaSy...`), service account keys
+- **AWS**: Access keys, secret keys, session tokens
+- **Azure**: Client secrets, storage keys
+- **Google Cloud**: API keys, service account keys
 
 ### API Keys & Tokens
-- **AI/ML**: OpenAI (`sk-proj-...`, `sk-...`), Anthropic Claude (`sk-ant-api...`), Hugging Face (`hf_...`), Cohere (`co....`), Replicate (`r8_...`), Mistral (UUID format)
-- **Development**: GitHub (`ghp_...`, `gho_...`), GitLab (`glpat-...`), npm (`npm_...`)
-- **Services**: Slack (`xox[aboprs]-...`), SendGrid (`SG....`), Twilio (`AC...`, `SK...`), Mailchimp, Stripe (`[rs]k_live_...`), Square
-- **JWT/JWE**: JSON Web Tokens (`eyJ...`)
+- **AI/ML**: OpenAI, Anthropic Claude, Hugging Face, Cohere, Replicate, Mistral
+- **Development**: GitHub tokens, GitLab tokens, npm tokens
+- **Services**: Slack tokens, SendGrid keys, Twilio credentials, Mailchimp keys, Stripe keys, Square tokens
+- **JWT/JWE**: JSON Web Tokens
 
 ### Database Credentials
-- MongoDB connection strings (`mongodb://user:pass@host`)
-- PostgreSQL connection strings (`postgres://user:pass@host`)
-- MySQL connection strings (`mysql://user:pass@host`)
+- MongoDB connection strings
+- PostgreSQL connection strings  
+- MySQL connection strings
 
 ### Generic Detection
 - **Context-based patterns**: High-entropy strings near keywords like "password", "token", "key", "secret", "api"

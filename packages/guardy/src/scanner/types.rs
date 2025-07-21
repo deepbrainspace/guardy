@@ -65,7 +65,6 @@ impl Default for ScanMode {
 pub struct ScannerConfig {
     pub enable_entropy_analysis: bool,
     pub min_entropy_threshold: f64,
-    pub skip_binary_files: bool,
     pub follow_symlinks: bool,
     pub max_file_size_mb: usize,
     pub ignore_paths: Vec<String>,
@@ -86,7 +85,6 @@ impl Default for ScannerConfig {
         Self {
             enable_entropy_analysis: true,
             min_entropy_threshold: 1.0 / 1e5,
-            skip_binary_files: true,
             follow_symlinks: false,
             max_file_size_mb: 10,
             ignore_paths: vec![
