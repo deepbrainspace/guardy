@@ -110,15 +110,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             "ignore_paths": args.ignore_paths,
             "ignore_comments": args.ignore_comments
         }
-    });
-    
-    // Load configuration with custom overrides
-    println!("DEBUG: Scan execute received config_path: {:?}", config_path);
-    let config = GuardyConfig::load(config_path, Some(scanner_overrides))?;
-    
-    // Create custom scanner config based on CLI args
-    let mut scanner_config = Scanner::parse_scanner_config(&config)?;
-    
+    });g 
     // Apply CLI overrides
     if args.include_binary {
         scanner_config.skip_binary_files = false;

@@ -1,0 +1,22 @@
+[package]
+name = "guardy-figment-providers"
+version = "0.1.0"
+edition = "2021"
+description = "Enhanced Figment providers for smart format detection, empty value filtering, and improved environment variable handling"
+license = "MIT"
+authors = ["Nayeem Syed"]
+repository = "https://github.com/deepbrain/guardy"
+readme = "README.md"
+keywords = ["figment", "configuration", "providers", "config", "rust"]
+categories = ["config", "development-tools"]
+
+[dependencies]
+figment = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+serde_yml = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive"] }
