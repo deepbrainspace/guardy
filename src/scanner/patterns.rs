@@ -59,14 +59,9 @@ pub struct SecretPattern {
 /// use guardy::config::GuardyConfig;
 /// 
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let config = GuardyConfig::load()?;
+/// let config = GuardyConfig::load(None, None::<&()>)?;
 /// let patterns = SecretPatterns::new(&config)?;
 /// println!("Loaded {} secret detection patterns", patterns.pattern_count());
-/// 
-/// // List all pattern names
-/// for name in patterns.get_pattern_names() {
-///     println!("- {}", name);
-/// }
 /// # Ok(())
 /// # }
 /// ```
@@ -96,9 +91,12 @@ impl SecretPatterns {
     /// use guardy::scanner::patterns::SecretPatterns;
     /// use guardy::config::GuardyConfig;
     /// 
-    /// let config = GuardyConfig::load()?;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = GuardyConfig::load(None, None::<&()>)?;
     /// let patterns = SecretPatterns::new(&config)?;
     /// println!("Ready to scan with {} patterns", patterns.pattern_count());
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(config: &GuardyConfig) -> Result<Self> {
         let mut patterns = Vec::new();
@@ -436,9 +434,12 @@ impl SecretPatterns {
     /// use guardy::scanner::patterns::SecretPatterns;
     /// use guardy::config::GuardyConfig;
     /// 
-    /// let config = GuardyConfig::load()?;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = GuardyConfig::load(None, None::<&()>)?;
     /// let patterns = SecretPatterns::new(&config)?;
     /// println!("Scanner has {} patterns loaded", patterns.pattern_count());
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn pattern_count(&self) -> usize {
         self.patterns.len()
