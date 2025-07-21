@@ -213,10 +213,12 @@ impl Scanner {
         }
         
         if let Ok(test_attributes) = config.get_vec("scanner.test_attributes") {
+            // Keep test patterns case-sensitive for proper class name matching
             scanner_config.test_attributes = test_attributes;
         }
         
         if let Ok(test_modules) = config.get_vec("scanner.test_modules") {
+            // Keep test patterns case-sensitive for proper class name matching
             scanner_config.test_modules = test_modules;
         }
         
@@ -224,7 +226,7 @@ impl Scanner {
         if let Ok(mode_str) = config.get_section("scanner.mode") {
             if let Some(mode) = mode_str.as_str() {
                 tracing::trace!("SCANNER CONFIG: Parsing mode from config: '{}'", mode);
-                scanner_config.mode = match mode {
+                scanner_config.mode = match mode.to_lowercase().as_str() {
                     "sequential" => super::types::ScanMode::Sequential,
                     "parallel" => super::types::ScanMode::Parallel,
                     "auto" => super::types::ScanMode::Auto,
@@ -585,48 +587,67 @@ impl Scanner {
     }
     
     fn scan_line(&self, line: &str, file_path: &Path, line_number: usize) -> Vec<SecretMatch> {
+        // Always use sequential pattern processing (parallel patterns proved to be 10x slower)
+        self.scan_line_sequential(line, file_path, line_number)
+    }
+    
+    /// Sequential pattern matching (original implementation)
+    fn scan_line_sequential(&self, line: &str, file_path: &Path, line_number: usize) -> Vec<SecretMatch> {
         let mut matches = Vec::new();
         
-        // Debug output removed
-        
-        // Find potential secrets using pattern matching
+        // Find potential secrets using sequential pattern matching
         for pattern in &self.patterns.patterns {
             for regex_match in pattern.regex.find_iter(line) {
-                // Pattern match found
-                let matched_text = regex_match.as_str();
-                
-                // Extract the actual secret from capture groups if present
-                let secret_content = if pattern.regex.captures_len() > 1 {
-                    // If pattern has capture groups, use the first group
-                    pattern.regex.captures(line)
-                        .and_then(|caps| caps.get(1))
-                        .map(|m| m.as_str())
-                        .unwrap_or(matched_text)
-                } else {
-                    matched_text
-                };
-                
-                // Apply entropy analysis if enabled (only on the secret content)
-                if self.config.enable_entropy_analysis {
-                    if !is_likely_secret(secret_content.as_bytes(), self.config.min_entropy_threshold) {
-                        continue; // Skip if entropy too low
-                    }
+                if let Some(secret_match) = self.process_pattern_match(pattern, regex_match, line, file_path, line_number) {
+                    matches.push(secret_match);
                 }
-                
-                matches.push(SecretMatch {
-                    file_path: file_path.to_string_lossy().to_string(),
-                    line_number,
-                    line_content: line.to_string(),
-                    matched_text: matched_text.to_string(),
-                    start_pos: regex_match.start(),
-                    end_pos: regex_match.end(),
-                    secret_type: pattern.name.clone(),
-                    pattern_description: pattern.description.clone(),
-                });
             }
         }
         
         matches
+    }
+    
+    
+    /// Process a single pattern match (extracted for reuse between sequential and parallel)
+    fn process_pattern_match(
+        &self,
+        pattern: &super::patterns::SecretPattern,
+        regex_match: regex::Match,
+        line: &str,
+        file_path: &Path,
+        line_number: usize,
+    ) -> Option<SecretMatch> {
+        // Pattern match found
+        let matched_text = regex_match.as_str();
+        
+        // Extract the actual secret from capture groups if present
+        let secret_content = if pattern.regex.captures_len() > 1 {
+            // If pattern has capture groups, use the first group
+            pattern.regex.captures(line)
+                .and_then(|caps| caps.get(1))
+                .map(|m| m.as_str())
+                .unwrap_or(matched_text)
+        } else {
+            matched_text
+        };
+        
+        // Apply entropy analysis if enabled (only on the secret content)
+        if self.config.enable_entropy_analysis {
+            if !is_likely_secret(secret_content.as_bytes(), self.config.min_entropy_threshold) {
+                return None; // Skip if entropy too low
+            }
+        }
+        
+        Some(SecretMatch {
+            file_path: file_path.to_string_lossy().to_string(),
+            line_number,
+            line_content: line.to_string(),
+            matched_text: matched_text.to_string(),
+            start_pos: regex_match.start(),
+            end_pos: regex_match.end(),
+            secret_type: pattern.name.clone(),
+            pattern_description: pattern.description.clone(),
+        })
     }
 }
 

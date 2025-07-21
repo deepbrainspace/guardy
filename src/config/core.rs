@@ -66,15 +66,13 @@ impl GuardyConfig {
     
     /// Get a nested object/section as JSON
     pub fn get_section(&self, path: &str) -> Result<serde_json::Value> {
-        let mut value = self.figment.extract_inner(path)?;
-        Self::normalize_strings(&mut value);
+        let value = self.figment.extract_inner(path)?;
         Ok(value)
     }
     
     /// Get the full merged configuration as a structured value
     pub fn get_full_config(&self) -> Result<serde_json::Value> {
-        let mut value = self.figment.extract()?;
-        Self::normalize_strings(&mut value);
+        let value = self.figment.extract()?;
         Ok(value)
     }
     
@@ -82,28 +80,9 @@ impl GuardyConfig {
     /// Get a vector of strings from config
     pub fn get_vec(&self, path: &str) -> Result<Vec<String>> {
         let vec: Vec<String> = self.figment.extract_inner(path)?;
-        Ok(vec.into_iter().map(|s| s.to_lowercase()).collect())
+        Ok(vec)
     }
     
-    /// Recursively normalize all string values to lowercase
-    fn normalize_strings(value: &mut serde_json::Value) {
-        match value {
-            serde_json::Value::String(s) => {
-                *s = s.to_lowercase();
-            }
-            serde_json::Value::Object(map) => {
-                for v in map.values_mut() {
-                    Self::normalize_strings(v);
-                }
-            }
-            serde_json::Value::Array(arr) => {
-                for v in arr.iter_mut() {
-                    Self::normalize_strings(v);
-                }
-            }
-            _ => {} // Numbers, booleans, null don't need normalization
-        }
-    }
     
     fn user_config_path() -> String {
         match std::env::var("HOME") {
