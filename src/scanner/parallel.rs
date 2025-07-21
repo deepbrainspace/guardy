@@ -2,7 +2,6 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use ignore::WalkBuilder;
 use crossbeam::channel::{bounded, Receiver, Sender};
 use super::types::{SecretMatch, ScanStats, Warning, ScanResult, Scanner, ScanFileResult};
 
@@ -14,50 +13,14 @@ impl Scanner {
         let start_time = std::time::Instant::now();
         let mut warnings: Vec<Warning> = Vec::new();
         
-        // Build intelligent walker that respects .gitignore AND skips directories that should be ignored
-        let mut builder = WalkBuilder::new(path);
-        builder
-            .follow_links(self.config.follow_symlinks)
-            .git_ignore(true)        // Respect .gitignore files
-            .git_global(true)        // Respect global gitignore
-            .git_exclude(true)       // Respect .git/info/exclude
-            .hidden(false)           // Don't ignore hidden files by default
-            .parents(true);          // Check parent directories for .gitignore
-            
-        // Add intelligent skipping for directories that SHOULD be ignored based on project type
-        builder.filter_entry(|entry| {
-            if let Some(file_name) = entry.file_name().to_str() {
-                // Skip directories that should always be ignored for security/performance
-                !matches!(file_name,
-                    // Rust build artifacts
-                    "target" |
-                    // Node.js dependencies and build artifacts  
-                    "node_modules" | "dist" | "build" | ".next" | ".nuxt" |
-                    // Python artifacts
-                    "__pycache__" | ".pytest_cache" | "venv" | ".venv" | "env" | ".env" |
-                    // Go artifacts
-                    "vendor" |
-                    // Java artifacts  
-                    "out" |
-                    // Generic build/cache directories
-                    "cache" | ".cache" | "tmp" | ".tmp" | "temp" | ".temp" |
-                    // Version control
-                    ".git" | ".svn" | ".hg" |
-                    // IDE directories
-                    ".vscode" | ".idea" | ".vs" |
-                    // Coverage reports
-                    "coverage" | ".nyc_output"
-                )
-            } else {
-                true
-            }
-        });
-        
-        let walker = builder.build();
+        let walker = self.build_directory_walker(path).build();
         
         // Fast file counting for progress tracking
         let file_count = self.fast_count_files(path)?;
         println!("🔍 Scanning {} files in parallel...", file_count);
+        
+        // Analyze directories and their gitignore status (same as sequential mode)
+        self.analyze_and_display_directories(path);
         
         // Collect all file paths first (lightweight operation)
         let mut file_paths = Vec::new();

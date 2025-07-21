@@ -1,4 +1,5 @@
 pub mod core;
+pub mod directory;
 pub mod entropy;
 pub mod parallel;
 pub mod patterns;
