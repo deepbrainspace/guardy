@@ -77,7 +77,7 @@ impl Cli {
                 println!("DEBUG: CLI config path: {:?}", self.config);
                 scan::execute(args, self.verbose, self.config.as_deref()).await
             },
-            Some(Commands::Config(args)) => config::execute(args).await,
+            Some(Commands::Config(args)) => config::execute(args, self.config.as_deref()).await,
             Some(Commands::Status(args)) => status::execute(args).await,
             Some(Commands::Uninstall(args)) => uninstall::execute(args).await,
             Some(Commands::Mcp(args)) => mcp::execute(args).await,
