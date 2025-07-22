@@ -100,6 +100,42 @@ let config: AppConfig = SuperFigment::new()
 - **Hierarchical Configuration**: Search and merge config files across directory hierarchy
 - **100% Figment Compatible**: All existing Figment code works without changes
 
+## Environment Variable Handling
+
+SuperFigment provides two options for environment variable processing:
+
+### Standard Environment Variables
+```rust
+let config = SuperFigment::new()
+    .with_env("APP_");  // Preserves all values, including empty ones
+```
+
+### Environment Variables with Empty Filtering
+```rust  
+let config = SuperFigment::new()
+    .with_env_ignore_empty("APP_");  // Filters out empty strings, arrays, objects
+```
+
+**When to use each:**
+- Use `with_env()` when you want maximum flexibility and explicit empty values
+- Use `with_env_ignore_empty()` when you want clean config overrides without empty noise
+
+**Example:**
+```bash
+# These environment variables:
+export APP_DEBUG=""           # Empty string
+export APP_HOST="localhost"   # Valid value  
+export APP_FEATURES="[]"      # Empty array
+```
+
+```rust
+// with_env() result:
+// { debug: "", host: "localhost", features: [] }
+
+// with_env_ignore_empty() result:  
+// { host: "localhost" }  # Empty values filtered out
+```
+
 ## License
 
 Licensed under the MIT License.

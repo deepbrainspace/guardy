@@ -78,12 +78,11 @@
 //!     name: "myapp".to_string(),
 //!     port: 3000,
 //! };
-//! let args = Some(figment::providers::Serialized::defaults(cli_args));
 //!
 //! let config: AppConfig = SuperFigment::new()
 //!     .with_file("config")        // Auto-detects .toml/.json/.yaml
 //!     .with_env("APP_")          // Enhanced env parsing with JSON arrays
-//!     .with_cli_opt(args)        // Filtered CLI args (if Some)
+//!     .with_cli_opt(Some(cli_args))  // Filtered CLI args (if Some)
 //!     .extract()?;               // Direct extraction with auto array merging
 //! 
 //! # Ok::<(), figment::Error>(())
@@ -92,6 +91,11 @@
 use std::ops::Deref;
 use std::path::Path;
 use figment::{Figment, Provider};
+// ExtendExt trait is imported in individual methods where needed
+
+// Re-export figment for compatibility
+pub use figment;
+
 
 pub mod providers;
 pub mod ext;
@@ -99,7 +103,7 @@ pub mod ext;
 // Re-export enhanced providers for existing Figment users
 pub use providers::{Universal, Nested, Empty, Hierarchical};
 
-// Re-export extension traits
+// Re-export extension traits  
 pub use ext::{ExtendExt, FluentExt, AccessExt};
 
 // Re-export prelude module for convenient imports
@@ -147,6 +151,7 @@ impl SuperFigment {
     ///     .with_defaults(defaults);
     /// ```
     pub fn with_defaults<T: serde::Serialize>(self, defaults: T) -> Self {
+        use crate::ext::ExtendExt;
         Self {
             figment: self.figment.merge_extend(figment::providers::Serialized::defaults(defaults)),
         }
@@ -164,8 +169,28 @@ impl SuperFigment {
     ///     .with_file("config");        // Auto-detects .toml/.yaml/.json
     /// ```
     pub fn with_file<P: AsRef<Path>>(self, path: P) -> Self {
+        use crate::ext::ExtendExt;
         Self {
             figment: self.figment.merge_extend(Universal::file(path)),
+        }
+    }
+
+    /// Add optional file-based configuration with automatic format detection and array merging
+    ///
+    /// Only adds the file if the Option is Some. Useful for conditional configuration loading.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use superfigment::SuperFigment;
+    /// 
+    /// let custom_config: Option<&str> = Some("custom.toml");
+    /// let config = SuperFigment::new()
+    ///     .with_file_opt(custom_config);  // Only adds if Some
+    /// ```
+    pub fn with_file_opt<P: AsRef<Path>>(self, path: Option<P>) -> Self {
+        match path {
+            Some(p) => self.with_file(p),
+            None => self,
         }
     }
 
@@ -187,7 +212,67 @@ impl SuperFigment {
         }
     }
 
-    /// Add CLI arguments with empty value filtering and array merging (if provided)
+    /// Add environment variable configuration with empty value filtering and array merging
+    ///
+    /// Similar to `with_env` but filters out empty values (empty strings, arrays, objects)
+    /// to prevent meaningless overrides from masking meaningful configuration values.
+    /// 
+    /// Uses both the Nested provider for advanced environment variable parsing and the 
+    /// Empty provider for filtering, combined with ExtendExt for array merging support.
+    ///
+    /// **Filtered Values:**
+    /// - Empty strings: `""`
+    /// - Empty arrays: `[]`
+    /// - Empty objects: `{}`
+    ///
+    /// **Preserved Values:**
+    /// - Meaningful falsy values: `false`, `0`
+    /// - Non-empty strings, arrays, objects
+    /// - JSON arrays with array merging: `MYAPP_FEATURES_ADD=["new_item"]`
+    ///
+    /// # Examples
+    /// ```rust
+    /// use superfigment::SuperFigment;
+    /// use serde::{Deserialize, Serialize};
+    /// 
+    /// #[derive(Debug, Deserialize, Serialize)]
+    /// struct Config {
+    ///     debug: bool,
+    ///     host: String,
+    ///     features: Vec<String>,
+    /// }
+    /// 
+    /// // Environment variables:
+    /// // APP_DEBUG=""              <- filtered out (empty string)
+    /// // APP_HOST="localhost"       <- preserved (non-empty)  
+    /// // APP_FEATURES="[]"          <- filtered out (empty array)
+    /// // APP_FEATURES_ADD=["auth"]  <- merged with existing features
+    /// 
+    /// let config: Config = SuperFigment::new()
+    ///     .with_defaults(Config {
+    ///         debug: true,
+    ///         host: "0.0.0.0".to_string(),
+    ///         features: vec!["core".to_string()],
+    ///     })
+    ///     .with_env_ignore_empty("APP_")  // Empty values filtered, meaningful ones applied
+    ///     .extract()?;
+    ///     
+    /// // Result: debug=true (default preserved), host="localhost" (env applied), 
+    /// //         features=["core", "auth"] (array merged, not replaced)
+    /// # Ok::<(), figment::Error>(())
+    /// ```
+    /// 
+    /// # When to Use
+    /// - Use `with_env_ignore_empty()` when you want clean config overrides without empty noise
+    /// - Use `with_env()` when you need maximum flexibility and explicit empty values matter
+    pub fn with_env_ignore_empty<S: AsRef<str>>(self, prefix: S) -> Self {
+        use crate::ext::ExtendExt;
+        Self {
+            figment: self.figment.merge_extend(Empty::new(Nested::prefixed(prefix))),
+        }
+    }
+
+    /// Add CLI arguments with empty value filtering and array merging
     ///
     /// Uses the Empty provider internally to filter out empty values.
     ///
@@ -199,18 +284,40 @@ impl SuperFigment {
     /// #[derive(Serialize)]
     /// struct CliArgs { verbose: bool }
     /// 
-    /// let cli_args = Some(figment::providers::Serialized::defaults(CliArgs { verbose: true }));
+    /// let config = SuperFigment::new()
+    ///     .with_cli(CliArgs { verbose: true });
+    /// ```
+    pub fn with_cli<T: serde::Serialize>(self, cli: T) -> Self {
+        let provider = figment::providers::Serialized::defaults(cli);
+        Self {
+            figment: self.figment.merge_extend(Empty::new(provider)),
+        }
+    }
+
+    /// Add optional CLI arguments with empty value filtering and array merging
+    ///
+    /// Only adds CLI arguments if the Option is Some. Uses the Empty provider internally
+    /// to filter out empty values.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use superfigment::SuperFigment;
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct CliArgs { verbose: bool }
+    /// 
+    /// let cli_args: Option<CliArgs> = Some(CliArgs { verbose: true });
     /// let config = SuperFigment::new()
     ///     .with_cli_opt(cli_args);     // Only merged if Some(), empty values filtered
     /// ```
-    pub fn with_cli_opt<P: Provider>(self, provider: Option<P>) -> Self {
-        match provider {
-            Some(p) => Self {
-                figment: self.figment.merge_extend(Empty::new(p)),
-            },
+    pub fn with_cli_opt<T: serde::Serialize>(self, cli: Option<T>) -> Self {
+        match cli {
+            Some(c) => self.with_cli(c),
             None => self,
         }
     }
+
 
     /// Add any provider with automatic array merging
     ///
