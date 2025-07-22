@@ -4,10 +4,9 @@
 //! masking meaningful configuration values from files.
 
 use figment::{
-    value::{Dict, Empty as FigmentEmpty, Map, Num, Tag, Value},
+    value::{Dict, Map, Value},
     Error, Metadata, Profile, Provider,
 };
-use serde_json;
 
 /// Provider wrapper that filters out empty values while preserving meaningful falsy values
 pub struct Empty<T> {
@@ -97,108 +96,6 @@ impl<T: Provider> Empty<T> {
         }
     }
 
-    /// Convert Figment Value to serde_json::Value for processing
-    fn figment_value_to_json_value(value: Value) -> Result<serde_json::Value, Error> {
-        match value {
-            Value::String(_, s) => Ok(serde_json::Value::String(s)),
-            Value::Char(_, c) => Ok(serde_json::Value::String(c.to_string())),
-            Value::Bool(_, b) => Ok(serde_json::Value::Bool(b)),
-            Value::Num(_, num) => Self::num_to_json_value(num),
-            Value::Empty(_, _) => Ok(serde_json::Value::Null),
-            Value::Dict(_, dict) => {
-                let json_obj: Result<serde_json::Map<String, serde_json::Value>, Error> = dict
-                    .into_iter()
-                    .map(|(k, v)| Ok((k, Self::figment_value_to_json_value(v)?)))
-                    .collect();
-                Ok(serde_json::Value::Object(json_obj?))
-            }
-            Value::Array(_, arr) => {
-                let json_arr: Result<Vec<serde_json::Value>, Error> = arr
-                    .into_iter()
-                    .map(Self::figment_value_to_json_value)
-                    .collect();
-                Ok(serde_json::Value::Array(json_arr?))
-            }
-        }
-    }
-
-    /// Convert Figment Num to serde_json::Value
-    fn num_to_json_value(num: Num) -> Result<serde_json::Value, Error> {
-        match num {
-            Num::U8(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::U16(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::U32(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::U64(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::U128(n) => {
-                if let Ok(parsed) = n.to_string().parse::<u64>() {
-                    Ok(serde_json::Value::Number(serde_json::Number::from(parsed)))
-                } else {
-                    Ok(serde_json::Value::String(n.to_string()))
-                }
-            }
-            Num::I8(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::I16(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::I32(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::I64(n) => Ok(serde_json::Value::Number(n.into())),
-            Num::I128(n) => {
-                if let Ok(parsed) = n.to_string().parse::<i64>() {
-                    Ok(serde_json::Value::Number(serde_json::Number::from(parsed)))
-                } else {
-                    Ok(serde_json::Value::String(n.to_string()))
-                }
-            }
-            Num::F32(n) => {
-                if let Some(n) = serde_json::Number::from_f64(n as f64) {
-                    Ok(serde_json::Value::Number(n))
-                } else {
-                    Ok(serde_json::Value::String(n.to_string()))
-                }
-            }
-            Num::F64(n) => {
-                if let Some(n) = serde_json::Number::from_f64(n) {
-                    Ok(serde_json::Value::Number(n))
-                } else {
-                    Ok(serde_json::Value::String(n.to_string()))
-                }
-            }
-            Num::USize(n) => Ok(serde_json::Value::Number((n as u64).into())),
-            Num::ISize(n) => Ok(serde_json::Value::Number((n as i64).into())),
-        }
-    }
-
-    /// Convert serde_json::Value back to Figment Value
-    fn json_value_to_figment_value(json_val: serde_json::Value) -> Result<Value, Error> {
-        match json_val {
-            serde_json::Value::Null => Ok(Value::Empty(Tag::default(), FigmentEmpty::Unit)),
-            serde_json::Value::Bool(b) => Ok(Value::Bool(Tag::default(), b)),
-            serde_json::Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    Ok(Value::from(i))
-                } else if let Some(u) = n.as_u64() {
-                    Ok(Value::from(u))
-                } else if let Some(f) = n.as_f64() {
-                    Ok(Value::from(f))
-                } else {
-                    Ok(Value::String(Tag::default(), n.to_string()))
-                }
-            }
-            serde_json::Value::String(s) => Ok(Value::String(Tag::default(), s)),
-            serde_json::Value::Array(arr) => {
-                let figment_array: Result<Vec<Value>, Error> = arr
-                    .into_iter()
-                    .map(Self::json_value_to_figment_value)
-                    .collect();
-                Ok(Value::Array(Tag::default(), figment_array?))
-            }
-            serde_json::Value::Object(obj) => {
-                let figment_dict: Result<Dict, Error> = obj
-                    .into_iter()
-                    .map(|(k, v)| Ok((k, Self::json_value_to_figment_value(v)?)))
-                    .collect();
-                Ok(Value::Dict(Tag::default(), figment_dict?))
-            }
-        }
-    }
 }
 
 impl<T: Provider> Provider for Empty<T> {

@@ -34,18 +34,26 @@ use super::ExtendExt; // Import array merging functionality
 /// ### Basic Builder Pattern
 /// ```rust
 /// use figment::Figment;
-/// use superfigment::FluentExt;
+/// use superfigment::prelude::*; // Import all SuperFigment functionality
+/// use serde::Serialize;
+/// 
+/// #[derive(Serialize)]
+/// struct CliArgs { verbose: bool }
+/// 
+/// let cli_args = Some(figment::providers::Serialized::defaults(
+///     CliArgs { verbose: true }
+/// ));
 /// 
 /// let config = Figment::new()
 ///     .with_file("config")           // Auto-detects .toml/.json/.yaml
 ///     .with_env("APP_")              // Nested env vars with JSON parsing
-///     .with_cli_opt(args);           // Empty value filtering
+///     .with_cli_opt(cli_args);       // Empty value filtering
 /// ```
 ///
 /// ### Hierarchical Configuration
 /// ```rust
 /// use figment::Figment;
-/// use superfigment::FluentExt;
+/// use superfigment::prelude::*; // Import all SuperFigment functionality
 /// 
 /// // Automatically searches and merges config files from:
 /// // ~/.config/myapp/config.*, ~/.myapp/config.*, ./config.*
@@ -56,14 +64,20 @@ use super::ExtendExt; // Import array merging functionality
 /// ### Full Configuration Chain
 /// ```rust
 /// use figment::Figment;
-/// use superfigment::FluentExt;
+/// use superfigment::prelude::*; // Import all SuperFigment functionality
 /// use figment::providers::Serialized;
+/// use serde::Serialize;
 /// 
-/// #[derive(serde::Serialize)]
+/// #[derive(Serialize)]
 /// struct Defaults {
 ///     port: u16,
 ///     host: String,
 /// }
+/// 
+/// #[derive(Serialize)]
+/// struct CliArgs { debug: bool }
+/// 
+/// let cli_args = Some(Serialized::defaults(CliArgs { debug: true }));
 /// 
 /// let config = Figment::new()
 ///     .merge_extend(Serialized::defaults(Defaults {
@@ -82,9 +96,9 @@ pub trait FluentExt {
     /// extension fallback, and format-specific parsing attempts.
     ///
     /// # Examples
-    /// ```rust
+    /// ```rust,no_run
     /// use figment::Figment;
-    /// use superfigment::FluentExt;
+    /// use superfigment::prelude::*; // Import FluentExt trait
     /// 
     /// let config = Figment::new()
     ///     .with_file("config");        // Tries config.toml, config.yaml, etc.
@@ -97,9 +111,9 @@ pub trait FluentExt {
     /// with JSON parsing, smart type detection, and nested structure creation.
     ///
     /// # Examples
-    /// ```rust
+    /// ```rust,no_run
     /// use figment::Figment;
-    /// use superfigment::FluentExt;
+    /// use superfigment::prelude::*; // Import FluentExt trait
     /// 
     /// // Environment: APP_DATABASE_HOST=localhost, APP_FEATURES=["auth","cache"]
     /// let config = Figment::new()
@@ -115,10 +129,15 @@ pub trait FluentExt {
     /// # Examples
     /// ```rust
     /// use figment::Figment;
-    /// use superfigment::FluentExt;
+    /// use superfigment::prelude::*; // Import FluentExt trait
     /// use figment::providers::Serialized;
+    /// use serde::Serialize;
     /// 
-    /// let cli_args = Some(Serialized::defaults(/* CLI args */));
+    /// #[derive(Serialize)]
+    /// struct CliArgs { verbose: bool }
+    /// 
+    /// let cli_data = CliArgs { verbose: true };
+    /// let cli_args = Some(Serialized::defaults(cli_data));
     /// let config = Figment::new()
     ///     .with_cli_opt(cli_args);     // Only merged if Some(), empty values filtered
     /// ```
@@ -137,9 +156,9 @@ pub trait FluentExt {
     /// 5. Current directory: `./{base_name}.*`
     ///
     /// # Examples
-    /// ```rust
+    /// ```rust,no_run
     /// use figment::Figment;
-    /// use superfigment::FluentExt;
+    /// use superfigment::prelude::*; // Import FluentExt trait
     /// 
     /// let config = Figment::new()
     ///     .with_hierarchical_config("myapp");  // Searches config hierarchy
@@ -155,8 +174,8 @@ pub trait FluentExt {
     /// # Examples
     /// ```rust
     /// use figment::Figment;
-    /// use figment::providers::Json;
-    /// use superfigment::FluentExt;
+    /// use figment::providers::{Json, Format};
+    /// use superfigment::prelude::*; // Import FluentExt trait
     /// 
     /// let config = Figment::new()
     ///     .with_provider(Json::file("config.json"));

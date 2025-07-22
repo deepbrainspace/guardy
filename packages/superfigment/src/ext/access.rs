@@ -16,10 +16,14 @@ use figment::error::Actual;
 /// ### Format Conversion
 /// ```rust
 /// use figment::Figment;
-/// use superfigment::AccessExt;
+/// use superfigment::{AccessExt, Universal};
+/// use serde::Serialize;
+/// 
+/// #[derive(Serialize)]
+/// struct Config { name: String }
 /// 
 /// let config = Figment::new()
-///     .merge(/* providers */);
+///     .merge(figment::providers::Serialized::defaults(Config { name: "test".to_string() }));
 ///     
 /// let json_str = config.as_json()?;
 /// let yaml_str = config.as_yaml()?;
@@ -31,9 +35,24 @@ use figment::error::Actual;
 /// ```rust
 /// use figment::Figment;
 /// use superfigment::AccessExt;
+/// use serde::Serialize;
+/// 
+/// #[derive(Serialize)]
+/// struct Config { 
+///     database: Database,
+///     allowed_ports: Vec<u16>,
+/// }
+/// 
+/// #[derive(Serialize)]
+/// struct Database { host: String }
+/// 
+/// let test_config = Config {
+///     database: Database { host: "localhost".to_string() },
+///     allowed_ports: vec![8080, 3000],
+/// };
 /// 
 /// let config = Figment::new()
-///     .merge(/* providers */);
+///     .merge(figment::providers::Serialized::defaults(test_config));
 ///     
 /// let host = config.get_string("database.host")?;
 /// let ports = config.get_array::<u16>("allowed_ports")?;
@@ -42,12 +61,13 @@ use figment::error::Actual;
 /// ```
 ///
 /// ### Debug Information
-/// ```rust
-/// use figment::Figment;
+/// ```rust,no_run
+/// use superfigment::SuperFigment;
 /// use superfigment::AccessExt;
 /// 
-/// let config = Figment::new()
-///     .merge(/* providers */);
+/// let config = SuperFigment::new()
+///     .with_file("config.toml")
+///     .with_env("APP_");
 ///     
 /// println!("{}", config.debug_config()?);
 /// let sources = config.debug_sources();
@@ -92,8 +112,14 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { name: String }
+    /// 
+    /// let test_data = Config { name: "test".to_string() };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let json_str = config.as_json()?;
     /// println!("{}", json_str); // Pretty-printed JSON
@@ -116,8 +142,14 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { name: String }
+    /// 
+    /// let test_data = Config { name: "test".to_string() };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let yaml_str = config.as_yaml()?;
     /// println!("{}", yaml_str);
@@ -140,8 +172,14 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { name: String }
+    /// 
+    /// let test_data = Config { name: "test".to_string() };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let toml_str = config.as_toml()?;
     /// println!("{}", toml_str);
@@ -164,8 +202,19 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { database: Database }
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Database { host: String }
+    /// 
+    /// let test_data = Config {
+    ///     database: Database { host: "localhost".to_string() }
+    /// };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let host = config.get_string("database.host")?;
     /// println!("Database host: {}", host);
@@ -182,8 +231,19 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { cors: Cors }
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Cors { allowed_origins: Vec<String> }
+    /// 
+    /// let test_data = Config {
+    ///     cors: Cors { allowed_origins: vec!["https://example.com".to_string()] }
+    /// };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let origins = config.get_array::<String>("cors.allowed_origins")?;
     /// println!("CORS origins: {:?}", origins);
@@ -203,8 +263,19 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { redis: Redis }
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Redis { enabled: bool }
+    /// 
+    /// let test_data = Config {
+    ///     redis: Redis { enabled: true }
+    /// };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// if config.has_key("redis.enabled")? {
     ///     println!("Redis is configured");
@@ -226,8 +297,17 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { database: String, redis: String }
+    /// 
+    /// let test_data = Config {
+    ///     database: "postgres://localhost".to_string(),
+    ///     redis: "redis://localhost".to_string()
+    /// };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let keys = config.keys()?;
     /// println!("Config sections: {:?}", keys);
@@ -253,8 +333,14 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { name: String }
+    /// 
+    /// let test_data = Config { name: "test".to_string() };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// println!("{}", config.debug_config()?);
     /// // Output shows merged config with provider information
@@ -285,8 +371,14 @@ impl AccessExt for Figment {
     /// use figment::Figment;
     /// use superfigment::AccessExt;
     /// 
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { name: String }
+    /// 
+    /// let test_data = Config { name: "test".to_string() };
     /// let config = Figment::new()
-    ///     .merge(/* provider */);
+    ///     .merge(figment::providers::Serialized::defaults(test_data));
     ///     
     /// let sources = config.debug_sources();
     /// println!("Configuration sources: {:#?}", sources);

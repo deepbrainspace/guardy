@@ -48,6 +48,14 @@ impl ExtendExt for Figment {
     /// ```rust
     /// use figment::Figment;
     /// use superfigment::ExtendExt;
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct Config { features: Vec<String> }
+    /// 
+    /// let provider = figment::providers::Serialized::defaults(
+    ///     Config { features: vec!["auth".to_string()] }
+    /// );
     /// 
     /// let config = Figment::new()
     ///     .merge_extend(provider); // Auto array merging applied
@@ -75,6 +83,14 @@ impl ExtendExt for Figment {
     /// ```rust
     /// use figment::Figment;
     /// use superfigment::ExtendExt;
+    /// use serde::Serialize;
+    /// 
+    /// #[derive(Serialize)]
+    /// struct CliArgs { debug: bool }
+    /// 
+    /// let cli_args = Some(figment::providers::Serialized::defaults(
+    ///     CliArgs { debug: true }
+    /// ));
     /// 
     /// let config = Figment::new()
     ///     .merge_extend_opt(cli_args); // Only merged if Some()
