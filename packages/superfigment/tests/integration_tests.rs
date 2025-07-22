@@ -387,19 +387,16 @@ allowed_origins_add = ["https://project.com"]
     
     let result: TestConfig = config.extract()?;
     
-    // For now, just test that the hierarchical provider loads without errors
-    // Full hierarchical functionality requires architectural fixes for profile handling
-    // assert_eq!(result.host, "project.example.com"); // TODO: Fix profile handling
-    assert_eq!(result.host, "localhost"); // Currently returns defaults due to profile issues
-    assert_eq!(result.port, 8080); // Currently returns defaults
-    assert_eq!(result.database.timeout, 30); // This works from defaults
+    // Test that hierarchical merging works correctly (system -> user -> project priority)
+    assert_eq!(result.host, "project.example.com"); // Project config overrides system
+    assert_eq!(result.port, 9090); // User config overrides system (no project override)
+    assert_eq!(result.database.timeout, 30); // From system config (no overrides)
     
-    // Skip complex array merging test - hierarchical provider needs profile handling fixes
-    // TODO: Fix hierarchical configuration profile handling and array merging
-    // let origins = &result.database.allowed_origins;
-    // assert!(origins.contains(&"https://user.com".to_string()));
-    // assert!(origins.contains(&"https://project.com".to_string()));
-    // assert!(!origins.contains(&"https://system.com".to_string()));
+    // Test complex array merging across hierarchy (system -> user -> project)
+    let origins = &result.database.allowed_origins;
+    assert!(origins.contains(&"https://user.com".to_string()));   // Added by user config
+    assert!(origins.contains(&"https://project.com".to_string())); // Added by project config  
+    assert!(!origins.contains(&"https://system.com".to_string())); // Removed by project config
     
     // Restore environment
     if original_home.is_empty() {
