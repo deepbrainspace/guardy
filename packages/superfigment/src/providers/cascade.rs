@@ -244,6 +244,78 @@ impl Hierarchical {
             .map(PathBuf::from)
             .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
     }
+    
+    /// Efficiently merge multiple configuration maps for a single profile
+    fn merge_profile_configs(configs: Vec<Map<String, Value>>) -> Map<String, Value> {
+        if configs.is_empty() {
+            return Map::new();
+        }
+        
+        // Build up configuration by direct map merging (preserving _add/_remove patterns)
+        let mut result = Map::new();
+        
+        for config in configs {
+            Self::merge_maps_without_array_processing(&mut result, config);
+        }
+        
+        // Apply array merging ONCE at the end to process all _add/_remove patterns together
+        Self::apply_array_merging_to_map(result)
+    }
+    
+    /// Merge two configuration maps without applying array processing (preserving _add/_remove patterns)
+    fn merge_maps_without_array_processing(base: &mut Map<String, Value>, override_config: Map<String, Value>) {
+        for (key, value) in override_config {
+            match base.get_mut(&key) {
+                Some(existing_value) => {
+                    // If both are objects, merge recursively
+                    if let Value::Dict(_, existing_dict) = existing_value {
+                        if let Value::Dict(_, override_dict) = &value {
+                            Self::merge_maps_without_array_processing(existing_dict, override_dict.clone());
+                            continue;
+                        }
+                    }
+                    
+                    // Special handling for _add and _remove patterns - these should be combined, not overridden
+                    if key.ends_with("_add") || key.ends_with("_remove") {
+                        if let Value::Array(_, existing_arr) = existing_value {
+                            if let Value::Array(_, new_arr) = &value {
+                                // Combine arrays instead of overriding
+                                existing_arr.extend(new_arr.clone());
+                                continue;
+                            }
+                        }
+                    }
+                    
+                    // Otherwise, override takes precedence
+                    *existing_value = value;
+                }
+                None => {
+                    // Key doesn't exist, insert it
+                    base.insert(key, value);
+                }
+            }
+        }
+    }
+    
+    
+    /// Apply array merging patterns (_add, _remove) to a configuration map
+    fn apply_array_merging_to_map(config: Map<String, Value>) -> Map<String, Value> {
+        // Use the existing ArrayMergeHelper functionality through a temporary figment
+        // This is still efficient since it's only called once per profile
+        let temp_figment = figment::Figment::new()
+            .merge(figment::providers::Serialized::from(&config, figment::Profile::Default))
+            .merge_arrays();
+            
+        // Extract the merged data
+        if let Ok(merged_data) = temp_figment.data() {
+            if let Some(default_data) = merged_data.get(&figment::Profile::Default) {
+                return default_data.clone();
+            }
+        }
+        
+        // Fallback to original config if array merging fails
+        config
+    }
 
 
     /// Find all existing configuration files in the search hierarchy
@@ -253,6 +325,8 @@ impl Hierarchical {
         let mut found_files = Vec::new();
 
         for search_dir in &self.search_paths {
+            let mut found_in_dir = false;
+            
             // Try common extensions for the base name
             let extensions = ["toml", "yaml", "yml", "json", "cfg"];
             
@@ -260,18 +334,32 @@ impl Hierarchical {
                 let config_file = search_dir.join(format!("{}.{}", self.base_name, ext));
                 if config_file.exists() && config_file.is_file() {
                     found_files.push(config_file);
+                    found_in_dir = true;
                     break; // Only take the first matching extension per directory
                 }
             }
 
-            // Also try the base name without extension
-            let config_file = search_dir.join(&self.base_name);
-            if config_file.exists() && config_file.is_file() {
-                found_files.push(config_file);
+            // Only try the base name without extension if no extension file was found
+            if !found_in_dir {
+                let config_file = search_dir.join(&self.base_name);
+                if config_file.exists() && config_file.is_file() {
+                    found_files.push(config_file);
+                }
             }
         }
 
-        found_files
+        // Reverse to get correct priority order: system -> user -> project
+        found_files.reverse();
+        
+        // Remove duplicates while preserving order
+        let mut unique_files = Vec::new();
+        for file in found_files {
+            if !unique_files.contains(&file) {
+                unique_files.push(file);
+            }
+        }
+        
+        unique_files
     }
 }
 
@@ -283,27 +371,27 @@ impl Provider for Hierarchical {
     fn data(&self) -> Result<Map<Profile, Map<String, Value>>, Error> {
         let config_files = self.find_config_files();
         
-        // Debug: Hierarchical provider implementation (profile handling needs fixes)
-        // println!("Hierarchical provider found files: {:?}", config_files);
-        
         if config_files.is_empty() {
             // No config files found - return empty data
             return Ok(Map::new());
         }
 
-        // Build up the configuration by merging files step by step with array merging
-        let mut temp_figment = figment::Figment::new();
+        // Collect all profile data across files for efficient merging
+        let mut profile_data_by_profile: Map<Profile, Vec<Map<String, Value>>> = Map::new();
         
         // Process config files in correct order (least specific to most specific)
         for config_file in config_files {
             let provider = (self.provider_factory)(&config_file);
-            // println!("Loading config file: {:?}", config_file); // Debug
             
-            // Extract provider data and create a serialized provider for merging
+            // Extract provider data and group by profile
             match provider.data() {
                 Ok(provider_data) => {
-                    let serialized_provider = figment::providers::Serialized::from(provider_data, figment::Profile::Default);
-                    temp_figment = temp_figment.merge_extend(serialized_provider);
+                    for (profile, profile_data) in provider_data {
+                        profile_data_by_profile
+                            .entry(profile)
+                            .or_insert_with(Vec::new)
+                            .push(profile_data);
+                    }
                 }
                 Err(_) => {
                     // Skip files that fail to load
@@ -312,8 +400,28 @@ impl Provider for Hierarchical {
             }
         }
         
-        // Extract the final merged data with array merging applied
-        temp_figment.data()
+        // Now merge each profile's data efficiently
+        let mut final_data: Map<Profile, Map<String, Value>> = Map::new();
+        
+        for (profile, profile_configs) in profile_data_by_profile {
+            if profile_configs.is_empty() {
+                continue;
+            }
+            
+            // Optimize for single config (common case)
+            let merged_data = if profile_configs.len() == 1 {
+                // Fast path: no merging needed, just apply array merging
+                let single_config = profile_configs.into_iter().next().unwrap();
+                Self::apply_array_merging_to_map(single_config)
+            } else {
+                // Merge multiple configs for this profile with array merging
+                Self::merge_profile_configs(profile_configs)
+            };
+            
+            final_data.insert(profile, merged_data);
+        }
+        
+        Ok(final_data)
     }
 
     fn profile(&self) -> Option<Profile> {
