@@ -1,33 +1,92 @@
 //! # SuperFigment
 //!
-//! SuperFigment gives "superpowers" to the already powerful Figment library.
-//! It provides enhanced configuration management with 100% Figment compatibility
-//! plus advanced features like array merging and smart format detection.
+//! **Supercharged configuration management for Rust** - 100% Figment compatible with powerful enhancements.
 //!
-//! ## Dual API Design
+//! ## ✨ What SuperFigment Provides
 //!
-//! SuperFigment provides two ways to use it:
+//! ### 🔧 Enhanced Providers (Additional superpowers)
+//! - **Universal** - Smart format detection (.toml/.yaml/.json)
+//! - **Nested** - Advanced environment variable parsing with JSON arrays
+//! - **Empty** - Automatic empty value filtering
+//! - **Hierarchical** - Cascading config files across directory hierarchy
 //!
-//! ### 1. Enhanced Providers (Drop-in for existing Figment users)
+//! ### 🚀 Extension Traits (Add methods to regular Figment)
+//! - **ExtendExt** - Array merging with `_add`/`_remove` patterns
+//! - **FluentExt** - Builder methods (`.with_file()`, `.with_env()`, etc.)
+//! - **AccessExt** - Convenience methods (`.as_json()`, `.get_string()`, etc.)
+//!
+//! ### 💫 SuperFigment Builder (All-in-one solution)
+//! - Built-in methods combining all enhancements
+//! - Zero import complexity for new projects
+//! - Use existing Figment functionalities from within SuperFigment
+//!
+//! ## 🎯 Quick Start
 //! ```rust
-//! use figment::Figment;
-//! use superfigment::{Universal, NestedEnv, SkipEmpty, FigmentExt};
-//!
-//! let config = Figment::new()
-//!     .merge(Universal::file("config"))           // Auto-detects format
-//!     .merge_extend(NestedEnv::prefixed("APP_"))  // Array merging
-//!     .merge(SkipEmpty::new(cli_args));          // Filters empty values
+//! use superfigment::SuperFigment;  // Recommended: clean all-in-one API
+//! // or
+//! use superfigment::prelude::*;    // For existing Figment users: add superpowers to current setup
 //! ```
 //!
-//! ### 2. SuperFigment Builder (Convenient fluent API)
-//! ```rust
-//! use superfigment::SuperFigment;
+//! ## 🔗 100% Figment Compatibility
 //!
-//! let config = SuperFigment::new()
+//! SuperFigment is fully compatible with existing Figment code:
+//! - All Figment methods work seamlessly 
+//! - Existing Figment configurations can be enhanced without changes
+//! - SuperFigment can be converted to/from regular Figment instances
+//! - No breaking changes to your existing Figment workflow
+//!
+//! ## Two Ways to Use SuperFigment
+//!
+//! Choose the approach that best fits your project:
+//!
+//! ### Approach A: Enhance Existing Figment Setup (Extension Pattern)
+//!
+//! **For teams with existing Figment code** - Add SuperFigment powers without changing your setup:
+//!
+//! ```rust
+//! use figment::Figment;
+//! use superfigment::prelude::*;  // Everything: traits + providers
+//! use serde::Serialize;
+//!
+//! #[derive(Serialize)]
+//! struct Config { name: String }
+//! 
+//! let cli_args = Config { name: "test".to_string() };
+//! 
+//! let config = Figment::new()                     // Keep existing Figment code
+//!     .merge(Universal::file("config"))           // Enhanced provider
+//!     .merge_extend(Nested::prefixed("APP_"))     // Extension trait method
+//!     .merge(Empty::new(figment::providers::Serialized::defaults(cli_args))); // Enhanced provider
+//! ```
+//!
+//! ### Approach B: Pure SuperFigment (All-in-One Pattern)
+//!
+//! **For new projects or clean rewrites** - Use SuperFigment's fluent builder directly:
+//!
+//! ```rust,no_run
+//! use superfigment::SuperFigment;  // Only import you need
+//! use serde::{Deserialize, Serialize};
+//! // No prelude needed - SuperFigment has built-in methods
+//!
+//! #[derive(Debug, Deserialize, Serialize, Default)]
+//! struct AppConfig {
+//!     name: String,
+//!     port: u16,
+//! }
+//! 
+//! let cli_args = AppConfig {
+//!     name: "myapp".to_string(),
+//!     port: 3000,
+//! };
+//! let args = Some(figment::providers::Serialized::defaults(cli_args));
+//!
+//! let config: AppConfig = SuperFigment::new()
 //!     .with_file("config")        // Auto-detects .toml/.json/.yaml
 //!     .with_env("APP_")          // Enhanced env parsing with JSON arrays
 //!     .with_cli_opt(args)        // Filtered CLI args (if Some)
 //!     .extract()?;               // Direct extraction with auto array merging
+//! 
+//! # Ok::<(), figment::Error>(())
 //! ```
 
 use std::ops::Deref;
@@ -41,7 +100,10 @@ pub mod ext;
 pub use providers::{Universal, Nested, Empty, Hierarchical};
 
 // Re-export extension traits
-pub use ext::{ExtendExt, FluentExt, AccessExt, AllExt};
+pub use ext::{ExtendExt, FluentExt, AccessExt};
+
+// Re-export prelude module for convenient imports
+pub use ext::prelude;
 
 /// SuperFigment provides a fluent builder API with automatic enhancements
 /// while maintaining 100% compatibility with Figment through Deref.
@@ -68,9 +130,9 @@ impl SuperFigment {
     /// # Examples
     /// ```rust
     /// use superfigment::SuperFigment;
-    /// use serde::Deserialize;
+    /// use serde::{Deserialize, Serialize};
     /// 
-    /// #[derive(Deserialize)]
+    /// #[derive(Deserialize, Serialize)]
     /// struct Config {
     ///     host: String,
     ///     port: u16,
@@ -132,8 +194,12 @@ impl SuperFigment {
     /// # Examples
     /// ```rust
     /// use superfigment::SuperFigment;
+    /// use serde::Serialize;
     /// 
-    /// let cli_args = Some(/* CLI provider */);
+    /// #[derive(Serialize)]
+    /// struct CliArgs { verbose: bool }
+    /// 
+    /// let cli_args = Some(figment::providers::Serialized::defaults(CliArgs { verbose: true }));
     /// let config = SuperFigment::new()
     ///     .with_cli_opt(cli_args);     // Only merged if Some(), empty values filtered
     /// ```
@@ -151,10 +217,10 @@ impl SuperFigment {
     /// # Examples
     /// ```rust
     /// use superfigment::SuperFigment;
-    /// use figment::providers::Json;
+    /// use figment::providers::{Json, Format};
     /// 
     /// let config = SuperFigment::new()
-    ///     .with_provider(Json::file("config.json"));
+    ///     .with_provider(Json::string(r#"{"key": "value"}"#));
     /// ```
     pub fn with_provider<P: Provider>(self, provider: P) -> Self {
         Self {
@@ -193,17 +259,20 @@ impl SuperFigment {
     /// the need to dereference before extraction.
     ///
     /// # Examples
-    /// ```rust
+    /// ```rust,no_run
     /// use superfigment::SuperFigment;
-    /// use serde::Deserialize;
+    /// use serde::{Deserialize, Serialize};
     /// 
-    /// #[derive(Deserialize)]
+    /// #[derive(Deserialize, Serialize, Default)]
     /// struct Config {
+    ///     #[serde(default)]
     ///     host: String,
+    ///     #[serde(default)]
     ///     port: u16,
     /// }
     /// 
     /// let config: Config = SuperFigment::new()
+    ///     .with_defaults(Config::default())
     ///     .with_file("config.toml")
     ///     .with_env("APP_")
     ///     .extract()?;                 // Direct extraction with all enhancements

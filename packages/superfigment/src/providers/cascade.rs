@@ -38,7 +38,7 @@ use crate::ext::ExtendExt;
 /// ```rust
 /// use superfigment::Hierarchical;
 /// use figment::Figment;
-/// use superfigment::FigmentExt;
+/// use superfigment::ExtendExt;
 ///
 /// // Search for "config.*" files across hierarchy
 /// let provider = Hierarchical::new("config");
@@ -48,7 +48,7 @@ use crate::ext::ExtendExt;
 /// ### With Custom Provider
 /// ```rust
 /// use superfigment::{Hierarchical, Universal};
-/// use figment::providers::Toml;
+/// use figment::providers::{Toml, Format};
 ///
 /// // Use only TOML files instead of auto-detection
 /// let provider = Hierarchical::new("myapp")
@@ -151,19 +151,19 @@ impl Hierarchical {
     /// # Examples
     /// ```rust
     /// use superfigment::Hierarchical;
-    /// use figment::providers::{Json, Toml, Yaml};
+    /// use figment::providers::{Json, Toml, Yaml, Format};
     /// 
     /// // Only read TOML files
     /// let provider = Hierarchical::new("config")
-    ///     .with_provider(|path| Box::new(Toml::file(path)));
+    ///     .with_provider(|path| Box::new(Toml::file_exact(path)));
     /// 
     /// // Only read JSON files  
     /// let provider = Hierarchical::new("config")
-    ///     .with_provider(|path| Box::new(Json::file(path)));
+    ///     .with_provider(|path| Box::new(Json::file_exact(path)));
     /// 
     /// // Only read YAML files
     /// let provider = Hierarchical::new("config")
-    ///     .with_provider(|path| Box::new(Yaml::file(path)));
+    ///     .with_provider(|path| Box::new(Yaml::file_exact(path)));
     /// ```
     pub fn with_provider<F>(mut self, factory: F) -> Self
     where
@@ -245,25 +245,6 @@ impl Hierarchical {
             .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
     }
 
-    /// Apply array merging logic to a single profile's data
-    fn merge_arrays_in_data(&self, data: Map<String, Value>) -> Map<String, Value> {
-        // Use the ExtendExt functionality to merge arrays in this data
-        // Create a temporary figment just for array merging
-        let temp_figment = figment::Figment::new()
-            .merge(figment::providers::Serialized::from(&data, figment::Profile::Default));
-            
-        // Apply array merging and extract the data back out
-        match temp_figment.merge_arrays().data() {
-            Ok(merged_data) => {
-                // Extract the default profile data
-                merged_data.into_iter()
-                    .find(|(profile, _)| profile == &figment::Profile::Default)
-                    .map(|(_, profile_data)| profile_data)
-                    .unwrap_or_else(|| data)
-            }
-            Err(_) => data, // Fall back to original data if merging fails
-        }
-    }
 
     /// Find all existing configuration files in the search hierarchy
     ///
