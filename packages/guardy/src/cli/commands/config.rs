@@ -25,7 +25,7 @@ pub enum ConfigCommand {
     Validate,
 }
 
-pub async fn execute(args: ConfigArgs) -> Result<()> {
+pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()> {
     use crate::cli::output::*;
     use crate::config::{GuardyConfig, ConfigFormat};
     
@@ -37,7 +37,7 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
         },
         ConfigCommand::Show { format } => {
             info("Loading merged configuration...");
-            let config = GuardyConfig::load(None, None::<&()>)?;
+            let config = GuardyConfig::load(custom_config, None::<&()>)?;
             
             let format_enum = match format.to_lowercase().as_str() {
                 "json" => ConfigFormat::Json,
@@ -56,7 +56,7 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
         },
         ConfigCommand::Get { key } => {
             info(&format!("Getting {}", key));
-            let config = GuardyConfig::load(None, None::<&()>)?;
+            let config = GuardyConfig::load(custom_config, None::<&()>)?;
             
             // First try to get as a section/object
             if let Ok(section_val) = config.get_section(&key) {

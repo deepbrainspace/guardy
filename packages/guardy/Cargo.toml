@@ -16,8 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Configuration
-figment = { workspace = true }
-guardy-figment-providers = { path = "../guardy-figment-providers" }
+superfigment = { path = "../superfigment" }
 
 # CLI and utilities
 clap = { version = "4.5.41", features = ["derive", "env"] }
