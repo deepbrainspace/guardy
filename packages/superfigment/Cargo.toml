@@ -74,3 +74,4 @@ optional = true
 [dev-dependencies]
 serde = { workspace = true, features = ["derive"] }
 tokio-test = "0.4"
+tempfile = "3.8"

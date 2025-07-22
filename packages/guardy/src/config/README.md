@@ -51,7 +51,7 @@ src/config/
 
 Guardy uses custom Figment providers from the `guardy-figment-providers` package for advanced configuration management:
 
-### SmartFormat Provider
+### Universal Provider
 - **Auto-detects configuration file formats** from content (JSON, TOML, YAML)
 - **No file extensions required** - `guardy` automatically detects format
 - **Content-based detection** - examines file structure, not just filename
@@ -70,7 +70,7 @@ Guardy uses custom Figment providers from the `guardy-figment-providers` package
 
 1. **CLI Overrides** (highest) - Filtered through SkipEmpty provider
 2. **Environment Variables** - `GUARDY_*` with nested mapping via NestedEnv
-3. **Custom Config** - Auto-detected format via SmartFormat provider
+3. **Custom Config** - Auto-detected format via Universal provider
 4. **Repository Config** - `guardy.{toml,json,yaml,yml}` with auto-detection
 5. **User Config** - `~/.config/guardy/config.{toml,json,yaml,yml}` with auto-detection  
 6. **Default Config** (lowest) - Embedded `default-config.toml`

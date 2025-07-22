@@ -1,6 +1,7 @@
 use anyhow::Result;
-use figment::{Figment, providers::{Format, Toml, Json, Yaml}};
-use guardy_figment_providers::{SmartFormat, SkipEmpty, NestedEnv};
+use figment::Figment;
+use guardy_figment_providers::providers::{Universal, SkipEmpty, NestedEnv};
+use guardy_figment_providers::ext::FigmentExt;
 use serde::Serialize;
 
 // Embed the default config at compile time
@@ -16,62 +17,20 @@ impl GuardyConfig {
         custom_config: Option<&str>, 
         cli_overrides: Option<T>
     ) -> Result<Self> {
-        let mut figment = Figment::new()
-            .merge(Toml::string(DEFAULT_CONFIG));  // 1. Defaults (lowest)
-        
         // Debug: Show starting config load (only at trace level -vvv)
         tracing::trace!("CONFIG LOAD: Starting");
 
-        // Standard configs first: json → yaml → yml → toml for each location
-        figment = figment
-            // User configs (old manual approach)
-            .merge(Json::file(Self::user_config_path().replace(".toml", ".json")))  // 2. User JSON
-            .merge(Yaml::file(Self::user_config_path().replace(".toml", ".yaml")))  // 3. User YAML
-            .merge(Yaml::file(Self::user_config_path().replace(".toml", ".yml")))   // 4. User YML
-            .merge(Toml::file(Self::user_config_path()))                            // 5. User TOML
-            // User configs (NEW: SmartFormat auto-detection)
-            .merge(SmartFormat::file(Self::user_config_path().replace(".toml", ""))) // 5b. User auto-detect
-            
-            // Repo configs (old manual approach)
-            .merge(Json::file("guardy.json"))                                       // 6. Repo JSON
-            .merge(Yaml::file("guardy.yaml"))                                       // 7. Repo YAML
-            .merge(Yaml::file("guardy.yml"))                                        // 8. Repo YML
-            .merge(Toml::file("guardy.toml"))                                       // 9. Repo TOML
-            // Repo configs (NEW: SmartFormat auto-detection)
-            .merge(SmartFormat::file("guardy"));                                    // 9b. Repo auto-detect
-        
-        // Custom config overrides user/repo configs
-        if let Some(custom_path) = custom_config {
-            println!("DEBUG: Loading custom config from: {}", custom_path);
-            figment = figment.merge(SmartFormat::file(custom_path));                // 14. Custom (auto format)
-            
-            // Debug: Try to read the file directly
-            if let Ok(content) = std::fs::read_to_string(custom_path) {
-                println!("DEBUG: Custom config file content: {}", content);
-            }
-            
-            // Debug: Check what figment extracted after loading custom config
-            match figment.extract::<serde_json::Value>() {
-                Ok(extracted) => {
-                    println!("DEBUG: Figment extracted after custom config: {}", serde_json::to_string_pretty(&extracted).unwrap_or_else(|_| "Failed to serialize".to_string()));
-                },
-                Err(e) => {
-                    println!("DEBUG: Figment extract failed: {:?}", e);
-                    println!("DEBUG: Figment error kind: {:?}", e.kind);
-                    println!("DEBUG: Figment error path: {:?}", e.path);
-                    println!("DEBUG: Figment profile: {:?}", e.profile);
-                }
-            }
-        }
-        
-        // Environment variables with enhanced nested mapping
-        figment = figment.merge(NestedEnv::prefixed("GUARDY_"));                    // 15. Environment
-        
-        // CLI overrides (highest priority) - filter out empty values
-        if let Some(cli_overrides) = cli_overrides {
-            tracing::trace!("CONFIG LOAD: Applying CLI overrides");
-            figment = figment.merge(SkipEmpty::new(cli_overrides));                          // 16. CLI (highest)
-        }
+        // Complete configuration chain with array merging support
+        let figment = Figment::new()
+            .merge(Universal::string(DEFAULT_CONFIG))                              // 1. Defaults (lowest)
+            .merge_extend(Universal::file(Self::user_config_base_path()))          // 2. User config (any format)
+            .merge_extend(Universal::file("guardy"))                               // 3. Repo config (any format)
+            .merge_extend_opt(custom_config.map(|path| Universal::file(path)))     // 4. Custom config (if provided)
+            .merge_extend(NestedEnv::prefixed("GUARDY_"))                           // 5. Environment variables
+            .merge_extend_opt(cli_overrides.map(|cli| {                            // 6. CLI (highest priority)
+                tracing::trace!("CONFIG LOAD: Applying CLI overrides");
+                SkipEmpty::new(cli)
+            }));
         
         // Debug: Show final config (only at trace level -vvv)
         if let Ok(final_config) = figment.extract::<serde_json::Value>() {
@@ -102,10 +61,10 @@ impl GuardyConfig {
     }
     
     
-    fn user_config_path() -> String {
+    fn user_config_base_path() -> String {
         match std::env::var("HOME") {
-            Ok(home) => format!("{}/.config/guardy/config.toml", home),
-            Err(_) => "~/.config/guardy/config.toml".to_string(),
+            Ok(home) => format!("{}/.config/guardy/config", home),
+            Err(_) => "~/.config/guardy/config".to_string(),
         }
     }
 }
