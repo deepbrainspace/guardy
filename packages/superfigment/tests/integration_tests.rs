@@ -302,11 +302,9 @@ fn test_empty_value_filtering() -> Result<(), Box<dyn std::error::Error>> {
         items: Vec::new(), // empty array - should be filtered
     };
     
-    let cli_provider = figment::providers::Serialized::defaults(cli_values);
-    
     let config = SuperFigment::new()
         .with_file(&base_config)
-        .with_cli_opt(Some(cli_provider));
+        .with_cli_opt(Some(cli_values));
         
     let result: FilterConfig = config.extract()?;
     
