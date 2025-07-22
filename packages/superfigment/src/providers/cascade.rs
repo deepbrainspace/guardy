@@ -245,6 +245,26 @@ impl Hierarchical {
             .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
     }
 
+    /// Apply array merging logic to a single profile's data
+    fn merge_arrays_in_data(&self, data: Map<String, Value>) -> Map<String, Value> {
+        // Use the ExtendExt functionality to merge arrays in this data
+        // Create a temporary figment just for array merging
+        let temp_figment = figment::Figment::new()
+            .merge(figment::providers::Serialized::from(&data, figment::Profile::Default));
+            
+        // Apply array merging and extract the data back out
+        match temp_figment.merge_arrays().data() {
+            Ok(merged_data) => {
+                // Extract the default profile data
+                merged_data.into_iter()
+                    .find(|(profile, _)| profile == &figment::Profile::Default)
+                    .map(|(_, profile_data)| profile_data)
+                    .unwrap_or_else(|| data)
+            }
+            Err(_) => data, // Fall back to original data if merging fails
+        }
+    }
+
     /// Find all existing configuration files in the search hierarchy
     ///
     /// Returns paths in merge order (least specific to most specific).
@@ -282,24 +302,27 @@ impl Provider for Hierarchical {
     fn data(&self) -> Result<Map<Profile, Map<String, Value>>, Error> {
         let config_files = self.find_config_files();
         
+        // Debug: Hierarchical provider implementation (profile handling needs fixes)
+        // println!("Hierarchical provider found files: {:?}", config_files);
+        
         if config_files.is_empty() {
             // No config files found - return empty data
             return Ok(Map::new());
         }
 
-        // Create a figment that merges all found files with enhanced array merging
-        let mut figment = figment::Figment::new();
+        // Build up the configuration by merging files step by step with array merging
+        let mut temp_figment = figment::Figment::new();
         
+        // Process config files in correct order (least specific to most specific)
         for config_file in config_files {
             let provider = (self.provider_factory)(&config_file);
-            // Since we can't dereference a Box<dyn Provider> directly, we need to 
-            // extract its data and merge it manually
-            // Extract and merge the provider's data
+            // println!("Loading config file: {:?}", config_file); // Debug
+            
+            // Extract provider data and create a serialized provider for merging
             match provider.data() {
                 Ok(provider_data) => {
-                    // Create a provider from the raw data
-                    let data_provider = figment::providers::Serialized::from(provider_data, figment::Profile::Default);
-                    figment = figment.merge(data_provider);
+                    let serialized_provider = figment::providers::Serialized::from(provider_data, figment::Profile::Default);
+                    temp_figment = temp_figment.merge_extend(serialized_provider);
                 }
                 Err(_) => {
                     // Skip files that fail to load
@@ -308,8 +331,8 @@ impl Provider for Hierarchical {
             }
         }
         
-        // Apply array merging to the final result and extract the final merged data
-        figment.merge_arrays().data()
+        // Extract the final merged data with array merging applied
+        temp_figment.data()
     }
 
     fn profile(&self) -> Option<Profile> {
