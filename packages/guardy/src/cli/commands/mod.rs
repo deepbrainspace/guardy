@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use supercli::clap::create_help_styles;
 
 pub mod install;
 pub mod run;
@@ -16,7 +17,8 @@ pub mod version;
     version = env!("CARGO_PKG_VERSION"),
     about = "Fast, secure git hooks in Rust with MCP server integration",
     long_about = "Guardy provides native Rust implementations of git hooks with security scanning, \
-                  code formatting, and MCP server capabilities for AI integration."
+                  code formatting, and MCP server capabilities for AI integration.",
+    styles = create_help_styles()
 )]
 pub struct Cli {
     /// Run as if started in <DIR> instead of current working directory
@@ -74,7 +76,11 @@ impl Cli {
             Some(Commands::Install(args)) => install::execute(args).await,
             Some(Commands::Run(args)) => run::execute(args).await,
             Some(Commands::Scan(args)) => {
-                println!("DEBUG: CLI config path: {:?}", self.config);
+                use crate::cli::output;
+                output::styled!("{}: CLI config path: {}", 
+                    ("DEBUG", "debug"),
+                    (format!("{:?}", self.config), "muted")
+                );
                 scan::execute(args, self.verbose, self.config.as_deref()).await
             },
             Some(Commands::Config(args)) => config::execute(args, self.config.as_deref()).await,

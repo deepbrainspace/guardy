@@ -31,12 +31,19 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()
     
     match args.command {
         ConfigCommand::Init => {
-            info("Creating default guardy.toml...");
+            styled!("Creating default {} file...", 
+                ("guardy.toml", "file_path")
+            );
             // TODO: Implement init - create minimal config file
-            success("Created guardy.toml with default settings!");
+            styled!("{} Created {} with default settings!", 
+                ("✅", "success_symbol"),
+                ("guardy.toml", "file_path")
+            );
         },
         ConfigCommand::Show { format } => {
-            info("Loading merged configuration...");
+            styled!("Loading merged configuration in {} format...", 
+                (&format, "property")
+            );
             let config = GuardyConfig::load(custom_config, None::<&()>)?;
             
             let format_enum = match format.to_lowercase().as_str() {
@@ -50,12 +57,19 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()
             println!("{}", output);
         },
         ConfigCommand::Set { key, value } => {
-            info(&format!("Setting {}={}", key, value));
+            styled!("Setting {} = {}", 
+                (&key, "property"),
+                (&value, "accent")
+            );
             // TODO: Implement set - modify config file
-            success("Configuration updated!");
+            styled!("{} Configuration updated!", 
+                ("✅", "success_symbol")
+            );
         },
         ConfigCommand::Get { key } => {
-            info(&format!("Getting {}", key));
+            styled!("Getting configuration key: {}", 
+                (&key, "property")
+            );
             let config = GuardyConfig::load(custom_config, None::<&()>)?;
             
             // First try to get as a section/object
@@ -92,9 +106,13 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()
             }
         },
         ConfigCommand::Validate => {
-            info("Validating configuration...");
+            styled!("Validating {} configuration...", 
+                ("guardy", "primary")
+            );
             let _config = GuardyConfig::load(None, None::<&()>)?;  // This will fail if config is invalid
-            success("Configuration is valid!");
+            styled!("{} Configuration is valid!", 
+                ("✅", "success_symbol")
+            );
         },
     }
     

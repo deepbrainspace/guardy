@@ -16,17 +16,17 @@ path = "src/main.rs"
 
 [dependencies]
 # Configuration
-superfigment = { path = "../superfigment" }
+superconfig = { path = "../../../superconfig/crates/superconfig" }
 
 # CLI and utilities
-clap = { version = "4.5.41", features = ["derive", "env"] }
+clap = { version = "4.5.41", features = ["derive", "env", "color"] }
 git2 = "0.20.2"
 regex = "1.11.1"
 globset = "0.4.16"
 syntect = "5.2.0"
 two-face = "0.4.3"
 atty = "0.2.14"
-console = "0.16.0"
+supercli = { path = "../supercli", features = ["clap"] }
 which = "8.0.0"
 uuid = { version = "1.17.0", features = ["v4"] }
 

@@ -126,8 +126,8 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         for pattern in &patterns.patterns {
             if verbose_level > 0 {
                 println!("📋 {} - {}", 
-                    console::style(&pattern.name).cyan().bold(),
-                    console::style(&pattern.description).dim()
+                    output::property(&pattern.name),
+                    output::symbol(&pattern.description)
                 );
             } else {
                 println!("  - {}", pattern.name);
@@ -146,7 +146,11 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
                 });
             }
             Err(e) => {
-                output::warning(&format!("Invalid custom pattern '{}': {}", custom_pattern, e));
+                output::styled!("{} Invalid custom pattern '{}': {}", 
+                ("⚠️", "warning_symbol"),
+                (custom_pattern, "property"),
+                (e.to_string(), "error")
+            );
             }
         }
     }
@@ -157,7 +161,9 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     // Create scanner with loaded config
     let scanner = Scanner::with_config(patterns, scanner_config)?;
     
-    output::info("Starting security scan...");
+    output::styled!("{} Starting security scan...", 
+        ("ℹ", "info_symbol")
+    );
     let start_time = Instant::now();
     
     // Determine paths to scan
@@ -190,7 +196,10 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             let scan_result = scanner.scan_directory(path, None)?;
             all_scan_results.push(scan_result);
         } else {
-            output::warning(&format!("Path not found: {}", path.display()));
+            output::styled!("{} Path not found: {}", 
+                ("⚠️", "warning_symbol"),
+                (path.display().to_string(), "file_path")
+            );
         }
     }
     
@@ -245,22 +254,24 @@ fn print_text_results(
     warnings: &[&crate::scanner::types::Warning]
 ) -> Result<()> {
     if matches.is_empty() {
-        output::success("No secrets detected!");
+        output::styled!("{} No secrets detected!", 
+            ("✔", "success_symbol")
+        );
         
         // Print statistics if requested
         if args.stats {
             println!();
             println!("{} {}", 
-                    console::style("📊").green().bold(), 
-                    console::style("Scan Statistics").green().bold());
-            println!("  Files scanned: {}", console::style(total_files).cyan());
+                    output::symbol("📊"), 
+                    output::property("Scan Statistics"));
+            println!("  Files scanned: {}", output::symbol(&total_files.to_string()));
             if total_skipped > 0 {
-                println!("  Files skipped: {}", console::style(total_skipped).cyan());
+                println!("  Files skipped: {}", output::symbol(&total_skipped.to_string()));
             }
-            println!("  Secrets found: {}", console::style(0).cyan());
-            println!("  Scan time: {}ms", console::style(elapsed.as_millis()).cyan());
+            println!("  Secrets found: {}", output::symbol("0"));
+            println!("  Scan time: {}ms", output::symbol(&elapsed.as_millis().to_string()));
             if !warnings.is_empty() {
-                println!("  Warnings: {}", console::style(warnings.len()).yellow());
+                println!("  Warnings: {}", output::symbol(&warnings.len().to_string()));
             }
         }
         
@@ -271,34 +282,34 @@ fn print_text_results(
     for secret_match in matches {
         println!(
             "{} {} {}",
-            console::style("📄").blue(),
-            console::style(format!("{}:{}", secret_match.file_path, secret_match.line_number)).cyan().bold(),
-            console::style(format!("[{}]", secret_match.secret_type)).red().bold()
+            output::symbol("📄"),
+            output::file_path(&format!("{}:{}", secret_match.file_path, secret_match.line_number)),
+            output::id_value(&format!("[{}]", secret_match.secret_type))
         );
         
         if verbose_level > 0 {
-            println!("  📋 {}", console::style(&secret_match.pattern_description).dim());
+            println!("  📋 {}", output::symbol(&secret_match.pattern_description));
         }
         
         if args.show_content || verbose_level > 0 {
-            println!("  Content: {}", console::style(secret_match.line_content.trim()).dim());
+            println!("  Content: {}", output::symbol(secret_match.line_content.trim()));
             if !secret_match.matched_text.is_empty() {
-                println!("  Matched: {}", console::style(&secret_match.matched_text).red().bold());
+                println!("  Matched: {}", output::hash_value(&secret_match.matched_text));
             }
         } else {
             // Hide the actual secret content for security - just show file location
-            println!("  {}", console::style("[Content hidden - use -v or --show-content to reveal]").dim());
+            println!("  {}", output::symbol("[Content hidden - use -v or --show-content to reveal]"));
         }
     }
     
     println!();
-    output::warning(&format!("Found {} potential secrets!", matches.len()));
+    println!("{} {}", output::symbol("⚠"), output::caution(&format!("Found {} potential secrets!", matches.len())));
     
     // Print warnings from scan results
     if !warnings.is_empty() {
         println!();
         for warning in warnings {
-            output::warning(&warning.message);
+            output::warning!(&warning.message);
         }
     }
     
@@ -306,16 +317,16 @@ fn print_text_results(
     if args.stats {
         println!();
         println!("{} {}", 
-                console::style("📊").green().bold(), 
-                console::style("Scan Statistics").green().bold());
-        println!("  Files scanned: {}", console::style(total_files).cyan());
+                output::symbol("📊"), 
+                output::property("Scan Statistics"));
+        println!("  Files scanned: {}", output::symbol(&total_files.to_string()));
         if total_skipped > 0 {
-            println!("  Files skipped: {}", console::style(total_skipped).cyan());
+            println!("  Files skipped: {}", output::symbol(&total_skipped.to_string()));
         }
-        println!("  Secrets found: {}", console::style(matches.len()).cyan());
-        println!("  Scan time: {}ms", console::style(elapsed.as_millis()).cyan());
+        println!("  Secrets found: {}", output::symbol(&matches.len().to_string()));
+        println!("  Scan time: {}", output::symbol(&format!("{}ms", elapsed.as_millis())));
         if !warnings.is_empty() {
-            println!("  Warnings: {}", console::style(warnings.len()).yellow());
+            println!("  Warnings: {}", output::symbol(&warnings.len().to_string()));
         }
     }
     

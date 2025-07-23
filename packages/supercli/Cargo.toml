@@ -1,0 +1,18 @@
+[package]
+name = "supercli"
+version = "0.1.0"
+edition = "2021"
+description = "Universal CLI output wrapper around starbase-styles for consistent CLI theming across tools"
+license = "MIT"
+authors = ["Nayeem Syed"]
+keywords = ["cli", "output", "starbase", "colors", "terminal"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+starbase_styles = "0.6.3"
+clap = { version = "4.5", features = ["color"], optional = true }
+atty = { version = "0.2", optional = true }
+
+[features]
+default = []
+clap = ["dep:clap", "dep:atty"]
