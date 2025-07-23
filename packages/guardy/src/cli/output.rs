@@ -1,25 +1,11 @@
-use console::{style, Emoji};
+// Re-export everything from supercli prelude for consistent CLI output
+pub use supercli::prelude::*;
 
-// Professional symbols matching Claude Code style  
-const SUCCESS: Emoji = Emoji("✔", "✓");
-const WARNING: Emoji = Emoji("⚠", "!");
-const INFO: Emoji = Emoji("ℹ", "i");
-const ERROR: Emoji = Emoji("✗", "X");
-
-// Simple output functions for basic messages
-pub fn success(message: &str) {
-    println!("{} {}", style(SUCCESS).green().bold(), style(message).green());
-}
-
-pub fn warning(message: &str) {
-    println!("{} {}", style(WARNING).yellow().bold(), style(message).yellow());
-}
-
-pub fn info(message: &str) {
-    println!("{} {}", style(INFO).blue().bold(), style(message).blue());
-}
-
-pub fn error(message: &str) {
-    println!("{} {}", style(ERROR).red().bold(), style(message).red());
-}
+// Re-export starbase styling functions directly for backward compatibility
+pub use supercli::starbase_styles::color::{
+    file as file_path,
+    property as property_name,
+    hash as hash_value,
+    id as id_value
+};
 

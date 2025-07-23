@@ -1,5 +1,5 @@
 use anyhow::Result;
-use superfigment::SuperFigment;
+use superconfig::{prelude::*, SuperConfig};
 use serde::Serialize;
 
 // Embed the default config at compile time
@@ -7,7 +7,7 @@ const DEFAULT_CONFIG: &str = include_str!("../../default-config.toml");
 
 
 pub struct GuardyConfig {
-    config: SuperFigment,
+    config: SuperConfig,
 }
 
 impl GuardyConfig {
@@ -18,9 +18,9 @@ impl GuardyConfig {
         // Debug: Show starting config load (only at trace level -vvv)
         tracing::trace!("CONFIG LOAD: Starting");
 
-        // Clean 4-stage configuration hierarchy using SuperFigment's explicit API
-        let config = SuperFigment::new()
-            .with_provider(superfigment::Universal::string(DEFAULT_CONFIG))       // 1. Defaults (lowest)
+        // Clean 4-stage configuration hierarchy using SuperConfig's explicit API
+        let config = SuperConfig::new()
+            .with_provider(Universal::string(DEFAULT_CONFIG))                     // 1. Defaults (lowest)
             .with_hierarchical_config("guardy")                                   // 2. Hierarchical: system→user→project
             .with_file_opt(custom_config)                                         // 3. Custom config file (if provided)
             .with_env_ignore_empty("GUARDY_")                                     // 4. Environment variables (with empty filtering)

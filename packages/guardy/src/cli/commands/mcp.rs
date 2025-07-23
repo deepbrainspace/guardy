@@ -32,13 +32,13 @@ pub async fn execute(args: McpArgs) -> Result<()> {
     
     match args.command {
         McpCommand::Start { port, host } => {
-            info(&format!("Starting MCP server on {}:{}", host, port));
+            info!(&format!("Starting MCP server on {}:{}", host, port));
         }
-        McpCommand::Stop => info("Stopping MCP server..."),
-        McpCommand::Status => info("Checking MCP server status..."),
-        McpCommand::Tools => info("Listing available MCP tools..."),
+        McpCommand::Stop => info!("Stopping MCP server..."),
+        McpCommand::Status => info!("Checking MCP server status..."),
+        McpCommand::Tools => info!("Listing available MCP tools..."),
     }
     
-    success("MCP operation completed!");
+    success!("MCP operation completed!");
     Ok(())
 }

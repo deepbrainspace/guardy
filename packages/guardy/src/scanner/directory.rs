@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::sync::Arc;
 use anyhow::Result;
-use console;
+use crate::cli::output;
 use crate::parallel::{ExecutionStrategy, progress::{factories, ProgressReporter}};
 use super::types::{ScanStats, Warning, ScanResult, Scanner, ScanFileResult};
 
@@ -363,12 +363,21 @@ impl DirectoryHandler {
 
         // Common setup: file counting and directory analysis
         let file_count = scanner.fast_count_files(path)?;
-        let (mode_icon, mode_text) = match &execution_strategy {
-            ExecutionStrategy::Sequential => ("🔍", String::new()),
-            ExecutionStrategy::Parallel { workers } => ("⚡", format!(" using {} workers", workers)),
+        match &execution_strategy {
+            ExecutionStrategy::Sequential => {
+                output::styled!("{} Scanning {} files...", 
+                    ("🔍", "info_symbol"),
+                    (file_count.to_string(), "number")
+                );
+            },
+            ExecutionStrategy::Parallel { workers } => {
+                output::styled!("{} Scanning {} files using {} workers...", 
+                    ("⚡", "info_symbol"),
+                    (file_count.to_string(), "number"),
+                    (workers.to_string(), "accent")
+                );
+            },
         };
-        
-        println!("{} Scanning {} files{}...", mode_icon, file_count, mode_text);
         
         // Analyze directories and display results
         let analysis = self.analyze_directories(path);
@@ -448,21 +457,18 @@ impl DirectoryHandler {
         };
 
         // Show timing summary
-        let summary_icon = match &execution_strategy {
-            ExecutionStrategy::Sequential => "⏱️",
-            ExecutionStrategy::Parallel { workers: _ } => "⚡",
-        };
-        let mode_info = match &execution_strategy {
-            ExecutionStrategy::Sequential => String::new(),
-            ExecutionStrategy::Parallel { workers } => format!(" ({} workers)", workers),
+        let (summary_icon, mode_info) = match &execution_strategy {
+            ExecutionStrategy::Sequential => (output::symbols::STOPWATCH, String::new()),
+            ExecutionStrategy::Parallel { workers } => (output::symbols::LIGHTNING, format!(" ({} workers)", workers)),
         };
 
-        println!("{}  Scan completed in {:.2}s ({} files scanned, {} matches found{})", 
-                 summary_icon,
-                 scan_duration.as_secs_f64(), 
-                 stats.files_scanned, 
-                 stats.total_matches,
-                 mode_info);
+        output::styled!("{} Scan completed in {}s ({} files scanned, {} matches found{})", 
+            (summary_icon, "success_symbol"),
+            (format!("{:.2}", scan_duration.as_secs_f64()), "time"),
+            (stats.files_scanned.to_string(), "number"),
+            (stats.total_matches.to_string(), "accent"),
+            (mode_info, "muted")
+        );
 
         Ok(ScanResult {
             matches: all_matches,
@@ -545,31 +551,35 @@ impl DirectoryAnalysis {
         }
         
         let total_dirs = self.properly_ignored.len() + self.needs_gitignore.len();
-        println!("📁 Discovered {} director{}:", 
-                 total_dirs, 
-                 if total_dirs == 1 { "y" } else { "ies" });
+        output::styled!("{} Discovered {} director{}:", 
+            ("📁", "info_symbol"),
+            (total_dirs.to_string(), "number"),
+            (if total_dirs == 1 { "y" } else { "ies" }, "primary")
+        );
         
         // Show properly ignored directories
         for (dir, description) in &self.properly_ignored {
-            println!("   ✅ {} ({})", 
-                console::style(dir).green(),
-                console::style(description).dim()
+            output::styled!("   {} {} ({})", 
+                ("✔", "success_symbol"),
+                (dir, "file_path"),
+                (description, "muted")
             );
         }
         
         // Show directories that need gitignore rules
         for (dir, description) in &self.needs_gitignore {
-            println!("   ⚠️  {} ({})", 
-                console::style(dir).yellow(),
-                console::style(description).dim()
+            output::styled!("   {} {} ({})", 
+                ("⚠️", "warning_symbol"),
+                (dir, "file_path"),
+                (description, "muted")
             );
         }
         
         // Only show gitignore recommendations for directories that need them
         if !self.needs_gitignore.is_empty() {
             let patterns: Vec<&str> = self.needs_gitignore.iter().map(|(dir, _)| dir.as_str()).collect();
-            println!("💡 Consider adding to .gitignore: {}", 
-                     console::style(patterns.join(", ")).cyan());
+            output::info!(&format!("Consider adding to .gitignore: {}", 
+                     output::property_name(&patterns.join(", "))), output::symbols::LIGHTBULB);
         }
     }
 }

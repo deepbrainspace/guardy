@@ -12,18 +12,27 @@ pub async fn execute(_args: StatusArgs) -> Result<()> {
     use crate::config::GuardyConfig;
     use crate::scanner::SecretPatterns;
     
-    info("Checking guardy status...");
+    styled!("Checking {} status...", 
+        ("guardy", "primary")
+    );
     
     // Check if we're in a git repository
     let repo = match GitRepo::discover() {
         Ok(repo) => {
-            success("✅ Git repository detected");
+            styled!("{} Git repository detected", 
+                ("✅", "success_symbol")
+            );
+            
             let branch = repo.current_branch()?;
-            println!("  Current branch: {}", branch);
+            styled!("  Current branch: {}", 
+                (branch, "branch")
+            );
             repo
         }
         Err(_) => {
-            warning("❌ Not in a git repository");
+            styled!("{} Not in a git repository", 
+                ("❌", "error_symbol")
+            );
             return Ok(());
         }
     };
@@ -31,20 +40,31 @@ pub async fn execute(_args: StatusArgs) -> Result<()> {
     // Check configuration
     match GuardyConfig::load(None, None::<&()>) {
         Ok(config) => {
-            success("✅ Configuration loaded");
+            styled!("{} Configuration loaded", 
+                ("✅", "success_symbol")
+            );
             
             // Check patterns
             match SecretPatterns::new(&config) {
                 Ok(patterns) => {
-                    success(&format!("✅ Scanner ready with {} patterns", patterns.pattern_count()));
+                    styled!("{} Scanner ready with {} patterns", 
+                        ("✅", "success_symbol"),
+                        (patterns.pattern_count().to_string(), "number")
+                    );
                 }
                 Err(e) => {
-                    error(&format!("❌ Pattern loading failed: {}", e));
+                    styled!("{} Pattern loading failed: {}", 
+                        ("❌", "error_symbol"),
+                        (e.to_string(), "error")
+                    );
                 }
             }
         }
         Err(e) => {
-            warning(&format!("⚠️  Configuration issues: {}", e));
+            styled!("{} Configuration issues: {}", 
+                ("⚠️", "warning_symbol"),
+                (e.to_string(), "warning")
+            );
         }
     }
     
@@ -62,7 +82,10 @@ pub async fn execute(_args: StatusArgs) -> Result<()> {
                 if content.contains("guardy run") {
                     installed_hooks.push(*hook_name);
                 } else {
-                    println!("  ⚠️  {} exists but not managed by guardy", hook_name);
+                    styled!("  {} {} exists but not managed by guardy", 
+                        ("⚠️", "warning_symbol"),
+                        (hook_name, "property")
+                    );
                 }
             }
         } else {
@@ -71,18 +94,30 @@ pub async fn execute(_args: StatusArgs) -> Result<()> {
     }
     
     if !installed_hooks.is_empty() {
-        success(&format!("✅ Installed hooks: {}", installed_hooks.join(", ")));
+        styled!("{} Installed hooks: {}", 
+            ("✅", "success_symbol"),
+            (installed_hooks.join(", "), "property")
+        );
     }
     
     if !missing_hooks.is_empty() {
-        warning(&format!("❌ Missing hooks: {}", missing_hooks.join(", ")));
-        info("Run 'guardy install' to install missing hooks");
+        styled!("{} Missing hooks: {}", 
+            ("❌", "error_symbol"),
+            (missing_hooks.join(", "), "property")
+        );
+        styled!("Run {} to install missing hooks", 
+            ("'guardy install'", "command")
+        );
     }
     
     if installed_hooks.len() == hook_names.len() {
-        success("🎉 Guardy is fully configured and ready!");
+        styled!("{} Guardy is fully configured and ready!", 
+            ("🎉", "success_symbol")
+        );
     } else {
-        info("Status: Partially configured");
+        styled!("Status: {}", 
+            ("Partially configured", "warning")
+        );
     }
     
     Ok(())

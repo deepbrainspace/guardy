@@ -1,8 +1,7 @@
 [workspace]
 members = [
     "packages/guardy",
-    "packages/guardy-figment-providers",
-    "packages/superfigment"
+    "packages/supercli"
 ]
 resolver = "2"
 

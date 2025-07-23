@@ -16,14 +16,14 @@ pub async fn execute(args: RunArgs) -> Result<()> {
     use crate::config::GuardyConfig;
     use crate::scanner::Scanner;
     
-    info(&format!("Running {} hook...", args.hook));
+    info!(&format!("Running {} hook...", args.hook));
     
     // Load configuration
     let config = GuardyConfig::load(None, None::<&()>)?;
     
     match args.hook.as_str() {
         "pre-commit" => {
-            info("Executing pre-commit checks...");
+            info!("Executing pre-commit checks...");
             
             // Check if we're in a git repository
             let repo = GitRepo::discover()?;
@@ -32,7 +32,7 @@ pub async fn execute(args: RunArgs) -> Result<()> {
             let staged_files = repo.get_staged_files()?;
             
             if staged_files.is_empty() {
-                info("No staged files to check");
+                info!("No staged files to check");
                 return Ok(());
             }
             
@@ -41,7 +41,7 @@ pub async fn execute(args: RunArgs) -> Result<()> {
             let scan_result = scanner.scan_paths(&staged_files)?;
             
             if scan_result.stats.total_matches > 0 {
-                error(&format!("❌ Found {} secrets in staged files", scan_result.stats.total_matches));
+                error!(&format!("❌ Found {} secrets in staged files", scan_result.stats.total_matches));
                 
                 // Print summary of found secrets
                 for secret_match in scan_result.matches.iter().take(5) {
@@ -60,30 +60,30 @@ pub async fn execute(args: RunArgs) -> Result<()> {
                 println!("\nCommit aborted. Remove secrets before committing.");
                 std::process::exit(1);
             } else {
-                success(&format!("✅ Scanned {} files - no secrets found", scan_result.stats.files_scanned));
+                success!(&format!("✅ Scanned {} files - no secrets found", scan_result.stats.files_scanned));
             }
         }
         "commit-msg" => {
-            info("Validating commit message...");
+            info!("Validating commit message...");
             // TODO: Implement commit message validation
-            success("Commit message validation passed");
+            success!("Commit message validation passed");
         }
         "post-checkout" => {
-            info("Running post-checkout actions...");
+            info!("Running post-checkout actions...");
             // TODO: Implement dependency installation checks
-            success("Post-checkout actions completed");
+            success!("Post-checkout actions completed");
         }
         "pre-push" => {
-            info("Running pre-push validation...");
+            info!("Running pre-push validation...");
             // TODO: Implement lockfile sync validation and tests
-            success("Pre-push validation passed");
+            success!("Pre-push validation passed");
         }
         unknown => {
-            error(&format!("Unknown hook: {}", unknown));
+            error!(&format!("Unknown hook: {}", unknown));
             std::process::exit(1);
         }
     }
     
-    success("Hook execution completed!");
+    success!("Hook execution completed!");
     Ok(())
 }
