@@ -10,7 +10,7 @@ pub struct RunArgs {
     pub args: Vec<String>,
 }
 
-pub async fn execute(args: RunArgs) -> Result<()> {
+pub async fn execute(args: RunArgs, verbosity_level: u8) -> Result<()> {
     use crate::cli::output::*;
     use crate::git::GitRepo;
     use crate::config::GuardyConfig;
@@ -19,7 +19,7 @@ pub async fn execute(args: RunArgs) -> Result<()> {
     info!(&format!("Running {} hook...", args.hook));
     
     // Load configuration
-    let config = GuardyConfig::load(None, None::<&()>)?;
+    let config = GuardyConfig::load(None, None::<&()>, verbosity_level)?;
     
     match args.hook.as_str() {
         "pre-commit" => {

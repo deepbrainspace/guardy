@@ -25,7 +25,7 @@ pub enum ConfigCommand {
     Validate,
 }
 
-pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()> {
+pub async fn execute(args: ConfigArgs, custom_config: Option<&str>, verbosity_level: u8) -> Result<()> {
     use crate::cli::output::*;
     use crate::config::{GuardyConfig, ConfigFormat};
     
@@ -44,7 +44,7 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()
             styled!("Loading merged configuration in {} format...", 
                 (&format, "property")
             );
-            let config = GuardyConfig::load(custom_config, None::<&()>)?;
+            let config = GuardyConfig::load(custom_config, None::<&()>, verbosity_level)?;
             
             let format_enum = match format.to_lowercase().as_str() {
                 "json" => ConfigFormat::Json,
@@ -70,7 +70,7 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()
             styled!("Getting configuration key: {}", 
                 (&key, "property")
             );
-            let config = GuardyConfig::load(custom_config, None::<&()>)?;
+            let config = GuardyConfig::load(custom_config, None::<&()>, verbosity_level)?;
             
             // First try to get as a section/object
             if let Ok(section_val) = config.get_section(&key) {
@@ -109,7 +109,7 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>) -> Result<()
             styled!("Validating {} configuration...", 
                 ("guardy", "primary")
             );
-            let _config = GuardyConfig::load(None, None::<&()>)?;  // This will fail if config is invalid
+            let _config = GuardyConfig::load(None, None::<&()>, verbosity_level)?;  // This will fail if config is invalid
             styled!("{} Configuration is valid!", 
                 ("✅", "success_symbol")
             );

@@ -12,7 +12,7 @@ pub struct InstallArgs {
     pub force: bool,
 }
 
-pub async fn execute(args: InstallArgs) -> Result<()> {
+pub async fn execute(args: InstallArgs, verbosity_level: u8) -> Result<()> {
     use crate::cli::output::*;
     use crate::git::GitRepo;
     use crate::config::GuardyConfig;
@@ -39,7 +39,7 @@ pub async fn execute(args: InstallArgs) -> Result<()> {
     }
     
     // Parse guardy.toml configuration
-    let _config = GuardyConfig::load(None, None::<&()>)?;
+    let _config = GuardyConfig::load(None, None::<&()>, verbosity_level)?;
     
     if args.force {
         warning!("Force mode enabled - will overwrite existing hooks");

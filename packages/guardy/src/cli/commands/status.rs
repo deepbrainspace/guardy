@@ -6,7 +6,7 @@ pub struct StatusArgs {
     // Add status-specific options here
 }
 
-pub async fn execute(_args: StatusArgs) -> Result<()> {
+pub async fn execute(_args: StatusArgs, verbosity_level: u8) -> Result<()> {
     use crate::cli::output::*;
     use crate::git::GitRepo;
     use crate::config::GuardyConfig;
@@ -38,7 +38,7 @@ pub async fn execute(_args: StatusArgs) -> Result<()> {
     };
     
     // Check configuration
-    match GuardyConfig::load(None, None::<&()>) {
+    match GuardyConfig::load(None, None::<&()>, verbosity_level) {
         Ok(config) => {
             styled!("{} Configuration loaded", 
                 ("✅", "success_symbol")
