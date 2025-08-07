@@ -113,7 +113,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     });
     
     // Load configuration with CLI overrides
-    let config = GuardyConfig::load(config_path, Some(scanner_overrides))?;
+    let config = GuardyConfig::load(config_path, Some(scanner_overrides), verbose_level)?;
     
     // Load patterns and add custom ones
     let mut patterns = SecretPatterns::new(&config)?;

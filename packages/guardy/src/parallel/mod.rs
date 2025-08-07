@@ -24,7 +24,7 @@
 //! ```text
 //! ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 //! │   Client        │    │   Parallel       │    │   System        │
-//! │   (Scanner)     │───▶│   Module         │───▶│   Resources     │
+//! │   (Scanner)     │──▶│   Module         │───▶│   Resources     │
 //! │                 │    │                  │    │                 │
 //! │ • File counts   │    │ • CPU cores      │    │ • Hardware      │
 //! │ • Domain logic  │    │ • Thread mgmt    │    │ • OS limits     │

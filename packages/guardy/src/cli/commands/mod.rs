@@ -73,8 +73,8 @@ impl Cli {
         setup_logging(self.verbose, self.quiet);
 
         match self.command {
-            Some(Commands::Install(args)) => install::execute(args).await,
-            Some(Commands::Run(args)) => run::execute(args).await,
+            Some(Commands::Install(args)) => install::execute(args, self.verbose).await,
+            Some(Commands::Run(args)) => run::execute(args, self.verbose).await,
             Some(Commands::Scan(args)) => {
                 use crate::cli::output;
                 output::styled!("{}: CLI config path: {}", 
@@ -83,15 +83,15 @@ impl Cli {
                 );
                 scan::execute(args, self.verbose, self.config.as_deref()).await
             },
-            Some(Commands::Config(args)) => config::execute(args, self.config.as_deref()).await,
-            Some(Commands::Status(args)) => status::execute(args).await,
+            Some(Commands::Config(args)) => config::execute(args, self.config.as_deref(), self.verbose).await,
+            Some(Commands::Status(args)) => status::execute(args, self.verbose).await,
             Some(Commands::Uninstall(args)) => uninstall::execute(args).await,
             Some(Commands::Mcp(args)) => mcp::execute(args).await,
             Some(Commands::Version(args)) => version::execute(args).await,
             None => {
                 // Default behavior - show status if in git repo, otherwise show help
                 if crate::git::GitRepo::discover().is_ok() {
-                    status::execute(status::StatusArgs::default()).await
+                    status::execute(status::StatusArgs::default(), self.verbose).await
                 } else {
                     // TODO: Implement proper help display using clap's help system
                     println!("Run 'guardy --help' for usage information");
