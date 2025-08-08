@@ -263,9 +263,18 @@ mod tests {
 
     #[test]
     fn test_protection_manager_new() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        
+        // Change to temp directory to avoid existing .guardy files
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
         let config = ProtectionConfig::default();
         let manager = ProtectionManager::new(config).unwrap();
         assert!(manager.protected_files.is_empty());
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
@@ -338,7 +347,7 @@ mod tests {
         let config = ProtectionConfig::default();
         let manager = ProtectionManager::new(config).unwrap();
         
-        let backed_up = manager.backup_before_sync(&[test_file.clone()]).unwrap();
+        let backed_up = manager.backup_before_sync(std::slice::from_ref(&test_file)).unwrap();
         assert!(!backed_up.is_empty());
         
         // Check backup file exists

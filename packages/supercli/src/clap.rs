@@ -30,7 +30,6 @@ use starbase_styles::color::{Style as StarbaseStyle};
 ///     // ... your fields
 /// }
 /// ```
-#[cfg(feature = "clap")]
 /// Create help styles with custom app prefix for environment variables
 #[cfg(feature = "clap")]
 pub fn create_help_styles_with_prefix(app_prefix: &str) -> Styles {
@@ -68,8 +67,12 @@ pub fn create_help_styles_with_prefix(app_prefix: &str) -> Styles {
                 .error(Style::new().bold())            // Bold errors
                 // literal, placeholder, valid, invalid remain default (no special styling)
         },
-        "none" | _ => {
+        "none" => {
             // Completely plain text
+            Styles::default()
+        }
+        _ => {
+            // Default fallback - completely plain text
             Styles::default()
         }
     }
@@ -122,12 +125,8 @@ pub fn get_output_style_with_prefix(app_prefix: &str) -> &'static str {
             "color"
         }
     }
-    // Check FORCE_COLOR
-    else if std::env::var("FORCE_COLOR").is_ok() {
-        "color"
-    }
-    // Check if we're in a terminal
-    else if atty::is(atty::Stream::Stdout) {
+    // Check FORCE_COLOR or if we're in a terminal
+    else if std::env::var("FORCE_COLOR").is_ok() || atty::is(atty::Stream::Stdout) {
         "color"
     } else {
         "none"

@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -24,9 +23,6 @@ impl ScanningStats {
         self.skipped.fetch_add(1, Ordering::Relaxed);
     }
     
-    pub fn increment_binary(&self) {
-        self.binary.fetch_add(1, Ordering::Relaxed);
-    }
     
     pub fn get_counts(&self) -> (usize, usize, usize) {
         (
@@ -35,12 +31,6 @@ impl ScanningStats {
             self.binary.load(Ordering::Relaxed),
         )
     }
-}
-
-/// Progress reporting strategies for parallel execution
-pub trait ProgressReporter: Send + Sync {
-    fn report(&self, current: usize, total: usize, worker_id: usize);
-    fn clear(&self);
 }
 
 /// Enhanced progress reporter with live statistics using indicatif
@@ -60,7 +50,7 @@ impl StatisticsProgressReporter {
         let multi_progress = MultiProgress::new();
         
         let style = ProgressStyle::with_template(
-            "🔍 [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} files {spinner}"
+            "🔍 [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} files {spinner} {msg}"
         )
         .unwrap()
         .progress_chars("█▉▊▋▌▍▎▏  ")
@@ -75,7 +65,7 @@ impl StatisticsProgressReporter {
             overall_bar: Some(main_bar),
             worker_bars: Vec::new(),
             stats: Arc::new(ScanningStats::new()),
-            update_frequency: 10, // Update every 10 files for smooth animation
+            update_frequency: 100, // Update every 100 files to reduce spam
             is_parallel: false,
         }
     }
@@ -107,7 +97,7 @@ impl StatisticsProgressReporter {
         
         // Overall progress bar
         let overall_style = ProgressStyle::with_template(
-            "Overall:   [{elapsed_precise}] {bar:40.bright_white/dim} {pos:>7}/{len:7} files ({percent}%)"
+            "Overall:   [{elapsed_precise}] {bar:40.bright_white/dim} {pos:>7}/{len:7} files ({percent}%) {msg}"
         )
         .unwrap()
         .progress_chars("█▉▊▋▌▍▎▏  ");
@@ -120,7 +110,7 @@ impl StatisticsProgressReporter {
             overall_bar: Some(overall_bar),
             worker_bars,
             stats: Arc::new(ScanningStats::new()),
-            update_frequency: 5, // More frequent updates for parallel (smoother)
+            update_frequency: 100, // Update every 100 files to reduce spam
             is_parallel: true,
         }
     }
@@ -137,42 +127,30 @@ impl StatisticsProgressReporter {
             } else {
                 file_path.to_string()
             };
-            worker_bar.set_message(format!("📄 {}", display_path));
+            worker_bar.set_message(format!("📄 {display_path}"));
         }
     }
     
-    /// Mark worker as complete
-    pub fn finish_worker(&self, worker_id: usize) {
-        if let Some(worker_bar) = self.worker_bars.get(worker_id) {
-            worker_bar.finish_with_message("✓ Complete");
-        }
-    }
     
     /// Update overall progress and statistics display
     pub fn update_overall(&self, completed: usize, total: usize) {
         if let Some(ref overall_bar) = self.overall_bar {
             overall_bar.set_position(completed as u64);
-        }
-        
-        // Update statistics display using println (appears above progress bars)
-        let (scanned, skipped, binary) = self.stats.get_counts();
-        let active_workers = if self.is_parallel {
-            self.worker_bars.iter().filter(|bar| !bar.is_finished()).count()
-        } else {
-            0
-        };
-        
-        let stats_msg = if self.is_parallel {
-            format!("📊 Scanned: {} | Skipped: {} | Binary: {} | Active: {} threads", 
-                   scanned, skipped, binary, active_workers)
-        } else {
-            format!("📊 Scanned: {} | Skipped: {} | Binary: {}", 
-                   scanned, skipped, binary)
-        };
-        
-        // Use println to show stats above progress bars (only every N updates to avoid spam)
-        if completed % (self.update_frequency * 5) == 0 || completed == total {
-            let _ = self.multi_progress.println(stats_msg);
+            
+            // Update statistics in the progress bar message instead of printing
+            let (scanned, skipped, _binary) = self.stats.get_counts();
+            
+            // Only update message every few files to reduce flicker
+            if completed % self.update_frequency == 0 || completed == total {
+                let stats_msg = if self.is_parallel {
+                    let active_workers = self.worker_bars.iter().filter(|bar| !bar.is_finished()).count();
+                    format!("📊 Scanned: {scanned} | Skipped: {skipped} | Active: {active_workers}")
+                } else {
+                    format!("📊 Scanned: {scanned} | Skipped: {skipped}")
+                };
+                
+                overall_bar.set_message(stats_msg);
+            }
         }
     }
     
@@ -181,90 +159,28 @@ impl StatisticsProgressReporter {
         self.stats.clone()
     }
     
-    /// Clear all progress bars
+    /// Finish all progress bars properly
     pub fn finish(&self) {
+        // Finish all worker bars
+        for worker_bar in &self.worker_bars {
+            worker_bar.finish();
+        }
+        
+        // Finish overall bar
+        if let Some(ref overall_bar) = self.overall_bar {
+            overall_bar.finish();
+        }
+        
+        // Clear the multi-progress display
         let _ = self.multi_progress.clear();
     }
 }
-
-/// Console progress reporter with configurable display
-#[derive(Clone)]
-pub struct ConsoleProgressReporter {
-    show_worker_id: bool,
-    update_frequency: usize,
-    progress_icon: &'static str,
-    item_name: String,
-}
-
-impl ConsoleProgressReporter {
-    pub fn new(item_name: &str) -> Self {
-        Self {
-            show_worker_id: false,
-            update_frequency: 5,
-            progress_icon: "⏳",
-            item_name: item_name.to_string(),
-        }
-    }
-
-    pub fn with_worker_id(mut self) -> Self {
-        self.show_worker_id = true;
-        self.progress_icon = "⚡";
-        self
-    }
-
-    pub fn with_frequency(mut self, frequency: usize) -> Self {
-        self.update_frequency = frequency;
-        self
-    }
-
-    pub fn with_icon(mut self, icon: &'static str) -> Self {
-        self.progress_icon = icon;
-        self
-    }
-}
-
-impl ProgressReporter for ConsoleProgressReporter {
-    fn report(&self, current: usize, total: usize, worker_id: usize) {
-        // Only report at specified frequency to reduce console spam
-        if current % self.update_frequency == 0 || current == total {
-            let percentage = current as f64 / total as f64 * 100.0;
-            
-            if self.show_worker_id {
-                print!("\r{} Progress: {}/{} {} ({:.1}%) [worker-{}]", 
-                       self.progress_icon, current, total, self.item_name, percentage, worker_id);
-            } else {
-                print!("\r{} Progress: {}/{} {} ({:.1}%)", 
-                       self.progress_icon, current, total, self.item_name, percentage);
-            }
-            
-            std::io::stdout().flush().ok();
-        }
-    }
-
-    fn clear(&self) {
-        print!("\r");
-        std::io::stdout().flush().ok();
-    }
-}
-
 
 
 /// Factory functions for common progress reporters
 pub mod factories {
     use super::*;
 
-    /// Create a parallel progress reporter for any type of items (legacy)
-    pub fn parallel_reporter(item_name: &str) -> ConsoleProgressReporter {
-        ConsoleProgressReporter::new(item_name)
-            .with_worker_id()
-            .with_frequency(5)
-    }
-
-    /// Create a sequential progress reporter for any type of items (legacy)
-    pub fn sequential_reporter(item_name: &str) -> ConsoleProgressReporter {
-        ConsoleProgressReporter::new(item_name)
-            .with_frequency(5)
-    }
 
     /// Create an enhanced statistics progress reporter for sequential scanning
     pub fn enhanced_sequential_reporter(total_files: usize) -> StatisticsProgressReporter {
@@ -282,29 +198,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_console_progress_reporter() {
-        let reporter = ConsoleProgressReporter::new("items");
+    fn test_statistics_progress_reporter_sequential() {
+        let reporter = StatisticsProgressReporter::sequential(100);
         
-        // This test mainly ensures the reporter doesn't panic
-        reporter.report(5, 10, 0);
-        reporter.clear();
+        // Test basic functionality
+        reporter.update_overall(50, 100);
+        reporter.finish();
     }
 
     #[test]
-    fn test_console_progress_reporter_with_options() {
-        let reporter = ConsoleProgressReporter::new("files")
-            .with_worker_id()
-            .with_frequency(10)
-            .with_icon("🔍");
+    fn test_statistics_progress_reporter_parallel() {
+        let reporter = StatisticsProgressReporter::parallel(100, 4);
         
-        // This test mainly ensures the reporter doesn't panic
-        reporter.report(10, 100, 1);
-        reporter.clear();
+        // Test worker updates
+        reporter.update_worker_file(0, "/test/file.rs", 25, 50);
+        reporter.update_overall(50, 100);
+        reporter.finish();
     }
 
     #[test]
     fn test_factory_functions() {
-        let _parallel = factories::parallel_reporter("tasks");
-        let _sequential = factories::sequential_reporter("items");
+        let _sequential = factories::enhanced_sequential_reporter(100);
+        let _parallel = factories::enhanced_parallel_reporter(100, 4);
     }
 }
