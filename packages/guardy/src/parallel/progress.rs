@@ -97,6 +97,11 @@ pub mod factories {
             .with_frequency(5)
     }
 
+    /// Create a no-op progress reporter for quiet operations
+    pub fn quiet_reporter() -> NoOpProgressReporter {
+        NoOpProgressReporter
+    }
+
 }
 
 #[cfg(test)]

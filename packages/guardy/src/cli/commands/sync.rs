@@ -127,5 +127,9 @@ fn create_sync_manager(config_path: Option<&str>) -> Result<SyncManager> {
     let config = GuardyConfig::load::<()>(config_path, None, 0)
         .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
     
-    SyncManager::new(&config)
+    // Extract sync config using the proper parsing method
+    let sync_config = SyncManager::parse_sync_config(&config)?;
+    
+    // Create sync manager with parsed config
+    SyncManager::with_config(sync_config)
 }
