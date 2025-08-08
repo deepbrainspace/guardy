@@ -59,7 +59,7 @@ pub struct SecretPattern {
 /// use guardy::config::GuardyConfig;
 /// 
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let config = GuardyConfig::load(None, None::<&()>)?;
+/// let config = GuardyConfig::load(None, None::<&()>, 0)?;
 /// let patterns = SecretPatterns::new(&config)?;
 /// println!("Loaded {} secret detection patterns", patterns.pattern_count());
 /// # Ok(())
@@ -92,7 +92,7 @@ impl SecretPatterns {
     /// use guardy::config::GuardyConfig;
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let config = GuardyConfig::load(None, None::<&()>)?;
+    /// let config = GuardyConfig::load(None, None::<&()>, 0)?;
     /// let patterns = SecretPatterns::new(&config)?;
     /// println!("Ready to scan with {} patterns", patterns.pattern_count());
     /// # Ok(())
@@ -435,7 +435,7 @@ impl SecretPatterns {
     /// use guardy::config::GuardyConfig;
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let config = GuardyConfig::load(None, None::<&()>)?;
+    /// let config = GuardyConfig::load(None, None::<&()>, 0)?;
     /// let patterns = SecretPatterns::new(&config)?;
     /// println!("Scanner has {} patterns loaded", patterns.pattern_count());
     /// # Ok(())

@@ -355,11 +355,28 @@ fn print_text_results(
         (matches.len().to_string(), "caution")
     );
     
-    // Print warnings from scan results
+    // Print warnings from scan results in a contained format
     if !warnings.is_empty() {
         println!();
-        for warning in warnings {
-            output::warning!(&warning.message);
+        output::styled!("{} {}", 
+            ("⚠️", "warning_symbol"),
+            (format!("Warnings ({})", warnings.len()), "warning")
+        );
+        
+        // Limit warning display to prevent excessive scrolling
+        let max_warnings_to_show = 5;
+        let warnings_to_show = warnings.iter().take(max_warnings_to_show);
+        
+        for warning in warnings_to_show {
+            output::styled!("   {}",
+                (warning.message.as_str(), "warning")
+            );
+        }
+        
+        if warnings.len() > max_warnings_to_show {
+            output::styled!("   {} more warnings...",
+                (format!("({} more warnings not shown)", warnings.len() - max_warnings_to_show), "dim")
+            );
         }
     }
     
