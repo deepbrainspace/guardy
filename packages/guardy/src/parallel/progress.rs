@@ -42,6 +42,7 @@ pub struct StatisticsProgressReporter {
     stats: Arc<ScanningStats>,
     update_frequency: usize,
     pub is_parallel: bool,
+    worker_counts: Arc<Vec<AtomicUsize>>, // Per-worker file counts
 }
 
 impl StatisticsProgressReporter {
@@ -67,6 +68,7 @@ impl StatisticsProgressReporter {
             stats: Arc::new(ScanningStats::new()),
             update_frequency: 100, // Update every 100 files to reduce spam
             is_parallel: false,
+            worker_counts: Arc::new(Vec::new()),
         }
     }
     
@@ -89,7 +91,8 @@ impl StatisticsProgressReporter {
             .progress_chars("█▉▊▋▌▍▎▏  ")
             .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
             
-            let worker_bar = multi_progress.add(ProgressBar::new(0)); // Will be set when files are assigned
+            let estimated_per_worker = total_files / worker_count + 1;
+            let worker_bar = multi_progress.add(ProgressBar::new(estimated_per_worker as u64));
             worker_bar.set_style(style);
             worker_bar.enable_steady_tick(std::time::Duration::from_millis(120)); // Slightly different timing for visual variety
             worker_bars.push(worker_bar);
@@ -105,6 +108,11 @@ impl StatisticsProgressReporter {
         let overall_bar = multi_progress.add(ProgressBar::new(total_files as u64));
         overall_bar.set_style(overall_style);
         
+        // Initialize per-worker counters
+        let worker_counts: Vec<AtomicUsize> = (0..worker_count)
+            .map(|_| AtomicUsize::new(0))
+            .collect();
+        
         Self {
             multi_progress,
             overall_bar: Some(overall_bar),
@@ -112,14 +120,18 @@ impl StatisticsProgressReporter {
             stats: Arc::new(ScanningStats::new()),
             update_frequency: 100, // Update every 100 files to reduce spam
             is_parallel: true,
+            worker_counts: Arc::new(worker_counts),
         }
     }
     
     /// Update worker bar with current file being processed
-    pub fn update_worker_file(&self, worker_id: usize, file_path: &str, progress: usize, total: usize) {
+    pub fn update_worker_file(&self, worker_id: usize, file_path: &str) {
         if let Some(worker_bar) = self.worker_bars.get(worker_id) {
-            worker_bar.set_length(total as u64);
-            worker_bar.set_position(progress as u64);
+            // Increment this worker's file count
+            if let Some(worker_count) = self.worker_counts.get(worker_id) {
+                let current_count = worker_count.fetch_add(1, Ordering::Relaxed) + 1;
+                worker_bar.set_position(current_count as u64);
+            }
             
             // Show current file being scanned (truncate if too long)
             let display_path = if file_path.len() > 40 {
@@ -211,7 +223,7 @@ mod tests {
         let reporter = StatisticsProgressReporter::parallel(100, 4);
         
         // Test worker updates
-        reporter.update_worker_file(0, "/test/file.rs", 25, 50);
+        reporter.update_worker_file(0, "/test/file.rs");
         reporter.update_overall(50, 100);
         reporter.finish();
     }

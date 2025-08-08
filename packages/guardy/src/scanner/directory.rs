@@ -361,7 +361,7 @@ impl DirectoryHandler {
     /// use guardy::config::GuardyConfig;
     /// 
     /// # fn example() -> anyhow::Result<()> {
-    /// let config = GuardyConfig::load(None, None::<&()>)?;
+    /// let config = GuardyConfig::load(None, None::<&()>, 0)?;
     /// let scanner = Scanner::new(&config)?;
     /// let directory_handler = DirectoryHandler::new();
     /// let result = directory_handler.scan(
@@ -492,7 +492,7 @@ impl DirectoryHandler {
                     // Update worker progress with current file info
                     if progress.is_parallel && worker_id < progress.worker_bars.len() {
                         // We'd need access to current file path here - will enhance this
-                        progress.update_worker_file(worker_id, "scanning...", current, total);
+                        progress.update_worker_file(worker_id, "scanning...");
                     }
                     
                     // Update overall progress
