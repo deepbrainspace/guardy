@@ -87,8 +87,8 @@ impl StatisticsProgressReporter {
         let multi_progress = MultiProgress::new();
         let mut worker_bars = Vec::new();
         
-        // Colors for different workers
-        let worker_colors = ["cyan/blue", "green/yellow", "magenta/red", "yellow/blue"];
+        // Professional color scheme for different workers with background colors
+        let worker_colors = ["cyan/blue", "green/yellow", "magenta/red", "yellow/cyan"];
         
         // Estimate files per worker for progress bar lengths
         let estimated_files_per_worker = (total_files + worker_count - 1) / worker_count; // Round up division
@@ -112,7 +112,7 @@ impl StatisticsProgressReporter {
         
         // Overall progress bar
         let overall_style = ProgressStyle::with_template(
-            "Overall:   [{elapsed_precise}] {bar:40.bright_white/dim} {pos:>7}/{len:7} files ({percent}%) {msg}"
+            "Overall:\n[{elapsed_precise}] {bar:40.bright_white/dim} {pos:>7}/{len:7} files ({percent}%)\n{msg}"
         )
         .unwrap()
         .progress_chars("█▉▊▋▌▍▎▏  ");
