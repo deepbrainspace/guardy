@@ -10,6 +10,7 @@ pub mod status;
 pub mod mcp;
 pub mod uninstall;
 pub mod version;
+pub mod sync;
 
 #[derive(Parser)]
 #[command(
@@ -57,6 +58,8 @@ pub enum Commands {
     Uninstall(uninstall::UninstallArgs),
     /// MCP (Model Context Protocol) server management
     Mcp(mcp::McpArgs),
+    /// Protected file synchronization
+    Sync(sync::SyncArgs),
     /// Show version information
     Version(version::VersionArgs),
 }
@@ -87,6 +90,7 @@ impl Cli {
             Some(Commands::Status(args)) => status::execute(args, self.verbose).await,
             Some(Commands::Uninstall(args)) => uninstall::execute(args).await,
             Some(Commands::Mcp(args)) => mcp::execute(args).await,
+            Some(Commands::Sync(args)) => sync::execute(args, self.config.as_deref()).await,
             Some(Commands::Version(args)) => version::execute(args).await,
             None => {
                 // Default behavior - show status if in git repo, otherwise show help
