@@ -85,15 +85,15 @@ impl StatisticsProgressReporter {
         for worker_id in 0..worker_count {
             let color = worker_colors[worker_id % worker_colors.len()];
             let style = ProgressStyle::with_template(
-                &format!("[Worker {}] [{{elapsed_precise}}] {{bar:40.{}}} {{pos:>7}}/{{len:7}} {{spinner}} {{msg}}", 
+                &format!("[Worker {}] [{{elapsed_precise}}] {{bar:40.{}}} {{pos:>7}} files {{spinner}} {{msg}}", 
                         worker_id + 1, color)
             )
             .unwrap()
             .progress_chars("█▉▊▋▌▍▎▏  ")
             .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
             
-            let estimated_per_worker = total_files / worker_count + 1;
-            let worker_bar = multi_progress.add(ProgressBar::new(estimated_per_worker as u64));
+            // Set a high length that we'll never reach so bar shows progress without misleading fractions
+            let worker_bar = multi_progress.add(ProgressBar::new(u64::MAX));
             worker_bar.set_style(style);
             worker_bar.enable_steady_tick(std::time::Duration::from_millis(120)); // Slightly different timing for visual variety
             worker_bars.push(worker_bar);

@@ -431,7 +431,7 @@ impl DirectoryHandler {
         analysis.display();
 
         // Collect all file paths using unified walker logic, filtering binary files
-        let (file_paths, binary_stats) = self.collect_file_paths(&scanner, path, &mut warnings)?;
+        let file_paths = self.collect_file_paths(&scanner, path, &mut warnings)?;
         
         // Create enhanced progress reporter based on strategy
         let enhanced_progress = match &execution_strategy {
@@ -533,23 +533,7 @@ impl DirectoryHandler {
             scan_duration_ms: scan_duration.as_millis() as u64,
         };
 
-        // Show binary file skip summary if any were skipped
-        if !binary_stats.is_empty() {
-            let total_binary_files: usize = binary_stats.values().sum();
-            
-            // Sort extensions by count (descending) for better display
-            let mut sorted_extensions: Vec<_> = binary_stats.into_iter().collect();
-            sorted_extensions.sort_by(|a, b| b.1.cmp(&a.1));
-            
-            output::styled!("{} Skipped {} binary files: {}", 
-                ("📁", "info_symbol"),
-                (total_binary_files.to_string(), "number"),
-                (sorted_extensions.iter()
-                    .map(|(ext, count)| format!("{} {}", count, ext.to_uppercase()))
-                    .collect::<Vec<_>>()
-                    .join(", "), "muted")
-            );
-        }
+        // Binary files are tracked internally but not displayed to users
 
         // Show timing summary
         let (summary_icon, mode_info) = match &execution_strategy {
@@ -574,10 +558,9 @@ impl DirectoryHandler {
 
     /// Collect file paths from directory walker (shared by both modes)
     /// Returns (file_paths, binary_stats) where binary_stats is a map of extension -> count
-    fn collect_file_paths(&self, scanner: &Arc<Scanner>, path: &Path, warnings: &mut Vec<Warning>) -> Result<(Vec<PathBuf>, std::collections::HashMap<String, usize>)> {
+    fn collect_file_paths(&self, scanner: &Arc<Scanner>, path: &Path, warnings: &mut Vec<Warning>) -> Result<Vec<PathBuf>> {
         let walker = scanner.build_directory_walker(path).build();
         let mut file_paths = Vec::new();
-        let mut binary_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
         for entry in walker {
             match entry {
@@ -587,17 +570,6 @@ impl DirectoryHandler {
                         
                         // Check if this is a binary file that should be skipped (unless include_binary is enabled)
                         if !scanner.config.include_binary && is_binary_file(file_path, &scanner.config.binary_extensions) {
-                            // Track binary file statistics by extension or file type
-                            let file_type = if let Some(extension) = file_path.extension() {
-                                if let Some(ext_str) = extension.to_str() {
-                                    ext_str.to_lowercase()
-                                } else {
-                                    "unknown".to_string()
-                                }
-                            } else {
-                                "no-extension".to_string()
-                            };
-                            *binary_stats.entry(file_type).or_insert(0) += 1;
                             continue; // Skip binary files
                         }
                         
@@ -612,7 +584,7 @@ impl DirectoryHandler {
             }
         }
 
-        Ok((file_paths, binary_stats))
+        Ok(file_paths)
     }
 
     /// Analyze directories in the given path and return analysis results

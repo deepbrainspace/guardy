@@ -120,6 +120,7 @@ impl Default for ScannerConfig {
                 "zip".to_string(), "tar".to_string(), "gz".to_string(), "bz2".to_string(),
                 "xz".to_string(), "7z".to_string(), "rar".to_string(), "dmg".to_string(), "iso".to_string(),
                 "ace".to_string(), "cab".to_string(), "lzh".to_string(), "arj".to_string(),
+                "br".to_string(), "zst".to_string(), "lz4".to_string(), "lzo".to_string(), "lzma".to_string(),
                 // Executables & Object Files
                 "exe".to_string(), "dll".to_string(), "so".to_string(), "dylib".to_string(),
                 "bin".to_string(), "app".to_string(), "deb".to_string(), "rpm".to_string(),
@@ -158,6 +159,12 @@ impl Default for ScannerConfig {
                 // Specialized formats that are definitely binary
                 "bas".to_string(), "pic".to_string(), "b".to_string(), "mcw".to_string(),
                 "ind".to_string(), "dsk".to_string(), "z".to_string(),
+                // Test data and specialized formats that often cause UTF-8 issues
+                "gdiff".to_string(), "srt".to_string(), "zeno".to_string(), "cba".to_string(),
+                "parquet".to_string(), "avro".to_string(), "orc".to_string(),
+                // Additional problematic formats discovered in scans
+                "pak".to_string(), "rpak".to_string(), "webc".to_string(), "toast".to_string(),
+                "data".to_string(), // Generic data files often binary
             ],
             ignore_comments: vec![
                 "guardy:ignore".to_string(),
