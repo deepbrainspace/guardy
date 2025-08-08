@@ -1,4 +1,5 @@
 pub mod operations;
+pub mod remote;
 // TODO: Add hooks module for hook installation/management
 // TODO: Add commit module for commit operations
 
