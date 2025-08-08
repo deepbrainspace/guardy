@@ -10,3 +10,4 @@ pub mod mcp;
 pub mod shared;
 pub mod sync;
 pub mod parallel;
+pub mod reports;

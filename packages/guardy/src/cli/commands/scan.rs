@@ -247,10 +247,13 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         return Ok(());
     }
     
+    // Collect all warnings for all output formats
+    let all_warnings: Vec<_> = all_scan_results.iter().flat_map(|r| r.warnings.iter()).collect();
+    
     // Handle different output formats
     match args.format {
         OutputFormat::Json => {
-            print_json_results(&all_matches, total_files, total_skipped, elapsed)?;
+            print_json_results(&all_matches, total_files, total_skipped, elapsed, &all_warnings)?;
         }
         OutputFormat::Csv => {
             print_csv_results(&all_matches)?;
@@ -259,7 +262,6 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             print_files_only(&all_matches);
         }
         OutputFormat::Text => {
-            let all_warnings: Vec<_> = all_scan_results.iter().flat_map(|r| r.warnings.iter()).collect();
             print_text_results(&all_matches, total_files, total_skipped, elapsed, &args, verbose_level, &all_warnings)?;
         }
     }
@@ -317,28 +319,94 @@ fn print_text_results(
         return Ok(());
     }
 
-    println!();
-    for secret_match in matches {
-        output::styled!(
-            "{} {} {}",
+    // Check if we should generate a report file instead of terminal output
+    if matches.len() > 20 || warnings.len() > 20 {
+        use crate::reports::{ReportGenerator, ReportFormat};
+        
+        let current_dir = std::env::current_dir()?;
+        let report_path = ReportGenerator::generate_report(
+            matches, warnings, total_files, total_skipped, elapsed, 
+            &current_dir, ReportFormat::Html
+        )?;
+        
+        println!();
+        output::styled!("{} Found {} secrets and {} warnings (too many to display)", 
+            ("📊", "info_symbol"),
+            (matches.len().to_string(), "caution"),
+            (warnings.len().to_string(), "warning")
+        );
+        println!();
+        output::styled!("{} Full report saved to: file://{}", 
             ("📄", "info_symbol"),
-            (format!("{}:{}", secret_match.file_path, secret_match.line_number), "file_path"),
-            (format!("[{}]", secret_match.secret_type), "id_value")
+            (report_path.canonicalize()?.display().to_string(), "file_path")
+        );
+        output::styled!("{} Click the link above to open in your browser", 
+            ("💡", "info_symbol")
         );
         
-        if verbose_level > 0 {
+        // Also save JSON for machine processing
+        let json_path = ReportGenerator::generate_report(
+            matches, warnings, total_files, total_skipped, elapsed,
+            &current_dir, ReportFormat::Json
+        )?;
+        output::styled!("{} Machine-readable: {}", 
+            ("🤖", "info_symbol"),
+            (json_path.file_name().unwrap().to_string_lossy(), "file_path")
+        );
+        
+        return Ok(());
+    }
+    
+    // Group matches by file for more concise display
+    let grouped_matches = group_matches_by_file(matches);
+    
+    println!();
+    for (file_path, file_matches) in &grouped_matches {
+        // Show file with count of secrets
+        if file_matches.len() == 1 {
+            output::styled!(
+                "{} {} {}",
+                ("📄", "info_symbol"),
+                (format!("{}:{}", file_path, file_matches[0].line_number), "file_path"),
+                (format!("[{}]", file_matches[0].secret_type), "id_value")
+            );
+        } else {
+            output::styled!(
+                "{} {} {}",
+                ("📄", "info_symbol"),
+                (file_path.clone(), "file_path"),
+                (format!("[{} secrets found]", file_matches.len()), "id_value")
+            );
+            
+            // Show individual lines for this file
+            for secret_match in file_matches {
+                output::styled!(
+                    "   Line {}: {}",
+                    (secret_match.line_number.to_string(), "number"),
+                    (format!("[{}]", secret_match.secret_type), "id_value")
+                );
+            }
+        }
+        
+        if verbose_level > 0 && !file_matches.is_empty() {
             output::styled!("  📋 {}", 
-                (secret_match.pattern_description.clone(), "symbol")
+                (file_matches[0].pattern_description.clone(), "symbol")
             );
         }
         
         if args.show_content || verbose_level > 0 {
-            output::styled!("  Content: {}", 
-                (secret_match.line_content.trim(), "symbol")
-            );
-            if !secret_match.matched_text.is_empty() {
-                output::styled!("  Matched: {}", 
-                    (secret_match.matched_text.clone(), "hash_value")
+            if file_matches.len() == 1 {
+                output::styled!("  Content: {}", 
+                    (file_matches[0].line_content.trim(), "symbol")
+                );
+                if !file_matches[0].matched_text.is_empty() {
+                    output::styled!("  Matched: {}", 
+                        (file_matches[0].matched_text.clone(), "hash_value")
+                    );
+                }
+            } else {
+                output::styled!("  {}", 
+                    (format!("{} lines with secrets - use report for details", file_matches.len()), "symbol")
                 );
             }
         } else {
@@ -355,27 +423,37 @@ fn print_text_results(
         (matches.len().to_string(), "caution")
     );
     
-    // Print warnings from scan results in a contained format
+    // Print compact warnings summary
     if !warnings.is_empty() {
         println!();
         output::styled!("{} {}", 
             ("⚠️", "warning_symbol"),
-            (format!("Warnings ({})", warnings.len()), "warning")
+            (format!("Scan completed with {} warnings", warnings.len()), "warning")
         );
         
-        // Limit warning display to prevent excessive scrolling
-        let max_warnings_to_show = 5;
-        let warnings_to_show = warnings.iter().take(max_warnings_to_show);
-        
-        for warning in warnings_to_show {
-            output::styled!("   {}",
-                (warning.message.as_str(), "warning")
+        if warnings.len() <= 5 {
+            // Show all warnings if 5 or fewer
+            for warning in warnings {
+                output::styled!("   • {}",
+                    (warning.message.as_str(), "dim")
+                );
+            }
+        } else {
+            // Show first 2 warnings and a summary
+            for warning in warnings.iter().take(2) {
+                output::styled!("   • {}",
+                    (warning.message.as_str(), "dim")
+                );
+            }
+            
+            println!();
+            output::styled!("   {} {}",
+                ("📝", "info_symbol"),
+                (format!("Run with --output json > warnings.json to save all {} warnings", warnings.len()), "info")
             );
-        }
-        
-        if warnings.len() > max_warnings_to_show {
-            output::styled!("   {} more warnings...",
-                (format!("({} more warnings not shown)", warnings.len() - max_warnings_to_show), "dim")
+            output::styled!("   {} {}",
+                ("🔍", "info_symbol"), 
+                ("Or add --verbose for detailed warning display", "info")
             );
         }
     }
@@ -415,7 +493,8 @@ fn print_json_results(
     matches: &[&crate::scanner::types::SecretMatch], 
     total_files: usize, 
     total_skipped: usize, 
-    elapsed: std::time::Duration
+    elapsed: std::time::Duration,
+    warnings: &[&crate::scanner::types::Warning]
 ) -> Result<()> {
     use serde_json::json;
     
@@ -429,10 +508,14 @@ fn print_json_results(
             "start_pos": m.start_pos,
             "end_pos": m.end_pos
         })).collect::<Vec<_>>(),
+        "warnings": warnings.iter().map(|w| json!({
+            "message": w.message
+        })).collect::<Vec<_>>(),
         "statistics": {
             "files_scanned": total_files,
             "files_skipped": total_skipped,
             "secrets_found": matches.len(),
+            "warnings_count": warnings.len(),
             "scan_duration_ms": elapsed.as_millis()
         }
     });
@@ -464,5 +547,21 @@ fn print_files_only(matches: &[&crate::scanner::types::SecretMatch]) {
     for file in files {
         println!("{file}");
     }
+}
+
+/// Group secret matches by file path for more concise display
+fn group_matches_by_file<'a>(matches: &'a [&'a crate::scanner::types::SecretMatch]) -> Vec<(String, Vec<&'a crate::scanner::types::SecretMatch>)> {
+    use std::collections::HashMap;
+    
+    let mut grouped: HashMap<String, Vec<&'a crate::scanner::types::SecretMatch>> = HashMap::new();
+    for secret_match in matches {
+        grouped.entry(secret_match.file_path.clone())
+            .or_default()
+            .push(*secret_match);
+    }
+    
+    let mut result: Vec<_> = grouped.into_iter().collect();
+    result.sort_by(|a, b| a.0.cmp(&b.0)); // Sort by file path
+    result
 }
 
