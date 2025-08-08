@@ -430,7 +430,7 @@ impl DirectoryHandler {
         let analysis = self.analyze_directories(path);
         analysis.display();
 
-        // Collect all file paths using unified walker logic, filtering binary files
+        // Collect all file paths using unified walker logic
         let file_paths = self.collect_file_paths(&scanner, path, &mut warnings)?;
         
         // Create enhanced progress reporter based on strategy
@@ -452,15 +452,36 @@ impl DirectoryHandler {
             {
                 let scanner = scanner.clone();
                 let stats = stats.clone();
-                move |file_path: &PathBuf| -> ScanFileResult {
+                let enhanced_progress_for_worker = enhanced_progress.clone();
+                move |file_path: &PathBuf, worker_id: usize| -> ScanFileResult {
+                    // Update worker bar with current file
+                    if let Some(ref progress) = enhanced_progress_for_worker {
+                        if progress.is_parallel {
+                            progress.update_worker_file(worker_id, &file_path.to_string_lossy());
+                        }
+                    }
+                    
+                    // Check if this is a binary file first
+                    if !scanner.config.include_binary && super::directory::is_binary_file(file_path, &scanner.config.binary_extensions) {
+                        // Update statistics for binary files
+                        if let Some(ref stats) = stats {
+                            stats.increment_binary();
+                        }
+                        return ScanFileResult {
+                            matches: Vec::new(),
+                            file_path: file_path.to_string_lossy().to_string(),
+                            success: true,
+                            error: None,
+                        };
+                    }
+                    
                     let result = match scanner.scan_single_path(file_path) {
                         Ok(matches) => {
-                            // Update statistics
+                            // Update statistics - file was successfully scanned
                             if let Some(ref stats) = stats {
-                                if matches.is_empty() {
-                                    stats.increment_skipped();
-                                } else {
-                                    stats.increment_scanned();
+                                stats.increment_scanned();
+                                if !matches.is_empty() {
+                                    stats.increment_with_secrets();
                                 }
                             }
                             ScanFileResult {
@@ -488,14 +509,8 @@ impl DirectoryHandler {
             },
             enhanced_progress.as_ref().map(|progress| {
                 let progress = progress.clone();
-                move |current: usize, total: usize, worker_id: usize| {
-                    // Update worker progress with current file info
-                    if progress.is_parallel && worker_id < progress.worker_bars.len() {
-                        // We'd need access to current file path here - will enhance this
-                        progress.update_worker_file(worker_id, "scanning...");
-                    }
-                    
-                    // Update overall progress
+                move |current: usize, total: usize, _worker_id: usize| {
+                    // Update overall progress only
                     progress.update_overall(current, total);
                 }
             }),
@@ -556,8 +571,7 @@ impl DirectoryHandler {
         })
     }
 
-    /// Collect file paths from directory walker (shared by both modes)
-    /// Returns (file_paths, binary_stats) where binary_stats is a map of extension -> count
+    /// Collect file paths from directory walker
     fn collect_file_paths(&self, scanner: &Arc<Scanner>, path: &Path, warnings: &mut Vec<Warning>) -> Result<Vec<PathBuf>> {
         let walker = scanner.build_directory_walker(path).build();
         let mut file_paths = Vec::new();
@@ -566,14 +580,7 @@ impl DirectoryHandler {
             match entry {
                 Ok(entry) => {
                     if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                        let file_path = entry.path();
-                        
-                        // Check if this is a binary file that should be skipped (unless include_binary is enabled)
-                        if !scanner.config.include_binary && is_binary_file(file_path, &scanner.config.binary_extensions) {
-                            continue; // Skip binary files
-                        }
-                        
-                        file_paths.push(file_path.to_path_buf());
+                        file_paths.push(entry.path().to_path_buf());
                     }
                 }
                 Err(e) => {

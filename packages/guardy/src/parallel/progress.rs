@@ -6,6 +6,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[derive(Debug, Default)]
 pub struct ScanningStats {
     pub scanned: AtomicUsize,
+    pub with_secrets: AtomicUsize,
     pub skipped: AtomicUsize,
     pub binary: AtomicUsize,
 }
@@ -19,14 +20,22 @@ impl ScanningStats {
         self.scanned.fetch_add(1, Ordering::Relaxed);
     }
     
+    pub fn increment_with_secrets(&self) {
+        self.with_secrets.fetch_add(1, Ordering::Relaxed);
+    }
+    
     pub fn increment_skipped(&self) {
         self.skipped.fetch_add(1, Ordering::Relaxed);
     }
     
+    pub fn increment_binary(&self) {
+        self.binary.fetch_add(1, Ordering::Relaxed);
+    }
     
-    pub fn get_counts(&self) -> (usize, usize, usize) {
+    pub fn get_counts(&self) -> (usize, usize, usize, usize) {
         (
             self.scanned.load(Ordering::Relaxed),
+            self.with_secrets.load(Ordering::Relaxed),
             self.skipped.load(Ordering::Relaxed),
             self.binary.load(Ordering::Relaxed),
         )
@@ -81,21 +90,23 @@ impl StatisticsProgressReporter {
         // Colors for different workers
         let worker_colors = ["cyan/blue", "green/yellow", "magenta/red", "yellow/blue"];
         
+        // Estimate files per worker for progress bar lengths
+        let estimated_files_per_worker = (total_files + worker_count - 1) / worker_count; // Round up division
+        
         // Create worker bars with different colors and styles
         for worker_id in 0..worker_count {
             let color = worker_colors[worker_id % worker_colors.len()];
             let style = ProgressStyle::with_template(
-                &format!("[Worker {}] [{{elapsed_precise}}] {{bar:40.{}}} {{pos:>7}} files {{spinner}} {{msg}}", 
+                &format!("[Worker {:02}] {{bar:40.{}}} {{pos:>7}}/{{len:7}} {{msg}}", 
                         worker_id + 1, color)
             )
             .unwrap()
-            .progress_chars("█▉▊▋▌▍▎▏  ")
-            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+            .progress_chars("█▉▊▋▌▍▎▏  ");
             
-            // Set a high length that we'll never reach so bar shows progress without misleading fractions
-            let worker_bar = multi_progress.add(ProgressBar::new(u64::MAX));
+            // Set reasonable length based on estimated files per worker
+            let worker_bar = multi_progress.add(ProgressBar::new(estimated_files_per_worker as u64));
             worker_bar.set_style(style);
-            worker_bar.enable_steady_tick(std::time::Duration::from_millis(120)); // Slightly different timing for visual variety
+            worker_bar.enable_steady_tick(std::time::Duration::from_millis(100)); // Need tick for visibility
             worker_bars.push(worker_bar);
         }
         
@@ -151,16 +162,11 @@ impl StatisticsProgressReporter {
             overall_bar.set_position(completed as u64);
             
             // Update statistics in the progress bar message instead of printing
-            let (scanned, skipped, _binary) = self.stats.get_counts();
             
             // Only update message every few files to reduce flicker
             if completed % self.update_frequency == 0 || completed == total {
-                let stats_msg = if self.is_parallel {
-                    let active_workers = self.worker_bars.iter().filter(|bar| !bar.is_finished()).count();
-                    format!("📊 Scanned: {scanned} | Skipped: {skipped} | Active: {active_workers}")
-                } else {
-                    format!("📊 Scanned: {scanned} | Skipped: {skipped}")
-                };
+                let (scanned, with_secrets, skipped, binary) = self.stats.get_counts();
+                let stats_msg = format!("📊 Scanned: {scanned} | With Secrets: {with_secrets} | Skipped: {skipped} | Binary: {binary}");
                 
                 overall_bar.set_message(stats_msg);
             }
@@ -174,9 +180,9 @@ impl StatisticsProgressReporter {
     
     /// Finish all progress bars properly but keep them visible
     pub fn finish(&self) {
-        // Finish all worker bars
+        // Finish all worker bars and keep them visible with final state
         for worker_bar in &self.worker_bars {
-            worker_bar.finish_with_message("✅ Complete");
+            worker_bar.finish_with_message("");
         }
         
         // Finish overall bar
