@@ -44,7 +44,7 @@ where
         progress_reporter: Option<P>,
     ) -> Result<Vec<R>>
     where
-        F: Fn(&T) -> R + Send + Sync + 'static,
+        F: Fn(&T, usize) -> R + Send + Sync + 'static,  // Add worker_id parameter
         P: Fn(usize, usize, usize) + Send + Sync + 'static, // (current, total, worker_id)
     {
         if work_items.is_empty() {
@@ -104,11 +104,11 @@ where
 
     fn worker_thread<F, P>(&self, ctx: WorkerContext<T, R, F, P>)
     where
-        F: Fn(&T) -> R,
+        F: Fn(&T, usize) -> R,  // Add worker_id parameter
         P: Fn(usize, usize, usize),
     {
         while let Ok(work_item) = ctx.work_rx.recv() {
-            let result = (ctx.processor)(&work_item);
+            let result = (ctx.processor)(&work_item, ctx.worker_id);  // Pass worker_id
 
             if ctx.result_tx.send(result).is_err() {
                 break; // Receiver dropped
@@ -152,14 +152,14 @@ impl SequentialExecutor {
         progress_reporter: Option<P>
     ) -> Vec<R>
     where
-        F: Fn(&T) -> R,
+        F: Fn(&T, usize) -> R,  // Add worker_id parameter
         P: Fn(usize, usize, usize), // (current, total, worker_id)
     {
         let total_items = work_items.len();
         let mut results = Vec::with_capacity(total_items);
 
         for (index, work_item) in work_items.iter().enumerate() {
-            let result = processor(work_item);
+            let result = processor(work_item, 0);  // Sequential uses worker_id 0
             results.push(result);
 
             // Show progress
@@ -192,7 +192,7 @@ impl ExecutionStrategy {
     where
         T: Send + Sync + 'static,
         R: Send + Sync + 'static,
-        F: Fn(&T) -> R + Send + Sync + 'static,
+        F: Fn(&T, usize) -> R + Send + Sync + 'static,  // Add worker_id parameter
         P: Fn(usize, usize, usize) + Send + Sync + 'static,
     {
         match self {

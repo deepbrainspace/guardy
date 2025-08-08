@@ -398,10 +398,7 @@ impl Scanner {
             }
         }
         
-        // Check if this is a binary file that should be skipped (unless include_binary is enabled)
-        if !self.config.include_binary && super::directory::is_binary_file(path, &self.config.binary_extensions) {
-            return Ok(vec![]); // Skip binary files
-        }
+        // Binary file check is now handled at the directory level for better performance
         
         // Read file content - use streaming for large files
         const STREAMING_THRESHOLD_MB: u64 = 5; // Stream files larger than 5MB
