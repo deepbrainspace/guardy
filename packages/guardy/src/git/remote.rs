@@ -37,7 +37,7 @@ impl RemoteOperations {
         repo_url
             .trim_end_matches(".git")
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or("unknown")
             .to_string()
     }
@@ -57,13 +57,11 @@ impl GitRepo {
     /// Clone a repository from URL
     pub fn clone(repo_url: &str, repo_path: &Path) -> Result<Self> {
         // Convert various URL formats to git URLs
-        let git_url = if repo_url.starts_with("http") {
-            repo_url.to_string()
-        } else if repo_url.starts_with("git@") {
+        let git_url = if repo_url.starts_with("http") || repo_url.starts_with("git@") {
             repo_url.to_string()
         } else {
             // Assume it's github.com/org/repo format
-            format!("https://{}.git", repo_url)
+            format!("https://{repo_url}.git")
         };
 
         tracing::info!("Cloning from: {}", git_url);
@@ -88,11 +86,11 @@ impl GitRepo {
     /// Checkout a specific version (tag, branch, or commit)
     pub fn checkout_version(&self, version: &str) -> Result<()> {
         // Try to find the version as a tag, branch, or commit
-        let object = if let Ok(reference) = self.repo.find_reference(&format!("refs/tags/{}", version)) {
+        let object = if let Ok(reference) = self.repo.find_reference(&format!("refs/tags/{version}")) {
             reference.peel_to_commit()?.into_object()
-        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/heads/{}", version)) {
+        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/heads/{version}")) {
             reference.peel_to_commit()?.into_object()
-        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/remotes/origin/{}", version)) {
+        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/remotes/origin/{version}")) {
             reference.peel_to_commit()?.into_object()
         } else if let Ok(oid) = git2::Oid::from_str(version) {
             self.repo.find_object(oid, None)?

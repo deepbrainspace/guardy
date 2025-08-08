@@ -10,6 +10,10 @@ readme = "../../README.md"
 keywords = ["git", "hooks", "security", "mcp", "pre-commit"]
 categories = ["development-tools", "command-line-utilities"]
 
+[lints.clippy]
+# is_multiple_of() is only available in nightly Rust, so disable this lint
+manual_is_multiple_of = "allow"
+
 [[bin]]
 name = "guardy"
 path = "src/main.rs"

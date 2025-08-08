@@ -36,7 +36,7 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
     // Additional check: strings without numbers need higher probability
     let mut contains_number = false;
     for &byte in data {
-        if byte >= b'0' && byte <= b'9' {
+        if byte.is_ascii_digit() {
             contains_number = true;
             break;
         }
@@ -108,7 +108,7 @@ fn probability_random_char_class(s: &[u8], base: f64) -> f64 {
     // Look at the 3 main char classes (uppercase, lowercase, and numbers) if it's not hex and pick the
     // least probable one
     if base == 16.0 {
-        return probability_random_char_class_aux(s, b'0', b'9', 16.0);
+        probability_random_char_class_aux(s, b'0', b'9', 16.0)
     } else {
         let mut min_probability = f64::INFINITY;
 

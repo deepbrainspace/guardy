@@ -1,9 +1,10 @@
 pub mod manager;
+pub mod protection;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SyncConfig {
     pub repos: Vec<SyncRepo>,
     pub protection: ProtectionConfig,
@@ -71,11 +72,3 @@ impl Default for ProtectionConfig {
     }
 }
 
-impl Default for SyncConfig {
-    fn default() -> Self {
-        Self {
-            repos: Vec::new(),
-            protection: ProtectionConfig::default(),
-        }
-    }
-}

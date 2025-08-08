@@ -145,9 +145,8 @@ pub struct DirectoryHandler {
     pub coverage: &'static [&'static str],
 }
 
-impl DirectoryHandler {
-    /// Get the default directory handler
-    pub fn default() -> Self {
+impl Default for DirectoryHandler {
+    fn default() -> Self {
         Self {
             rust: &["target"],
             nodejs: &["node_modules", "dist", "build", ".next", ".nuxt"],
@@ -159,6 +158,13 @@ impl DirectoryHandler {
             ide: &[".vscode", ".idea", ".vs"],
             coverage: &["coverage", ".nyc_output"],
         }
+    }
+}
+
+impl DirectoryHandler {
+    /// Create a new directory handler with default configuration
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get all directory names that should be filtered during scanning
@@ -316,7 +322,7 @@ impl DirectoryHandler {
     /// # fn example() -> anyhow::Result<()> {
     /// let config = GuardyConfig::load(None, None::<&()>)?;
     /// let scanner = Scanner::new(&config)?;
-    /// let directory_handler = DirectoryHandler::default();
+    /// let directory_handler = DirectoryHandler::new();
     /// let result = directory_handler.scan(
     ///     Arc::new(scanner), 
     ///     Path::new("/tmp"), 
@@ -459,7 +465,7 @@ impl DirectoryHandler {
         // Show timing summary
         let (summary_icon, mode_info) = match &execution_strategy {
             ExecutionStrategy::Sequential => (output::symbols::STOPWATCH, String::new()),
-            ExecutionStrategy::Parallel { workers } => (output::symbols::LIGHTNING, format!(" ({} workers)", workers)),
+            ExecutionStrategy::Parallel { workers } => (output::symbols::LIGHTNING, format!(" ({workers} workers)")),
         };
 
         output::styled!("{} Scan completed in {}s ({} files scanned, {} matches found{})", 
@@ -485,13 +491,13 @@ impl DirectoryHandler {
         for entry in walker {
             match entry {
                 Ok(entry) => {
-                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    if entry.file_type().is_some_and(|ft| ft.is_file()) {
                         file_paths.push(entry.path().to_path_buf());
                     }
                 }
                 Err(e) => {
                     warnings.push(Warning {
-                        message: format!("Walk error: {}", e),
+                        message: format!("Walk error: {e}"),
                     });
                 }
             }
@@ -520,7 +526,7 @@ impl DirectoryHandler {
         // Check all analyzable directories
         for (dir_name, description) in self.analyzable_directories() {
             if path.join(dir_name).exists() {
-                let dir_with_slash = format!("{}/", dir_name);
+                let dir_with_slash = format!("{dir_name}/");
                 if check_gitignore_pattern(&dir_with_slash) || check_gitignore_pattern(dir_name) {
                     properly_ignored.push((dir_with_slash, description.to_string()));
                 } else {
@@ -579,7 +585,7 @@ impl DirectoryAnalysis {
         if !self.needs_gitignore.is_empty() {
             let patterns: Vec<&str> = self.needs_gitignore.iter().map(|(dir, _)| dir.as_str()).collect();
             output::info!(&format!("Consider adding to .gitignore: {}", 
-                     output::property_name(&patterns.join(", "))), output::symbols::LIGHTBULB);
+                     output::property_name(patterns.join(", "))), output::symbols::LIGHTBULB);
         }
     }
 }
@@ -592,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_default_directory_handler() {
-        let handler = DirectoryHandler::default();
+        let handler = DirectoryHandler::new();
         
         // Test some known directories
         assert!(handler.should_filter_directory("target"));
@@ -607,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_analyzable_directories() {
-        let handler = DirectoryHandler::default();
+        let handler = DirectoryHandler::new();
         let analyzable = handler.analyzable_directories();
         
         // Should include common build directories
@@ -619,7 +625,7 @@ mod tests {
     #[test]
     fn test_directory_analysis() {
         let temp_dir = TempDir::new().unwrap();
-        let handler = DirectoryHandler::default();
+        let handler = DirectoryHandler::new();
         
         // Create a target directory (not in gitignore)
         fs::create_dir(temp_dir.path().join("target")).unwrap();
@@ -636,7 +642,7 @@ mod tests {
     #[test]
     fn test_directory_analysis_with_gitignore() {
         let temp_dir = TempDir::new().unwrap();
-        let handler = DirectoryHandler::default();
+        let handler = DirectoryHandler::new();
         
         // Create target directory and gitignore file
         fs::create_dir(temp_dir.path().join("target")).unwrap();

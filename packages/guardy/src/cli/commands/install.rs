@@ -56,14 +56,13 @@ pub async fn execute(args: InstallArgs, verbosity_level: u8) -> Result<()> {
         
         // Check if hook exists and handle based on force flag
         if hook_path.exists() && !args.force {
-            warning!(&format!("Hook '{}' already exists. Use --force to overwrite.", hook_name));
+            warning!(&format!("Hook '{hook_name}' already exists. Use --force to overwrite."));
             continue;
         }
         
         // Create hook script that calls guardy
         let hook_script = format!(
-            "#!/bin/sh\n# Guardy hook: {}\nexec guardy run {}\n",
-            hook_name, hook_name
+            "#!/bin/sh\n# Guardy hook: {hook_name}\nexec guardy run {hook_name}\n"
         );
         
         fs::write(&hook_path, hook_script)?;
@@ -73,7 +72,7 @@ pub async fn execute(args: InstallArgs, verbosity_level: u8) -> Result<()> {
         permissions.set_mode(0o755);
         fs::set_permissions(&hook_path, permissions)?;
         
-        success!(&format!("Installed '{}' hook", hook_name));
+        success!(&format!("Installed '{hook_name}' hook"));
     }
     
     success!("Hook installation completed!");

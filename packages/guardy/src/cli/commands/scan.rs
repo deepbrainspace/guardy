@@ -120,24 +120,29 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     
     // Handle --list-patterns flag
     if args.list_patterns {
-        println!("Available Secret Detection Patterns ({} total):", patterns.pattern_count());
+        output::styled!("{} Available Secret Detection Patterns ({} total):", 
+            ("📋", "info_symbol"),
+            (patterns.pattern_count().to_string(), "property")
+        );
         println!();
         
         for pattern in &patterns.patterns {
             if verbose_level > 0 {
-                println!("📋 {} - {}", 
-                    output::property(&pattern.name),
-                    output::symbol(&pattern.description)
+                output::styled!("📋 {} - {}", 
+                    (pattern.name.clone(), "property"),
+                    (pattern.description.clone(), "symbol")
                 );
             } else {
-                println!("  - {}", pattern.name);
+                output::styled!("  - {}", 
+                    (pattern.name.clone(), "property")
+                );
             }
         }
         return Ok(());
     }
     
     for custom_pattern in &args.custom_patterns {
-        match Regex::new(&custom_pattern) {
+        match Regex::new(custom_pattern) {
             Ok(regex) => {
                 patterns.patterns.push(crate::scanner::patterns::SecretPattern {
                     name: "Custom Pattern".to_string(),
@@ -261,17 +266,28 @@ fn print_text_results(
         // Print statistics if requested
         if args.stats {
             println!();
-            println!("{} {}", 
-                    output::symbol("📊"), 
-                    output::property("Scan Statistics"));
-            println!("  Files scanned: {}", output::symbol(&total_files.to_string()));
+            output::styled!("{} {}", 
+                ("📊", "info_symbol"), 
+                ("Scan Statistics", "property")
+            );
+            output::styled!("  Files scanned: {}", 
+                (total_files.to_string(), "symbol")
+            );
             if total_skipped > 0 {
-                println!("  Files skipped: {}", output::symbol(&total_skipped.to_string()));
+                output::styled!("  Files skipped: {}", 
+                    (total_skipped.to_string(), "symbol")
+                );
             }
-            println!("  Secrets found: {}", output::symbol("0"));
-            println!("  Scan time: {}ms", output::symbol(&elapsed.as_millis().to_string()));
+            output::styled!("  Secrets found: {}", 
+                ("0", "symbol")
+            );
+            output::styled!("  Scan time: {}ms", 
+                (elapsed.as_millis().to_string(), "symbol")
+            );
             if !warnings.is_empty() {
-                println!("  Warnings: {}", output::symbol(&warnings.len().to_string()));
+                output::styled!("  Warnings: {}", 
+                    (warnings.len().to_string(), "symbol")
+                );
             }
         }
         
@@ -280,30 +296,41 @@ fn print_text_results(
 
     println!();
     for secret_match in matches {
-        println!(
+        output::styled!(
             "{} {} {}",
-            output::symbol("📄"),
-            output::file_path(&format!("{}:{}", secret_match.file_path, secret_match.line_number)),
-            output::id_value(&format!("[{}]", secret_match.secret_type))
+            ("📄", "info_symbol"),
+            (format!("{}:{}", secret_match.file_path, secret_match.line_number), "file_path"),
+            (format!("[{}]", secret_match.secret_type), "id_value")
         );
         
         if verbose_level > 0 {
-            println!("  📋 {}", output::symbol(&secret_match.pattern_description));
+            output::styled!("  📋 {}", 
+                (secret_match.pattern_description.clone(), "symbol")
+            );
         }
         
         if args.show_content || verbose_level > 0 {
-            println!("  Content: {}", output::symbol(secret_match.line_content.trim()));
+            output::styled!("  Content: {}", 
+                (secret_match.line_content.trim(), "symbol")
+            );
             if !secret_match.matched_text.is_empty() {
-                println!("  Matched: {}", output::hash_value(&secret_match.matched_text));
+                output::styled!("  Matched: {}", 
+                    (secret_match.matched_text.clone(), "hash_value")
+                );
             }
         } else {
             // Hide the actual secret content for security - just show file location
-            println!("  {}", output::symbol("[Content hidden - use -v or --show-content to reveal]"));
+            output::styled!("  {}", 
+                ("[Content hidden - use -v or --show-content to reveal]", "symbol")
+            );
         }
     }
     
     println!();
-    println!("{} {}", output::symbol("⚠"), output::caution(&format!("Found {} potential secrets!", matches.len())));
+    output::styled!("{} Found {} potential secrets!", 
+        ("⚠", "warning_symbol"),
+        (matches.len().to_string(), "caution")
+    );
     
     // Print warnings from scan results
     if !warnings.is_empty() {
@@ -316,17 +343,28 @@ fn print_text_results(
     // Print statistics if requested
     if args.stats {
         println!();
-        println!("{} {}", 
-                output::symbol("📊"), 
-                output::property("Scan Statistics"));
-        println!("  Files scanned: {}", output::symbol(&total_files.to_string()));
+        output::styled!("{} {}", 
+            ("📊", "info_symbol"), 
+            ("Scan Statistics", "property")
+        );
+        output::styled!("  Files scanned: {}", 
+            (total_files.to_string(), "symbol")
+        );
         if total_skipped > 0 {
-            println!("  Files skipped: {}", output::symbol(&total_skipped.to_string()));
+            output::styled!("  Files skipped: {}", 
+                (total_skipped.to_string(), "symbol")
+            );
         }
-        println!("  Secrets found: {}", output::symbol(&matches.len().to_string()));
-        println!("  Scan time: {}", output::symbol(&format!("{}ms", elapsed.as_millis())));
+        output::styled!("  Secrets found: {}", 
+            (matches.len().to_string(), "symbol")
+        );
+        output::styled!("  Scan time: {}ms", 
+            (elapsed.as_millis().to_string(), "symbol")
+        );
         if !warnings.is_empty() {
-            println!("  Warnings: {}", output::symbol(&warnings.len().to_string()));
+            output::styled!("  Warnings: {}", 
+                (warnings.len().to_string(), "symbol")
+            );
         }
     }
     
@@ -384,7 +422,7 @@ fn print_files_only(matches: &[&crate::scanner::types::SecretMatch]) {
     }
     
     for file in files {
-        println!("{}", file);
+        println!("{file}");
     }
 }
 
