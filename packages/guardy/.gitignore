@@ -16,6 +16,3 @@ Thumbs.db
 # Test artifacts
 /test-repo/
 /.guardy/
-
-# Fake test values (contains fake secrets for testing)
-fake_test_values.yml
