@@ -64,7 +64,7 @@ impl StatisticsProgressReporter {
             "🔍 [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} files {spinner} {msg}"
         )
         .unwrap()
-        .progress_chars("█▉▊▋▌▍▎▏  ")
+        .progress_chars("##-")
         .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
         
         let main_bar = multi_progress.add(ProgressBar::new(total_files as u64));
@@ -87,8 +87,8 @@ impl StatisticsProgressReporter {
         let multi_progress = MultiProgress::new();
         let mut worker_bars = Vec::new();
         
-        // Professional color scheme for different workers with background colors
-        let worker_colors = ["cyan/blue", "green/yellow", "magenta/red", "yellow/cyan"];
+        // Simple color scheme that should work in most terminals
+        let worker_colors = ["green/black", "blue/black", "red/black", "yellow/black"];
         
         // Estimate files per worker for progress bar lengths
         let estimated_files_per_worker = (total_files + worker_count - 1) / worker_count; // Round up division
@@ -101,7 +101,7 @@ impl StatisticsProgressReporter {
                         worker_id + 1, color)
             )
             .unwrap()
-            .progress_chars("█▉▊▋▌▍▎▏  ");
+            .progress_chars("##-");
             
             // Set reasonable length based on estimated files per worker
             let worker_bar = multi_progress.add(ProgressBar::new(estimated_files_per_worker as u64));
@@ -112,10 +112,10 @@ impl StatisticsProgressReporter {
         
         // Overall progress bar
         let overall_style = ProgressStyle::with_template(
-            "Overall:\n[{elapsed_precise}] {bar:40.bright_white/dim} {pos:>7}/{len:7} files ({percent}%)\n{msg}"
+            "Overall:\n[{elapsed_precise}] {bar:40.green/red} {pos:>7}/{len:7} files ({percent}%)\n{msg}"
         )
         .unwrap()
-        .progress_chars("█▉▊▋▌▍▎▏  ");
+        .progress_chars("##-");
         
         let overall_bar = multi_progress.add(ProgressBar::new(total_files as u64));
         overall_bar.set_style(overall_style);
