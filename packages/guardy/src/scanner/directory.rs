@@ -3,8 +3,49 @@ use std::time::Instant;
 use std::sync::Arc;
 use anyhow::Result;
 use crate::cli::output;
-use crate::parallel::{ExecutionStrategy, progress::{factories, ProgressReporter}};
+use crate::parallel::{ExecutionStrategy, progress::factories};
 use super::types::{ScanStats, Warning, ScanResult, Scanner, ScanFileResult};
+
+/// Check if a file should be treated as binary using configured extensions
+pub(crate) fn is_binary_file_by_extension(path: &Path, binary_extensions: &[String]) -> bool {
+    if let Some(extension) = path.extension() {
+        if let Some(ext_str) = extension.to_str() {
+            let ext_lower = ext_str.to_lowercase();
+            return binary_extensions.contains(&ext_lower);
+        }
+    }
+    false
+}
+
+/// Check if a file is binary using content inspection
+pub(crate) fn is_binary_file_by_content(path: &Path) -> bool {
+    use std::fs::File;
+    use std::io::Read;
+    
+    // Try to read a small sample of the file
+    if let Ok(mut file) = File::open(path) {
+        let mut buffer = vec![0; 512]; // Read first 512 bytes
+        if let Ok(bytes_read) = file.read(&mut buffer) {
+            buffer.truncate(bytes_read);
+            content_inspector::inspect(&buffer).is_binary()
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+/// Hybrid binary file detection: fast extension check first, then content inspection
+pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool {
+    // Fast extension-based check first
+    if is_binary_file_by_extension(path, binary_extensions) {
+        return true;
+    }
+    
+    // For unknown extensions, use content inspection as fallback
+    is_binary_file_by_content(path)
+}
 
 /// Directory handling for the scanner - combines filtering and analysis logic
 /// 
@@ -389,50 +430,80 @@ impl DirectoryHandler {
         let analysis = self.analyze_directories(path);
         analysis.display();
 
-        // Collect all file paths using unified walker logic
-        let file_paths = self.collect_file_paths(&scanner, path, &mut warnings)?;
+        // Collect all file paths using unified walker logic, filtering binary files
+        let (file_paths, binary_stats) = self.collect_file_paths(&scanner, path, &mut warnings)?;
         
-        // Create progress reporter based on strategy with proper icons and frequency
-        let progress_reporter = match &execution_strategy {
-            ExecutionStrategy::Sequential => Some(factories::sequential_reporter("files").with_icon("⏳").with_frequency(10)),
-            ExecutionStrategy::Parallel { .. } => Some(factories::parallel_reporter("files").with_icon("⚡").with_frequency(5)),
+        // Create enhanced progress reporter based on strategy
+        let enhanced_progress = match &execution_strategy {
+            ExecutionStrategy::Sequential => {
+                Some(factories::enhanced_sequential_reporter(file_paths.len()))
+            },
+            ExecutionStrategy::Parallel { workers } => {
+                Some(factories::enhanced_parallel_reporter(file_paths.len(), *workers))
+            },
         };
 
-        // Execute file scanning using the generic parallel framework with Arc
+        // Get statistics reference for tracking
+        let stats = enhanced_progress.as_ref().map(|p| p.stats());
+
+        // Execute file scanning using the generic parallel framework with enhanced progress
         let scan_results = execution_strategy.execute(
             file_paths,
             {
                 let scanner = scanner.clone();
+                let stats = stats.clone();
                 move |file_path: &PathBuf| -> ScanFileResult {
-                    match scanner.scan_single_path(file_path) {
-                        Ok(matches) => ScanFileResult {
-                            matches,
-                            file_path: file_path.to_string_lossy().to_string(),
-                            success: true,
-                            error: None,
+                    let result = match scanner.scan_single_path(file_path) {
+                        Ok(matches) => {
+                            // Update statistics
+                            if let Some(ref stats) = stats {
+                                if matches.is_empty() {
+                                    stats.increment_skipped();
+                                } else {
+                                    stats.increment_scanned();
+                                }
+                            }
+                            ScanFileResult {
+                                matches,
+                                file_path: file_path.to_string_lossy().to_string(),
+                                success: true,
+                                error: None,
+                            }
                         },
-                        Err(e) => ScanFileResult {
-                            matches: Vec::new(),
-                            file_path: file_path.to_string_lossy().to_string(),
-                            success: false,
-                            error: Some(e.to_string()),
-                        },
-                    }
+                        Err(e) => {
+                            // Update statistics for errors
+                            if let Some(ref stats) = stats {
+                                stats.increment_skipped();
+                            }
+                            ScanFileResult {
+                                matches: Vec::new(),
+                                file_path: file_path.to_string_lossy().to_string(),
+                                success: false,
+                                error: Some(e.to_string()),
+                            }
+                        }
+                    };
+                    result
                 }
             },
-            progress_reporter.clone().map(|reporter| {
+            enhanced_progress.as_ref().map(|progress| {
+                let progress = progress.clone();
                 move |current: usize, total: usize, worker_id: usize| {
-                    reporter.report(current, total, worker_id);
+                    // Update worker progress with current file info
+                    if progress.is_parallel && worker_id < progress.worker_bars.len() {
+                        // We'd need access to current file path here - will enhance this
+                        progress.update_worker_file(worker_id, "scanning...", current, total);
+                    }
+                    
+                    // Update overall progress
+                    progress.update_overall(current, total);
                 }
             }),
         )?;
 
-        // Clear progress line using proper method
-        if !scan_results.is_empty() {
-            // Use the reporter's clear method if we have one
-            if let Some(ref reporter) = progress_reporter {
-                reporter.clear();
-            }
+        // Clear progress display using enhanced reporter
+        if let Some(ref progress) = enhanced_progress {
+            progress.finish();
         }
 
         // Aggregate results
@@ -462,6 +533,24 @@ impl DirectoryHandler {
             scan_duration_ms: scan_duration.as_millis() as u64,
         };
 
+        // Show binary file skip summary if any were skipped
+        if !binary_stats.is_empty() {
+            let total_binary_files: usize = binary_stats.values().sum();
+            
+            // Sort extensions by count (descending) for better display
+            let mut sorted_extensions: Vec<_> = binary_stats.into_iter().collect();
+            sorted_extensions.sort_by(|a, b| b.1.cmp(&a.1));
+            
+            output::styled!("{} Skipped {} binary files: {}", 
+                ("📁", "info_symbol"),
+                (total_binary_files.to_string(), "number"),
+                (sorted_extensions.iter()
+                    .map(|(ext, count)| format!("{} {}", count, ext.to_uppercase()))
+                    .collect::<Vec<_>>()
+                    .join(", "), "muted")
+            );
+        }
+
         // Show timing summary
         let (summary_icon, mode_info) = match &execution_strategy {
             ExecutionStrategy::Sequential => (output::symbols::STOPWATCH, String::new()),
@@ -484,15 +573,35 @@ impl DirectoryHandler {
     }
 
     /// Collect file paths from directory walker (shared by both modes)
-    fn collect_file_paths(&self, scanner: &Arc<Scanner>, path: &Path, warnings: &mut Vec<Warning>) -> Result<Vec<PathBuf>> {
+    /// Returns (file_paths, binary_stats) where binary_stats is a map of extension -> count
+    fn collect_file_paths(&self, scanner: &Arc<Scanner>, path: &Path, warnings: &mut Vec<Warning>) -> Result<(Vec<PathBuf>, std::collections::HashMap<String, usize>)> {
         let walker = scanner.build_directory_walker(path).build();
         let mut file_paths = Vec::new();
+        let mut binary_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
         for entry in walker {
             match entry {
                 Ok(entry) => {
                     if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                        file_paths.push(entry.path().to_path_buf());
+                        let file_path = entry.path();
+                        
+                        // Check if this is a binary file that should be skipped (unless include_binary is enabled)
+                        if !scanner.config.include_binary && is_binary_file(file_path, &scanner.config.binary_extensions) {
+                            // Track binary file statistics by extension or file type
+                            let file_type = if let Some(extension) = file_path.extension() {
+                                if let Some(ext_str) = extension.to_str() {
+                                    ext_str.to_lowercase()
+                                } else {
+                                    "unknown".to_string()
+                                }
+                            } else {
+                                "no-extension".to_string()
+                            };
+                            *binary_stats.entry(file_type).or_insert(0) += 1;
+                            continue; // Skip binary files
+                        }
+                        
+                        file_paths.push(file_path.to_path_buf());
                     }
                 }
                 Err(e) => {
@@ -503,7 +612,7 @@ impl DirectoryHandler {
             }
         }
 
-        Ok(file_paths)
+        Ok((file_paths, binary_stats))
     }
 
     /// Analyze directories in the given path and return analysis results

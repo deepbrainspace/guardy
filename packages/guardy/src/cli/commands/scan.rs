@@ -2,11 +2,33 @@ use anyhow::Result;
 use clap::Args;
 use serde::Serialize;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
 use crate::scanner::{Scanner, types::ScanMode};
+
+/// Format scan time intelligently - use ms for short times, mm:ss for longer times
+fn format_scan_time(duration: Duration) -> String {
+    let total_ms = duration.as_millis();
+    
+    // Use milliseconds for times under 10 seconds
+    if total_ms < 10_000 {
+        format!("{}ms", total_ms)
+    } else {
+        // For longer times, show minutes, seconds, and milliseconds
+        let total_seconds = duration.as_secs();
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        let remaining_ms = total_ms % 1000;
+        
+        if minutes > 0 {
+            format!("{}m {}.{:03}s", minutes, seconds, remaining_ms)
+        } else {
+            format!("{}.{:03}s", seconds, remaining_ms)
+        }
+    }
+}
 
 #[derive(Args, Serialize)]
 pub struct ScanArgs {
@@ -102,6 +124,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         "scanner": {
             "mode": args.mode,
             "max_file_size_mb": args.max_file_size,
+            "include_binary": args.include_binary,
             "follow_symlinks": args.follow_symlinks,
             "enable_entropy_analysis": !args.no_entropy,
             "min_entropy_threshold": args.entropy_threshold,
@@ -184,19 +207,21 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     for path in &scan_paths {
         if path.is_file() {
             let matches = scanner.scan_file(path)?;
-            if !matches.is_empty() {
-                // Create a mini scan result for this file
-                all_scan_results.push(crate::scanner::types::ScanResult {
-                    matches,
-                    stats: crate::scanner::types::ScanStats {
-                        files_scanned: 1,
-                        files_skipped: 0,
-                        total_matches: 0, // Will be updated below
-                        scan_duration_ms: 0,
-                    },
-                    warnings: Vec::new(),
-                });
-            }
+            // Check if file was actually processed (not skipped due to binary detection, etc.)
+            let was_processed = !matches.is_empty() || 
+                !(!scanner.config.include_binary && 
+                  crate::scanner::directory::is_binary_file(path, &scanner.config.binary_extensions));
+            
+            all_scan_results.push(crate::scanner::types::ScanResult {
+                matches,
+                stats: crate::scanner::types::ScanStats {
+                    files_scanned: if was_processed { 1 } else { 0 },
+                    files_skipped: if was_processed { 0 } else { 1 },
+                    total_matches: 0, // Will be updated below
+                    scan_duration_ms: 0,
+                },
+                warnings: Vec::new(),
+            });
         } else if path.is_dir() {
             let scan_result = scanner.scan_directory(path, None)?;
             all_scan_results.push(scan_result);
@@ -281,8 +306,8 @@ fn print_text_results(
             output::styled!("  Secrets found: {}", 
                 ("0", "symbol")
             );
-            output::styled!("  Scan time: {}ms", 
-                (elapsed.as_millis().to_string(), "symbol")
+            output::styled!("  Scan time: {}", 
+                (format_scan_time(elapsed), "symbol")
             );
             if !warnings.is_empty() {
                 output::styled!("  Warnings: {}", 
@@ -358,8 +383,8 @@ fn print_text_results(
         output::styled!("  Secrets found: {}", 
             (matches.len().to_string(), "symbol")
         );
-        output::styled!("  Scan time: {}ms", 
-            (elapsed.as_millis().to_string(), "symbol")
+        output::styled!("  Scan time: {}", 
+            (format_scan_time(elapsed), "symbol")
         );
         if !warnings.is_empty() {
             output::styled!("  Warnings: {}", 
