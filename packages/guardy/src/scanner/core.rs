@@ -192,6 +192,12 @@ impl Scanner {
             }
         }
         
+        if let Ok(include_binary) = config.get_section("scanner.include_binary") {
+            if let Some(enabled) = include_binary.as_bool() {
+                scanner_config.include_binary = enabled;
+            }
+        }
+        
         // Load ignore patterns from config
         if let Ok(ignore_paths) = config.get_vec("scanner.ignore_paths") {
             crate::cli::output::styled!("{}: Loaded ignore_paths from config: {}", 
@@ -311,13 +317,26 @@ impl Scanner {
             
         // Use shared directory handler for consistent filtering logic
         let directory_handler = super::directory::DirectoryHandler::new();
+        
+        // Build ignore patterns for use in filter
+        let ignore_globset = self.build_path_ignorer().ok();
+        
         builder.filter_entry(move |entry| {
+            // Skip directories that should always be ignored for security/performance
             if let Some(file_name) = entry.file_name().to_str() {
-                // Skip directories that should always be ignored for security/performance
-                !directory_handler.should_filter_directory(file_name)
-            } else {
-                true
+                if directory_handler.should_filter_directory(file_name) {
+                    return false;
+                }
             }
+            
+            // Apply ignore_paths patterns
+            if let Some(ref globset) = ignore_globset {
+                if globset.is_match(entry.path()) {
+                    return false;
+                }
+            }
+            
+            true
         });
         
         builder
@@ -377,6 +396,11 @@ impl Scanner {
             if size_mb > self.config.max_file_size_mb as u64 {
                 return Ok(vec![]);
             }
+        }
+        
+        // Check if this is a binary file that should be skipped (unless include_binary is enabled)
+        if !self.config.include_binary && super::directory::is_binary_file(path, &self.config.binary_extensions) {
+            return Ok(vec![]); // Skip binary files
         }
         
         // Read file content - use streaming for large files

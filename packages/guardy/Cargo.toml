@@ -54,6 +54,7 @@ grep = "0.3.2"            # Meta-crate providing unified interface
 grep-searcher = "0.1.14"  # Fast line-oriented searching with mmap support  
 grep-regex = "0.1.13"     # Optimized regex matching for patterns
 ignore = "0.4.23"         # Gitignore support and file walking
+content_inspector = "0.2.4"  # Fast binary file detection
 
 # Entropy analysis dependencies
 memoize = "0.4.0"
@@ -63,6 +64,9 @@ lazy_static = "1.5.0"
 crossbeam = "0.8"
 rayon = "1.10"
 num_cpus = "1.16"
+
+# Progress reporting
+indicatif = "0.18"
 
 [dev-dependencies]
 tempfile = "3.20.0"

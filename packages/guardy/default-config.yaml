@@ -84,6 +84,14 @@ scanner:
     - "*.test.js"
     - "*.spec.ts"
     - "*.spec.js"
+    # Git objects and internal files (binary data)
+    - ".git/objects/**"
+    - ".git_disabled/**"
+    - ".git/refs/**"
+    - ".git/logs/**"
+    - ".git/index"
+    - "**/.git/objects/**"
+    - "**/.git_disabled/**"
   
   ignore_patterns:
     - "# TEST_SECRET:"
