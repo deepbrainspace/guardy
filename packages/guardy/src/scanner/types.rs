@@ -45,20 +45,17 @@ pub struct ScanResult {
 
 /// Scanning mode for determining parallelization strategy
 #[derive(Debug, Clone, PartialEq, clap::ValueEnum, serde::Serialize)]
+#[derive(Default)]
 pub enum ScanMode {
     /// Always use sequential processing
     Sequential,
     /// Always use parallel processing
     Parallel,
     /// Automatically choose based on file count (smart default)
+    #[default]
     Auto,
 }
 
-impl Default for ScanMode {
-    fn default() -> Self {
-        ScanMode::Auto
-    }
-}
 
 /// Configuration for the scanner
 #[derive(Debug, Clone)]

@@ -54,7 +54,7 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>, verbosity_le
             };
             
             let output = config.export_config_highlighted(format_enum)?;
-            println!("{}", output);
+            println!("{output}");
         },
         ConfigCommand::Set { key, value } => {
             styled!("Setting {} = {}", 
@@ -85,8 +85,8 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>, verbosity_le
                         if let serde_json::Value::Array(arr) = section_val {
                             for item in arr {
                                 match item {
-                                    serde_json::Value::String(s) => println!("{}", s),
-                                    _ => println!("{}", item),
+                                    serde_json::Value::String(s) => println!("{s}"),
+                                    _ => println!("{item}"),
                                 }
                             }
                         }
@@ -94,10 +94,10 @@ pub async fn execute(args: ConfigArgs, custom_config: Option<&str>, verbosity_le
                     _ => {
                         // Simple value - display directly
                         match section_val {
-                            serde_json::Value::String(s) => println!("{}", s),
-                            serde_json::Value::Bool(b) => println!("{}", b),
-                            serde_json::Value::Number(n) => println!("{}", n),
-                            _ => println!("{}", section_val),
+                            serde_json::Value::String(s) => println!("{s}"),
+                            serde_json::Value::Bool(b) => println!("{b}"),
+                            serde_json::Value::Number(n) => println!("{n}"),
+                            _ => println!("{section_val}"),
                         }
                     }
                 }

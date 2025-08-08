@@ -118,7 +118,7 @@ impl SecretPatterns {
                                 });
                             }
                             Err(e) => {
-                                eprintln!("Warning: Invalid custom regex pattern '{}': {}", pattern_str, e);
+                                eprintln!("Warning: Invalid custom regex pattern '{pattern_str}': {e}");
                             }
                         }
                     }

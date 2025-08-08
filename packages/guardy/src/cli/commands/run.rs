@@ -45,8 +45,7 @@ pub async fn execute(args: RunArgs, verbosity_level: u8) -> Result<()> {
                 
                 // Print summary of found secrets
                 for secret_match in scan_result.matches.iter().take(5) {
-                    println!("  {} {}:{} [{}]", 
-                        "🔍", 
+                    println!("  🔍 {}:{} [{}]", 
                         secret_match.file_path,
                         secret_match.line_number,
                         secret_match.secret_type
@@ -79,7 +78,7 @@ pub async fn execute(args: RunArgs, verbosity_level: u8) -> Result<()> {
             success!("Pre-push validation passed");
         }
         unknown => {
-            error!(&format!("Unknown hook: {}", unknown));
+            error!(&format!("Unknown hook: {unknown}"));
             std::process::exit(1);
         }
     }

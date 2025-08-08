@@ -68,9 +68,7 @@ impl<'a> TestDetector<'a> {
         let mut brace_count = 0;
         let mut found_opening_brace = false;
         
-        for i in start_line..lines.len() {
-            let line = lines[i];
-            
+        for (i, line) in lines.iter().enumerate().skip(start_line) {
             // Count opening braces
             let opens = line.matches(open_bracket).count();
             let closes = line.matches(close_bracket).count();
@@ -96,9 +94,7 @@ impl<'a> TestDetector<'a> {
         let start_indent = self.get_line_indent(lines[start_line]);
         
         // Find the next line that has same or less indentation
-        for i in (start_line + 1)..lines.len() {
-            let line = lines[i];
-            
+        for (i, line) in lines.iter().enumerate().skip(start_line + 1) {
             // Skip empty lines
             if line.trim().is_empty() {
                 continue;
@@ -144,7 +140,7 @@ mod tests {
     use std::fs;
     
     fn create_test_config() -> GuardyConfig {
-        GuardyConfig::load(None, None::<&()>).unwrap()
+        GuardyConfig::load(None, None::<&()>, 0).unwrap()
     }
     
     fn create_scanner_config() -> ScannerConfig {

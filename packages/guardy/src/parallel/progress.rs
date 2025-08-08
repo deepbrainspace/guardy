@@ -66,18 +66,6 @@ impl ProgressReporter for ConsoleProgressReporter {
     }
 }
 
-/// No-op progress reporter for quiet operations
-pub struct NoOpProgressReporter;
-
-impl ProgressReporter for NoOpProgressReporter {
-    fn report(&self, _current: usize, _total: usize, _worker_id: usize) {
-        // Do nothing
-    }
-
-    fn clear(&self) {
-        // Do nothing
-    }
-}
 
 
 /// Factory functions for common progress reporters
@@ -97,10 +85,6 @@ pub mod factories {
             .with_frequency(5)
     }
 
-    /// Create a no-op progress reporter for quiet operations
-    pub fn quiet_reporter() -> NoOpProgressReporter {
-        NoOpProgressReporter
-    }
 
 }
 
@@ -118,11 +102,14 @@ mod tests {
     }
 
     #[test]
-    fn test_noop_progress_reporter() {
-        let reporter = NoOpProgressReporter;
+    fn test_console_progress_reporter_with_options() {
+        let reporter = ConsoleProgressReporter::new("files")
+            .with_worker_id()
+            .with_frequency(10)
+            .with_icon("🔍");
         
-        // Should do nothing without panicking
-        reporter.report(5, 10, 0);
+        // This test mainly ensures the reporter doesn't panic
+        reporter.report(10, 100, 1);
         reporter.clear();
     }
 

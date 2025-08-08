@@ -47,7 +47,7 @@ impl Scanner {
     pub(crate) fn fast_count_files(&self, path: &Path) -> Result<usize> {
         use std::fs;
         
-        let directory_handler = super::directory::DirectoryHandler::default();
+        let directory_handler = super::directory::DirectoryHandler::new();
         
         fn count_files_recursive(dir: &Path, config: &ScannerConfig, directory_handler: &super::directory::DirectoryHandler) -> Result<usize> {
             let mut count = 0;
@@ -93,7 +93,7 @@ impl Scanner {
         
         for pattern in &self.config.ignore_paths {
             let glob = Glob::new(pattern)
-                .with_context(|| format!("Invalid glob pattern: {}", pattern))?;
+                .with_context(|| format!("Invalid glob pattern: {pattern}"))?;
             builder.add(glob);
         }
         
@@ -310,7 +310,7 @@ impl Scanner {
             .parents(true);          // Check parent directories for .gitignore
             
         // Use shared directory handler for consistent filtering logic
-        let directory_handler = super::directory::DirectoryHandler::default();
+        let directory_handler = super::directory::DirectoryHandler::new();
         builder.filter_entry(move |entry| {
             if let Some(file_name) = entry.file_name().to_str() {
                 // Skip directories that should always be ignored for security/performance
@@ -327,7 +327,7 @@ impl Scanner {
     /// Scan a directory recursively with optional execution strategy
     /// By default uses smart mode (auto-detects parallel vs sequential)
     pub fn scan_directory(&self, path: &Path, strategy: Option<ExecutionStrategy>) -> Result<ScanResult> {
-        let directory_handler = super::directory::DirectoryHandler::default();
+        let directory_handler = super::directory::DirectoryHandler::new();
         directory_handler.scan(Arc::new(self.clone()), path, strategy)
     }
     
@@ -475,11 +475,10 @@ impl Scanner {
         };
         
         // Apply entropy analysis if enabled (only on the secret content)
-        if self.config.enable_entropy_analysis {
-            if !is_likely_secret(secret_content.as_bytes(), self.config.min_entropy_threshold) {
+        if self.config.enable_entropy_analysis
+            && !is_likely_secret(secret_content.as_bytes(), self.config.min_entropy_threshold) {
                 return None; // Skip if entropy too low
             }
-        }
         
         Some(SecretMatch {
             file_path: file_path.to_string_lossy().into_owned(),
@@ -502,7 +501,7 @@ mod tests {
     use crate::config::GuardyConfig;
     
     fn create_test_config() -> GuardyConfig {
-        GuardyConfig::load(None, None::<&()>).unwrap()
+        GuardyConfig::load(None, None::<&()>, 0).unwrap()
     }
     
     #[test]

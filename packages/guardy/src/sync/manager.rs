@@ -5,11 +5,13 @@ use std::fs;
 use crate::config::GuardyConfig;
 use crate::git::remote::RemoteOperations;
 use super::{SyncConfig, SyncStatus, SyncRepo};
+use super::protection::ProtectionManager;
 
 pub struct SyncManager {
     config: SyncConfig,
     cache_dir: PathBuf,
     remote_ops: RemoteOperations,
+    pub protection_manager: ProtectionManager,
 }
 
 impl SyncManager {
@@ -19,11 +21,13 @@ impl SyncManager {
         std::fs::create_dir_all(&cache_dir)?;
 
         let remote_ops = RemoteOperations::new(cache_dir.clone());
+        let protection_manager = ProtectionManager::new(sync_config.protection.clone())?;
 
         Ok(Self {
             config: sync_config,
             cache_dir,
             remote_ops,
+            protection_manager,
         })
     }
 
@@ -50,11 +54,13 @@ impl SyncManager {
         std::fs::create_dir_all(&cache_dir)?;
 
         let remote_ops = RemoteOperations::new(cache_dir.clone());
+        let protection_manager = ProtectionManager::new(sync_config.protection.clone())?;
 
         Ok(Self {
             config: sync_config,
             cache_dir,
             remote_ops,
+            protection_manager,
         })
     }
 
@@ -93,12 +99,26 @@ impl SyncManager {
         }
     }
 
-    pub fn update_all_repos(&self, force: bool) -> Result<()> {
+    pub fn update_all_repos(&mut self, force: bool) -> Result<()> {
         if self.config.repos.is_empty() {
             return Err(anyhow!("No repositories configured for sync"));
         }
 
         tracing::info!("Updating {} repositories (force: {})", self.config.repos.len(), force);
+        
+        // Check if we should block modifications to protected files
+        if !force && self.protection_manager.should_block_modifications() {
+            // Collect all files that will be modified
+            let mut files_to_modify = Vec::new();
+            for repo in &self.config.repos {
+                let repo_path = self.remote_ops.clone_or_fetch(&repo.repo, &repo.version)?;
+                let potential_overwrites = self.get_files_to_overwrite(repo, &repo_path)?;
+                files_to_modify.extend(potential_overwrites);
+            }
+            
+            // Validate that no protected files will be modified
+            self.protection_manager.validate_modifications(&files_to_modify)?;
+        }
 
         for repo in &self.config.repos {
             tracing::info!("Syncing repo '{}' from '{}' version '{}'", 
@@ -109,8 +129,23 @@ impl SyncManager {
             
             tracing::info!("Repository cached at: {}", repo_path.display());
             
-            // Copy files from source to destination
-            self.copy_repo_files(repo, &repo_path)?;
+            // Backup existing files before overwriting (if force mode)
+            if force {
+                let dest_path = Path::new(&repo.dest_path);
+                if dest_path.exists() {
+                    let files_to_backup = self.get_files_to_overwrite(repo, &repo_path)?;
+                    if !files_to_backup.is_empty() {
+                        tracing::info!("Backing up {} files before sync", files_to_backup.len());
+                        self.protection_manager.backup_before_sync(&files_to_backup)?;
+                    }
+                }
+            }
+            
+            // Copy files from source to destination and protect them
+            let synced_files = self.copy_repo_files(repo, &repo_path)?;
+            
+            // Protect synced files if configured
+            self.protection_manager.protect_synced_files(repo, synced_files)?;
         }
 
         Ok(())
@@ -119,7 +154,7 @@ impl SyncManager {
     pub fn show_status(&self) -> Result<String> {
         let mut output = String::new();
         
-        output.push_str(&format!("Sync Configuration:\n"));
+        output.push_str("Sync Configuration:\n");
         output.push_str(&format!("  Repositories: {}\n", self.config.repos.len()));
         output.push_str(&format!("  Cache Directory: {}\n", self.cache_dir.display()));
         output.push_str(&format!("  Auto Protect: {}\n", self.config.protection.auto_protect_synced));
@@ -139,7 +174,7 @@ impl SyncManager {
 
 
     /// Copy files from repository to destination with include/exclude patterns
-    fn copy_repo_files(&self, repo: &SyncRepo, repo_path: &Path) -> Result<()> {
+    fn copy_repo_files(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
         let source_path = repo_path.join(&repo.source_path);
         let dest_path = Path::new(&repo.dest_path);
 
@@ -155,10 +190,13 @@ impl SyncManager {
         let include_set = self.build_globset(&repo.include)?;
         let exclude_set = self.build_globset(&repo.exclude)?;
 
-        // Walk through source directory and copy matching files
-        self.copy_directory_recursive(&source_path, dest_path, &include_set, &exclude_set)?;
+        // Track synced files
+        let mut synced_files = Vec::new();
 
-        Ok(())
+        // Walk through source directory and copy matching files
+        self.copy_directory_recursive(&source_path, dest_path, &include_set, &exclude_set, &mut synced_files)?;
+
+        Ok(synced_files)
     }
 
     /// Build a globset from pattern strings
@@ -171,8 +209,8 @@ impl SyncManager {
             builder.add(glob);
         }
         
-        Ok(builder.build()
-           .map_err(|e| anyhow!("Failed to build globset: {}", e))?)
+        builder.build()
+           .map_err(|e| anyhow!("Failed to build globset: {}", e))
     }
 
     /// Recursively copy directory contents with pattern matching
@@ -182,9 +220,10 @@ impl SyncManager {
         dest: &Path,
         include_set: &globset::GlobSet,
         exclude_set: &globset::GlobSet,
+        synced_files: &mut Vec<PathBuf>,
     ) -> Result<()> {
         if source.is_file() {
-            return self.copy_single_file(source, dest, include_set, exclude_set);
+            return self.copy_single_file(source, dest, include_set, exclude_set, synced_files);
         }
 
         for entry in fs::read_dir(source)? {
@@ -200,9 +239,9 @@ impl SyncManager {
                 }
                 
                 // Recursively copy directory contents
-                self.copy_directory_recursive(&entry_path, &dest_path, include_set, exclude_set)?;
+                self.copy_directory_recursive(&entry_path, &dest_path, include_set, exclude_set, synced_files)?;
             } else {
-                self.copy_single_file(&entry_path, &dest_path, include_set, exclude_set)?;
+                self.copy_single_file(&entry_path, &dest_path, include_set, exclude_set, synced_files)?;
             }
         }
 
@@ -216,6 +255,7 @@ impl SyncManager {
         dest: &Path,
         include_set: &globset::GlobSet,
         exclude_set: &globset::GlobSet,
+        synced_files: &mut Vec<PathBuf>,
     ) -> Result<()> {
         let file_name = source.file_name()
             .and_then(|n| n.to_str())
@@ -241,6 +281,9 @@ impl SyncManager {
         // Copy the file
         tracing::debug!("Copying file: {} -> {}", source.display(), dest.display());
         fs::copy(source, dest)?;
+        
+        // Track the synced file
+        synced_files.push(dest.to_path_buf());
 
         Ok(())
     }
@@ -257,12 +300,30 @@ impl SyncManager {
         Ok(sync_config)
     }
 
+    /// Get list of files that will be overwritten during sync
+    fn get_files_to_overwrite(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
+        let source_path = repo_path.join(&repo.source_path);
+        let dest_path = Path::new(&repo.dest_path);
+        
+        if !source_path.exists() || !dest_path.exists() {
+            return Ok(Vec::new());
+        }
+        
+        let include_set = self.build_globset(&repo.include)?;
+        let exclude_set = self.build_globset(&repo.exclude)?;
+        
+        let mut existing_files = Vec::new();
+        find_existing_files(&source_path, dest_path, &include_set, &exclude_set, &mut existing_files)?;
+        
+        Ok(existing_files)
+    }
+
     /// Extract repository name from URL for caching
     fn extract_repo_name(&self, repo_url: &str) -> String {
         repo_url
             .trim_end_matches(".git")
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or("unknown")
             .to_string()
     }
@@ -297,41 +358,8 @@ impl SyncManager {
         let exclude_set = self.build_globset(&repo.exclude)?;
 
         // Walk through destination and collect files that would be synced
-        self.collect_matching_files(dest_path, &include_set, &exclude_set, changed_files)?;
+        collect_matching_files(dest_path, &include_set, &exclude_set, changed_files)?;
         
-        Ok(())
-    }
-
-    /// Collect files matching include/exclude patterns
-    fn collect_matching_files(
-        &self,
-        path: &Path,
-        include_set: &globset::GlobSet,
-        exclude_set: &globset::GlobSet,
-        changed_files: &mut Vec<PathBuf>,
-    ) -> Result<()> {
-        if path.is_file() {
-            let file_name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-
-            // Check if file matches patterns
-            if !exclude_set.is_empty() && exclude_set.is_match(file_name) {
-                return Ok(());
-            }
-
-            if !include_set.is_empty() && !include_set.is_match(file_name) {
-                return Ok(());
-            }
-
-            changed_files.push(path.to_path_buf());
-        } else if path.is_dir() {
-            for entry in fs::read_dir(path)? {
-                let entry = entry?;
-                self.collect_matching_files(&entry.path(), include_set, exclude_set, changed_files)?;
-            }
-        }
-
         Ok(())
     }
 
@@ -411,4 +439,81 @@ impl SyncManager {
 
         Ok(())
     }
+}
+
+/// Find files that already exist in destination (free function for recursion)
+fn find_existing_files(
+    source: &Path,
+    dest: &Path,
+    include_set: &globset::GlobSet,
+    exclude_set: &globset::GlobSet,
+    existing_files: &mut Vec<PathBuf>,
+) -> Result<()> {
+    if source.is_file() {
+        if dest.exists() {
+            existing_files.push(dest.to_path_buf());
+        }
+        return Ok(());
+    }
+    
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let dest_path = dest.join(&file_name);
+        
+        if entry_path.is_dir() {
+            if dest_path.exists() {
+                find_existing_files(&entry_path, &dest_path, include_set, exclude_set, existing_files)?;
+            }
+        } else {
+            let file_name_str = file_name.to_str().unwrap_or("");
+            
+            // Check patterns
+            if !exclude_set.is_empty() && exclude_set.is_match(file_name_str) {
+                continue;
+            }
+            if !include_set.is_empty() && !include_set.is_match(file_name_str) {
+                continue;
+            }
+            
+            if dest_path.exists() {
+                existing_files.push(dest_path);
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Collect files matching include/exclude patterns (free function for recursion)
+fn collect_matching_files(
+    path: &Path,
+    include_set: &globset::GlobSet,
+    exclude_set: &globset::GlobSet,
+    changed_files: &mut Vec<PathBuf>,
+) -> Result<()> {
+    if path.is_file() {
+        let file_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        // Check if file matches patterns
+        if !exclude_set.is_empty() && exclude_set.is_match(file_name) {
+            return Ok(());
+        }
+
+        if !include_set.is_empty() && !include_set.is_match(file_name) {
+            return Ok(());
+        }
+
+        changed_files.push(path.to_path_buf());
+    } else if path.is_dir() {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            collect_matching_files(&entry.path(), include_set, exclude_set, changed_files)?;
+        }
+    }
+
+    Ok(())
 }

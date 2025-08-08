@@ -11,6 +11,17 @@ pub struct ParallelExecutor<T, R> {
     _phantom: std::marker::PhantomData<(T, R)>,
 }
 
+/// Context for worker threads to avoid too many function parameters
+struct WorkerContext<T, R, F, P> {
+    worker_id: usize,
+    work_rx: Receiver<T>,
+    result_tx: Sender<R>,
+    progress_counter: Arc<AtomicUsize>,
+    total_items: usize,
+    processor: Arc<F>,
+    progress_reporter: Option<Arc<P>>,
+}
+
 impl<T, R> ParallelExecutor<T, R>
 where
     T: Send + Sync + 'static,
@@ -47,26 +58,26 @@ where
         let progress_counter = Arc::new(AtomicUsize::new(0));
         let total_items = work_items.len();
 
+        // Wrap processor and progress_reporter in Arc for sharing
+        let processor = Arc::new(processor);
+        let progress_reporter = progress_reporter.map(Arc::new);
+
         // Use crossbeam::thread::scope for safe borrowing
         let results = crossbeam::thread::scope(|s| -> Result<Vec<R>> {
             // Spawn worker threads
             for worker_id in 0..actual_workers {
-                let work_rx = work_rx.clone();
-                let result_tx = result_tx.clone();
-                let progress_counter = progress_counter.clone();
-                let processor_ref = &processor;
-                let progress_reporter_ref = &progress_reporter;
+                let ctx = WorkerContext {
+                    worker_id,
+                    work_rx: work_rx.clone(),
+                    result_tx: result_tx.clone(),
+                    progress_counter: progress_counter.clone(),
+                    total_items,
+                    processor: processor.clone(),
+                    progress_reporter: progress_reporter.clone(),
+                };
 
                 s.spawn(move |_| {
-                    self.worker_thread(
-                        worker_id, 
-                        work_rx, 
-                        result_tx, 
-                        progress_counter, 
-                        total_items, 
-                        processor_ref,
-                        progress_reporter_ref
-                    )
+                    self.worker_thread(ctx)
                 });
             }
 
@@ -91,32 +102,24 @@ where
         results
     }
 
-    fn worker_thread<F, P>(
-        &self,
-        worker_id: usize,
-        work_rx: Receiver<T>,
-        result_tx: Sender<R>,
-        progress_counter: Arc<AtomicUsize>,
-        total_items: usize,
-        processor: &F,
-        progress_reporter: &Option<P>,
-    ) where
+    fn worker_thread<F, P>(&self, ctx: WorkerContext<T, R, F, P>)
+    where
         F: Fn(&T) -> R,
         P: Fn(usize, usize, usize),
     {
-        while let Ok(work_item) = work_rx.recv() {
-            let result = processor(&work_item);
+        while let Ok(work_item) = ctx.work_rx.recv() {
+            let result = (ctx.processor)(&work_item);
 
-            if result_tx.send(result).is_err() {
+            if ctx.result_tx.send(result).is_err() {
                 break; // Receiver dropped
             }
 
             // Update progress
-            let current = progress_counter.fetch_add(1, Ordering::Relaxed) + 1;
-            if let Some(reporter) = progress_reporter {
+            let current = ctx.progress_counter.fetch_add(1, Ordering::Relaxed) + 1;
+            if let Some(ref reporter) = ctx.progress_reporter {
                 // Only report progress every 5 items to reduce contention
-                if current % 5 == 0 || current == total_items {
-                    reporter(current, total_items, worker_id);
+                if current % 5 == 0 || current == ctx.total_items {
+                    reporter(current, ctx.total_items, ctx.worker_id);
                 }
             }
         }

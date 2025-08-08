@@ -46,7 +46,7 @@ pub async fn execute(args: UninstallArgs) -> Result<()> {
     if !args.yes {
         warning!(&format!("This will remove {} guardy hooks:", guardy_hooks.len()));
         for (hook_name, _) in &guardy_hooks {
-            println!("  - {}", hook_name);
+            println!("  - {hook_name}");
         }
         
         // Prompt for confirmation
@@ -69,17 +69,17 @@ pub async fn execute(args: UninstallArgs) -> Result<()> {
     for (hook_name, hook_path) in guardy_hooks {
         match fs::remove_file(&hook_path) {
             Ok(_) => {
-                success!(&format!("Removed '{}' hook", hook_name));
+                success!(&format!("Removed '{hook_name}' hook"));
                 removed_count += 1;
             }
             Err(e) => {
-                error!(&format!("Failed to remove '{}' hook: {}", hook_name, e));
+                error!(&format!("Failed to remove '{hook_name}' hook: {e}"));
             }
         }
     }
     
     if removed_count > 0 {
-        success!(&format!("Successfully removed {} guardy hooks", removed_count));
+        success!(&format!("Successfully removed {removed_count} guardy hooks"));
     } else {
         warning!("No hooks were removed");
     }
