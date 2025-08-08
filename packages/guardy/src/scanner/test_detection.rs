@@ -232,32 +232,73 @@ mod tests {
         let test_file = temp_dir.path().join("test_blocks.rs");
         
         let test_content = r#"
-// Regular code that should be scanned
-const API_KEY = "***REMOVED***";
+use superconfig::Config;
+use serde::{Deserialize, Serialize};
+use lazy_static::lazy_static;
+
+#[derive(Debug, Deserialize, Serialize)]
+struct FakeTestValues {
+    stripe_api_keys: Vec<String>,
+    aws_keys: AwsKeys,
+    github_tokens: Vec<String>,
+    jwt_tokens: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AwsKeys {
+    access_key: String,
+    secret_key: String,
+}
+
+lazy_static! {
+    static ref FAKE_VALUES: FakeTestValues = {
+        Config::builder()
+            .add_source(superconfig::File::with_name("fake_test_values"))
+            .build()
+            .expect("Failed to load fake_test_values.yml")
+            .try_deserialize()
+            .expect("Failed to parse fake test values")
+    };
+}
+
+// Regular code that should be scanned - uses first stripe key
+fn get_api_key() -> String {
+    FAKE_VALUES.stripe_api_keys[0].clone()
+}
 
 #[test]
 fn test_function() {
-    // This secret should be ignored because it's in a test
-    let secret = "***REMOVED***";
+    // This secret should be ignored because it's in a test - uses second stripe key
+    let secret = &FAKE_VALUES.stripe_api_keys[1];
     assert_eq!(1, 1);
 }
 
-// More regular code
-const ANOTHER_KEY = "***REMOVED***";
+// More regular code - uses AWS access key
+fn get_another_key() -> String {
+    FAKE_VALUES.aws_keys.access_key.clone()
+}
 
 #[cfg(test)]
 mod tests {
-    // This entire module should be ignored
-    const TEST_SECRET = "***REMOVED***";
+    use super::*;
+    
+    // This entire module should be ignored - uses github token
+    fn get_test_secret() -> String {
+        FAKE_VALUES.github_tokens[0].clone()
+    }
     
     #[test]
     fn another_test() {
-        let key = "***REMOVED***";
+        // Uses JWT token
+        let key = &FAKE_VALUES.jwt_tokens[0];
+        assert!(!key.is_empty());
     }
 }
 
-// Back to regular code
-const FINAL_KEY = "***REMOVED***";
+// Back to regular code - uses AWS secret key
+fn get_final_key() -> String {
+    FAKE_VALUES.aws_keys.secret_key.clone()
+}
 "#;
         
         fs::write(&test_file, test_content).unwrap();
