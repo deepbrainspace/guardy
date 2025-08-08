@@ -14,7 +14,7 @@ fn format_scan_time(duration: Duration) -> String {
     
     // Use milliseconds for times under 10 seconds
     if total_ms < 10_000 {
-        format!("{}ms", total_ms)
+        format!("{total_ms}ms")
     } else {
         // For longer times, show minutes, seconds, and milliseconds
         let total_seconds = duration.as_secs();
@@ -23,9 +23,9 @@ fn format_scan_time(duration: Duration) -> String {
         let remaining_ms = total_ms % 1000;
         
         if minutes > 0 {
-            format!("{}m {}.{:03}s", minutes, seconds, remaining_ms)
+            format!("{minutes}m {seconds}.{remaining_ms:03}s")
         } else {
-            format!("{}.{:03}s", seconds, remaining_ms)
+            format!("{seconds}.{remaining_ms:03}s")
         }
     }
 }
@@ -208,9 +208,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         if path.is_file() {
             let matches = scanner.scan_file(path)?;
             // Check if file was actually processed (not skipped due to binary detection, etc.)
-            let was_processed = !matches.is_empty() || 
-                !(!scanner.config.include_binary && 
-                  crate::scanner::directory::is_binary_file(path, &scanner.config.binary_extensions));
+            let was_processed = !matches.is_empty() || scanner.config.include_binary || !crate::scanner::directory::is_binary_file(path, &scanner.config.binary_extensions);
             
             all_scan_results.push(crate::scanner::types::ScanResult {
                 matches,

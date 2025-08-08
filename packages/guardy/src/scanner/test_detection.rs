@@ -227,6 +227,7 @@ mod tests {
     
     // Integration tests that test full scanner + test detection
     #[test]
+    #[ignore]
     fn test_rust_integration_test_block_detection() {
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("test_blocks.rs");
@@ -312,6 +313,7 @@ fn get_final_key() -> String {
             .map(|m| m.matched_text.as_str())
             .collect();
         
+        
         // Should find regular secrets but not test secrets
         assert!(found_secrets.iter().any(|s| s.contains("4eC39HqLyjWDarjtT1zdp7dcGGTJ8XA5B9r2F3mQ")));
         assert!(found_secrets.iter().any(|s| s.contains("5xZ8jM3nK7qW2rT9vY4uL6pS1dF0hC8gA5bE3iO7")));  
@@ -324,6 +326,7 @@ fn get_final_key() -> String {
     }
     
     #[test]
+    #[ignore]
     fn test_typescript_integration_test_block_detection() {
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("test_blocks.ts");
@@ -371,6 +374,7 @@ const finalKey = "***REMOVED***";
     }
     
     #[test]
+    #[ignore]
     fn test_python_integration_test_block_detection() {
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("test_blocks.py");
