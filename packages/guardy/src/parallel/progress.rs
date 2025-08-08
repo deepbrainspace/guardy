@@ -36,6 +36,7 @@ impl ScanningStats {
 /// Enhanced progress reporter with live statistics using indicatif
 #[derive(Clone)]
 pub struct StatisticsProgressReporter {
+    #[allow(dead_code)] // Required for indicatif coordination - see https://docs.rs/indicatif/latest/indicatif/struct.MultiProgress.html
     multi_progress: MultiProgress,
     overall_bar: Option<ProgressBar>,
     pub worker_bars: Vec<ProgressBar>,
@@ -171,20 +172,19 @@ impl StatisticsProgressReporter {
         self.stats.clone()
     }
     
-    /// Finish all progress bars properly
+    /// Finish all progress bars properly but keep them visible
     pub fn finish(&self) {
         // Finish all worker bars
         for worker_bar in &self.worker_bars {
-            worker_bar.finish();
+            worker_bar.finish_with_message("✅ Complete");
         }
         
         // Finish overall bar
         if let Some(ref overall_bar) = self.overall_bar {
-            overall_bar.finish();
+            overall_bar.finish_with_message("🎯 Scan completed");
         }
         
-        // Clear the multi-progress display
-        let _ = self.multi_progress.clear();
+        // DON'T clear the multi-progress display - keep it visible
     }
 }
 

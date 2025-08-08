@@ -11,6 +11,7 @@ mod mcp;
 mod shared;
 mod sync;
 mod parallel;
+mod reports;
 
 use cli::commands::Cli;
 
