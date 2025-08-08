@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__serena__*",
+      "mcp__ccusage__*",
+      "Bash",
+      "WebFetch",
+      "mcp__ccusage__daily",
+      "mcp__firecrawl__firecrawl_search",
+      "mcp__firecrawl__firecrawl_scrape",
+      "mcp__gmail__search_emails",
+      "mcp__gmail__list_email_labels",
+      "mcp__gmail__create_label",
+      "mcp__gmail__batch_modify_emails",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "mcp__Bright_Data__scrape_as_markdown",
+      "mcp__brave-search__brave_web_search",
+      "mcp__search-serper__deep-research"
+    ],
+    "deny": []
+  }
+}
