@@ -336,12 +336,9 @@ fn print_text_results(
             (warnings.len().to_string(), "warning")
         );
         println!();
-        output::styled!("{} Full report saved to: file://{}", 
+        output::styled!("{} Full report saved to: {}", 
             ("📄", "info_symbol"),
-            (report_path.canonicalize()?.display().to_string(), "file_path")
-        );
-        output::styled!("{} Click the link above to open in your browser", 
-            ("💡", "info_symbol")
+            (report_path.display().to_string(), "file_path")
         );
         
         // Also save JSON for machine processing
