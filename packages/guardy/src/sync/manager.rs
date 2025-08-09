@@ -6,13 +6,11 @@ use ignore::WalkBuilder;
 use crate::config::GuardyConfig;
 use crate::git::remote::RemoteOperations;
 use super::{SyncConfig, SyncStatus, SyncRepo};
-use super::protection::ProtectionManager;
 
 pub struct SyncManager {
-    config: SyncConfig,
+    pub config: SyncConfig,
     cache_dir: PathBuf,
     remote_ops: RemoteOperations,
-    pub protection_manager: ProtectionManager,
 }
 
 impl SyncManager {
@@ -20,21 +18,41 @@ impl SyncManager {
         let cache_dir = PathBuf::from(".guardy/cache");
         std::fs::create_dir_all(&cache_dir)?;
         let remote_ops = RemoteOperations::new(cache_dir.clone());
-        let protection_manager = ProtectionManager::new(sync_config.protection.clone())?;
 
-        Ok(Self { config: sync_config, cache_dir, remote_ops, protection_manager })
+        Ok(Self { 
+            config: sync_config, 
+            cache_dir, 
+            remote_ops 
+        })
     }
 
     pub fn bootstrap(repo_url: &str, version: &str) -> Result<Self> {
         let sync_repo = SyncRepo {
-            name: "bootstrap".to_string(), repo: repo_url.to_string(), version: version.to_string(),
-            source_path: ".".to_string(), dest_path: ".".to_string(),
-            include: vec!["*".to_string()], exclude: vec![".git".to_string()], protected: true,
+            name: "bootstrap".to_string(), 
+            repo: repo_url.to_string(), 
+            version: version.to_string(),
+            source_path: ".".to_string(), 
+            dest_path: ".".to_string(),
+            include: vec!["*".to_string()], 
+            exclude: vec![".git".to_string()],
         };
-        Self::with_config(SyncConfig { repos: vec![sync_repo], protection: Default::default() })
+        Self::with_config(SyncConfig { 
+            repos: vec![sync_repo]
+        })
     }
 
-    /// Core abstraction: Get files matching patterns using ignore crate  
+    /// Parse sync config from GuardyConfig
+    pub fn parse_sync_config(config: &GuardyConfig) -> Result<SyncConfig> {
+        let sync_value = config.get_section("sync")
+            .map_err(|_| anyhow!("No sync configuration found"))?;
+        
+        let sync_config: SyncConfig = serde_json::from_value(sync_value)
+            .map_err(|e| anyhow!("Failed to parse sync configuration: {}", e))?;
+        
+        Ok(sync_config)
+    }
+
+    /// Get files matching patterns using ignore crate  
     fn get_files(&self, source: &Path, repo: &SyncRepo) -> Result<Vec<PathBuf>> {
         let mut builder = WalkBuilder::new(source);
         
@@ -75,7 +93,9 @@ impl SyncManager {
         files.iter().map(|f| {
             let src_file = src.join(f);
             let dst_file = dst.join(f);
-            if let Some(parent) = dst_file.parent() { fs::create_dir_all(parent)?; }
+            if let Some(parent) = dst_file.parent() { 
+                fs::create_dir_all(parent)?; 
+            }
             fs::copy(&src_file, &dst_file)?;
             Ok(dst_file)
         }).collect()
@@ -88,15 +108,29 @@ impl SyncManager {
             if !dst_file.exists() || 
                fs::metadata(&src_file).ok()?.len() != fs::metadata(&dst_file).ok()?.len() {
                 Some(dst_file)
-            } else { None }
+            } else { 
+                None 
+            }
         }).collect()
     }
 
-    fn existing_files(&self, files: &[PathBuf], dst: &Path) -> Vec<PathBuf> {
-        files.iter().map(|f| dst.join(f)).filter(|f| f.exists()).collect()
+    /// Update cache from remote repository using git pull
+    fn update_cache(&self, repo: &SyncRepo) -> Result<PathBuf> {
+        let repo_name = self.extract_repo_name(&repo.repo);
+        let repo_path = self.cache_dir.join(&repo_name);
+
+        if !repo_path.exists() {
+            // Clone if doesn't exist
+            self.remote_ops.clone_repository(&repo.repo, &repo_name)?;
+        }
+
+        // Always fetch and reset to match remote
+        self.remote_ops.fetch_and_reset(&repo_name, &repo.version)?;
+        
+        Ok(repo_path)
     }
 
-    /// Public interface - compose the abstractions
+    /// Copy repository files from cache to destination
     fn copy_repo_files(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
         let src = repo_path.join(&repo.source_path);
         let dst = Path::new(&repo.dest_path);
@@ -104,24 +138,7 @@ impl SyncManager {
         self.copy_files(&files, &src, dst)
     }
 
-    fn copy_changed_repo_files(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
-        let src = repo_path.join(&repo.source_path);
-        let dst = Path::new(&repo.dest_path);
-        let all_files = self.get_files(&src, repo)?;
-        let changed_files = self.files_differ(&all_files, &src, dst);
-        
-        // Only copy the files that actually differ
-        let relative_changed_files: Vec<PathBuf> = changed_files.iter()
-            .filter_map(|abs_path| abs_path.strip_prefix(dst).ok().map(|p| p.to_path_buf()))
-            .collect();
-            
-        if !relative_changed_files.is_empty() {
-            self.copy_files(&relative_changed_files, &src, dst)
-        } else {
-            Ok(vec![])
-        }
-    }
-
+    /// Check if repository is in sync
     fn check_repo_sync_status(&self, repo: &SyncRepo, repo_path: &Path, changed: &mut Vec<PathBuf>) -> Result<()> {
         let src = repo_path.join(&repo.source_path);
         let dst = Path::new(&repo.dest_path);
@@ -130,15 +147,11 @@ impl SyncManager {
         Ok(())
     }
 
-    fn get_files_to_overwrite(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
-        let src = repo_path.join(&repo.source_path);
-        let dst = Path::new(&repo.dest_path);
-        let files = self.get_files(&src, repo)?;
-        Ok(self.existing_files(&files, dst))
-    }
-
+    /// Check sync status of all repositories
     pub fn check_sync_status(&self) -> Result<SyncStatus> {
-        if self.config.repos.is_empty() { return Ok(SyncStatus::NotConfigured); }
+        if self.config.repos.is_empty() { 
+            return Ok(SyncStatus::NotConfigured); 
+        }
         
         let mut changed_files = Vec::new();
         for repo in &self.config.repos {
@@ -148,64 +161,52 @@ impl SyncManager {
             }
         }
         
-        if changed_files.is_empty() { Ok(SyncStatus::InSync) } 
-        else { Ok(SyncStatus::OutOfSync { changed_files }) }
+        if changed_files.is_empty() {
+            Ok(SyncStatus::InSync)
+        } else {
+            Ok(SyncStatus::OutOfSync { changed_files })
+        }
     }
 
+    /// Update all repositories
     pub fn update_all_repos(&mut self, force: bool) -> Result<Vec<PathBuf>> {
-        if self.config.repos.is_empty() { return Err(anyhow!("No repositories configured")); }
+        let mut all_updated_files = Vec::new();
 
-        // Protection check
-        if !force && self.protection_manager.should_block_modifications() {
-            let files: Vec<_> = self.config.repos.iter()
-                .map(|repo| {
-                    let repo_path = self.remote_ops.clone_or_fetch(&repo.repo, &repo.version)?;
-                    self.get_files_to_overwrite(repo, &repo_path)
-                }).collect::<Result<Vec<_>, _>>()?
-                .into_iter().flatten().collect();
-            self.protection_manager.validate_modifications(&files)?;
-        }
-
-        let mut all_synced_files = Vec::new();
-        
-        // Sync repositories
         for repo in &self.config.repos {
-            let repo_path = self.remote_ops.clone_or_fetch(&repo.repo, &repo.version)?;
-            if force {
-                let files = self.get_files_to_overwrite(repo, &repo_path)?;
-                if !files.is_empty() { self.protection_manager.backup_before_sync(&files)?; }
+            tracing::info!("Updating repository: {}", repo.name);
+            
+            // Update cache from remote
+            let repo_path = self.update_cache(repo)?;
+            
+            // Check what will change
+            let src = repo_path.join(&repo.source_path);
+            let dst = Path::new(&repo.dest_path);
+            let files = self.get_files(&src, repo)?;
+            let changed_files = self.files_differ(&files, &src, dst);
+            
+            if !changed_files.is_empty() && !force {
+                // In non-force mode, we could add prompting here if needed
+                tracing::warn!("Files will be overwritten. Use --force to proceed.");
+                continue;
             }
             
-            // For bootstrap (initial setup), copy all files. For regular updates, only copy changed files.
-            let synced = if repo.name == "bootstrap" {
-                self.copy_repo_files(repo, &repo_path)?
-            } else {
-                self.copy_changed_repo_files(repo, &repo_path)?
-            };
-            
-            all_synced_files.extend(synced.clone());
-            self.protection_manager.protect_synced_files(repo, synced)?;
+            // Copy files from cache to destination
+            let updated = self.copy_repo_files(repo, &repo_path)?;
+            all_updated_files.extend(updated);
         }
-        Ok(all_synced_files)
+
+        Ok(all_updated_files)
     }
 
 
-    pub fn parse_sync_config(config: &GuardyConfig) -> Result<SyncConfig> {
-        match config.get_section("sync") {
-            Ok(section) => serde_json::from_value(section).map_err(|e| anyhow!("Parse error: {}", e)),
-            Err(_) => Ok(SyncConfig::default())
-        }
-    }
-
-    pub fn extract_repo_name(&self, url: &str) -> String {
-        url.trim_end_matches(".git").split('/').next_back().unwrap_or("unknown").to_string()
-    }
-    
-    pub fn get_config(&self) -> &SyncConfig {
-        &self.config
-    }
-    
-    pub fn get_cache_dir(&self) -> &std::path::Path {
-        &self.cache_dir
+    /// Extract repository name from URL
+    fn extract_repo_name(&self, repo_url: &str) -> String {
+        repo_url
+            .trim_end_matches('/')
+            .trim_end_matches(".git")
+            .split('/')
+            .next_back()
+            .unwrap_or("unknown")
+            .to_string()
     }
 }

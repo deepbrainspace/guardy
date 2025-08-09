@@ -11,23 +11,6 @@ impl RemoteOperations {
         Self { cache_dir }
     }
 
-    /// Clone or fetch a repository to the cache directory using system git
-    pub fn clone_or_fetch(&self, repo_url: &str, version: &str) -> Result<PathBuf> {
-        let repo_name = self.extract_repo_name(repo_url);
-        let repo_path = self.cache_dir.join(&repo_name);
-
-        if repo_path.exists() {
-            // Repository exists, try to fetch and checkout
-            tracing::info!("Fetching updates for {} at {}", repo_name, repo_path.display());
-            self.fetch_and_checkout_system_git(&repo_path, version)?;
-        } else {
-            // Clone the repository
-            tracing::info!("Cloning {} to {}", repo_url, repo_path.display());
-            self.clone_with_system_git(repo_url, &repo_path, version)?;
-        }
-
-        Ok(repo_path)
-    }
 
     /// Clone repository using system git command
     fn clone_with_system_git(&self, repo_url: &str, repo_path: &Path, version: &str) -> Result<()> {
@@ -53,23 +36,6 @@ impl RemoteOperations {
         Ok(())
     }
 
-    /// Fetch and checkout using system git
-    fn fetch_and_checkout_system_git(&self, repo_path: &Path, version: &str) -> Result<()> {
-        // Fetch from origin
-        let output = Command::new("git")
-            .args(["fetch", "--quiet", "origin"])
-            .current_dir(repo_path)
-            .output()?;
-
-        if !output.status.success() {
-            let error_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Failed to fetch from origin: {}", error_msg));
-        }
-
-        // Checkout the specified version
-        self.checkout_version_system_git(repo_path, version)?;
-        Ok(())
-    }
 
     /// Checkout a specific version using system git
     fn checkout_version_system_git(&self, repo_path: &Path, version: &str) -> Result<()> {
@@ -107,14 +73,58 @@ impl RemoteOperations {
         Ok(())
     }
 
-    fn extract_repo_name(&self, repo_url: &str) -> String {
-        // Extract repo name from URL like "github.com/org/repo" -> "repo"
-        repo_url
-            .trim_end_matches(".git")
-            .split('/')
-            .next_back()
-            .unwrap_or("unknown")
-            .to_string()
+    /// Clone repository (called when it doesn't exist in cache)
+    pub fn clone_repository(&self, repo_url: &str, repo_name: &str) -> Result<()> {
+        let repo_path = self.cache_dir.join(repo_name);
+        self.clone_with_system_git(repo_url, &repo_path, "main")?;
+        Ok(())
     }
+
+    /// Fetch and reset to remote version (ensures cache matches remote exactly)
+    pub fn fetch_and_reset(&self, repo_name: &str, version: &str) -> Result<()> {
+        let repo_path = self.cache_dir.join(repo_name);
+        
+        // Fetch all branches and tags from origin
+        let output = Command::new("git")
+            .args(["fetch", "--all", "--tags", "--prune"])
+            .current_dir(&repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Failed to fetch from origin: {}", error_msg));
+        }
+
+        // Reset hard to the specified version (discards any local changes in cache)
+        // Try as remote branch first
+        let remote_ref = format!("origin/{version}");
+        let reset_output = Command::new("git")
+            .args(["reset", "--hard", &remote_ref])
+            .current_dir(&repo_path)
+            .output()?;
+
+        if !reset_output.status.success() {
+            // Try as tag or commit
+            let reset_output = Command::new("git")
+                .args(["reset", "--hard", version])
+                .current_dir(&repo_path)
+                .output()?;
+
+            if !reset_output.status.success() {
+                let error_msg = String::from_utf8_lossy(&reset_output.stderr);
+                return Err(anyhow!("Failed to reset to version '{}': {}", version, error_msg));
+            }
+        }
+
+        // Clean any untracked files
+        Command::new("git")
+            .args(["clean", "-fd"])
+            .current_dir(&repo_path)
+            .output()?;
+
+        tracing::info!("Reset cache to version: {}", version);
+        Ok(())
+    }
+
 }
 
