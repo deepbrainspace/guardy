@@ -7,10 +7,49 @@ general:
   interactive: true
 
 hooks:
-  pre_commit: true
-  commit_msg: true
-  post_checkout: true
-  pre_push: true
+  pre-commit:
+    enabled: true
+    builtin:
+      - scan_secrets   # Run built-in secret scanner
+    custom: []
+    # Example custom commands (uncomment to use):
+    # custom:
+    #   - command: "cargo fmt --check"
+    #     description: "Check Rust formatting"
+    #     fail_on_error: true
+    #   - command: "cargo clippy -- -D warnings"
+    #     description: "Run clippy linter"
+    #     fail_on_error: true
+  
+  commit-msg:
+    enabled: false  # Set to true when you add custom commands
+    builtin: []
+    custom: []
+    # Example: Validate conventional commits
+    # custom:
+    #   - command: "grep -qE '^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+' $1"
+    #     description: "Validate commit message format"
+    #     fail_on_error: true
+  
+  post-checkout:
+    enabled: false
+    builtin: []
+    custom: []
+    # Example: Install dependencies after checkout
+    # custom:
+    #   - command: "pnpm install"
+    #     description: "Install dependencies"
+    #     fail_on_error: false
+  
+  pre-push:
+    enabled: false
+    builtin: []
+    custom: []
+    # Example: Run tests before push
+    # custom:
+    #   - command: "cargo test"
+    #     description: "Run all tests"
+    #     fail_on_error: true
 
 security:
   # Secret detection patterns (regex)
