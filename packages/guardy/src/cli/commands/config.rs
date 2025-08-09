@@ -14,7 +14,7 @@ pub enum ConfigCommand {
     /// Display current merged configuration
     Show {
         /// Output format: json, toml, yaml
-        #[arg(short, long, default_value = "toml")]
+        #[arg(short, long, default_value = "yaml")]
         format: String,
     },
     /// Set configuration value
