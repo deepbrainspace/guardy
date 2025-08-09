@@ -1,5 +1,7 @@
 pub mod manager;
 pub mod protection;
+pub mod interactive;
+pub mod status;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

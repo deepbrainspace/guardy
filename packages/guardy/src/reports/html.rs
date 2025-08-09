@@ -30,12 +30,12 @@ impl ReportGenerator {
         
         let (report_filename, content) = match format {
             ReportFormat::Html => {
-                let filename = format!("guardy-report-{}.html", timestamp);
+                let filename = format!("guardy-report-{timestamp}.html");
                 let content = Self::generate_html_content(matches, warnings, total_files, total_skipped, elapsed)?;
                 (filename, content)
             },
             ReportFormat::Json => {
-                let filename = format!("guardy-report-{}.json", timestamp);
+                let filename = format!("guardy-report-{timestamp}.json");
                 let content = Self::generate_json_content(matches, warnings, total_files, total_skipped, elapsed)?;
                 (filename, content)
             },
@@ -335,9 +335,9 @@ impl ReportGenerator {
                 let message = warning.message.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
                 sections.push_str(&format!(r#"
                         <tr>
-                            <td class="warning-msg">{}</td>
+                            <td class="warning-msg">{message}</td>
                         </tr>
-"#, message));
+"#));
             }
             
             sections.push_str(r#"
