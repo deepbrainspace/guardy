@@ -91,7 +91,7 @@ impl StatisticsProgressReporter {
         let worker_colors = ["green/black", "blue/black", "red/black", "yellow/black"];
         
         // Estimate files per worker for progress bar lengths
-        let estimated_files_per_worker = (total_files + worker_count - 1) / worker_count; // Round up division
+        let estimated_files_per_worker = total_files.div_ceil(worker_count); // Round up division
         
         // Create worker bars with different colors and styles
         for worker_id in 0..worker_count {

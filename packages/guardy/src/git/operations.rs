@@ -1,34 +1,31 @@
 use anyhow::{Result, Context};
-use git2::{Status, StatusOptions};
 use std::path::PathBuf;
+use std::process::Command;
 use super::GitRepo;
 
 impl GitRepo {
     /// Get list of files that are staged for commit (primary use case for pre-commit hooks)
     pub fn get_staged_files(&self) -> Result<Vec<PathBuf>> {
-        let mut files = Vec::new();
-        let mut status_opts = StatusOptions::new();
-        status_opts.include_ignored(false);
-        status_opts.include_untracked(false);
-        
-        let statuses = self.repo.statuses(Some(&mut status_opts))?;
-        let workdir = self.repo.workdir()
-            .context("Repository has no working directory")?;
-        
-        for entry in statuses.iter() {
-            let status = entry.status();
-            
-            // Check if file is staged
-            if status.intersects(Status::INDEX_NEW | Status::INDEX_MODIFIED | Status::INDEX_DELETED | Status::INDEX_RENAMED | Status::INDEX_TYPECHANGE) {
-                if let Some(path) = entry.path() {
-                    files.push(workdir.join(path));
-                }
-            }
+        let output = Command::new("git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(&self.path)
+            .output()
+            .context("Failed to execute git diff --cached --name-only")?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!("Git command failed: {}", 
+                String::from_utf8_lossy(&output.stderr)));
         }
-        
+
+        let stdout = String::from_utf8(output.stdout)
+            .context("Git output is not valid UTF-8")?;
+
+        let files = stdout
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| self.path.join(line.trim()))
+            .collect();
+
         Ok(files)
     }
-    
-    
-    
 }

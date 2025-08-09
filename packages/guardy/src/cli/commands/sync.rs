@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::sync::{SyncStatus, manager::SyncManager};
+use crate::sync::{SyncStatus, manager::SyncManager, interactive::InteractiveUpdater, status::StatusDisplay};
 
 #[derive(Parser)]
 #[command(about = "Protected file synchronization")]
@@ -33,8 +33,8 @@ pub enum SyncSubcommand {
         version: Option<String>,
     },
     
-    /// Show sync configuration and current status
-    Show,
+    /// Show detailed sync status including remote sources and protected files
+    Status,
     
     /// Unprotect specific files
     Unprotect {
@@ -62,7 +62,7 @@ pub async fn execute(args: SyncArgs, config_path: Option<&str>) -> Result<()> {
         SyncSubcommand::Update { force, repo, version } => {
             execute_update(force, repo, version, config_path).await
         },
-        SyncSubcommand::Show => execute_show(config_path).await,
+        SyncSubcommand::Status => execute_status(config_path).await,
         SyncSubcommand::Unprotect { files, all } => {
             execute_unprotect(files, all, config_path).await
         },
@@ -120,7 +120,17 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
             (&version_str, "id_value")
         );
         let mut manager = SyncManager::bootstrap(&repo_url, &version_str)?;
-        manager.update_all_repos(force)?;
+        let updated_files = manager.update_all_repos(force)?;
+        
+        if !updated_files.is_empty() {
+            output::styled!("{} Synced {} files:", 
+                ("📝", "info_symbol"),
+                (updated_files.len().to_string(), "property")
+            );
+            for file in &updated_files {
+                println!("  • {}", output::file_path(file.display().to_string()));
+            }
+        }
         output::styled!("{} Bootstrap complete", 
             ("✅", "success_symbol")
         );
@@ -131,28 +141,57 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
     let mut manager = create_sync_manager(config_path)?;
     
     if force {
+        // Force update without interaction
         output::styled!("{} Force updating all repositories...", 
             ("⚡", "info_symbol")
         );
+        let updated_files = manager.update_all_repos(force)?;
+        
+        if updated_files.is_empty() {
+            output::styled!("{} All files were already in sync", 
+                ("ℹ️", "info_symbol")
+            );
+        } else {
+            output::styled!("{} Successfully updated {} files:", 
+                ("✅", "success_symbol"),
+                (updated_files.len().to_string(), "property")
+            );
+            
+            // Group files by protection status for cleaner display
+            let mut protected_files = Vec::new();
+            let mut unprotected_files = Vec::new();
+            
+            for file in &updated_files {
+                if manager.protection_manager.is_protected(file) {
+                    protected_files.push(file);
+                } else {
+                    unprotected_files.push(file);
+                }
+            }
+            
+            // Show protected files first
+            for file in &protected_files {
+                println!("  • {} 🔒", output::file_path(file.display().to_string()));
+            }
+            
+            // Then unprotected files
+            for file in &unprotected_files {
+                println!("  • {}", output::file_path(file.display().to_string()));
+            }
+        }
     } else {
-        output::styled!("{} Updating all repositories...", 
-            ("📥", "info_symbol")
-        );
+        // Interactive update workflow
+        let mut interactive_updater = InteractiveUpdater::new(manager);
+        interactive_updater.run().await?;
     }
-    
-    manager.update_all_repos(force)?;
-    output::styled!("{} All repositories updated", 
-        ("✅", "success_symbol")
-    );
     
     Ok(())
 }
 
-async fn execute_show(config_path: Option<&str>) -> Result<()> {
+async fn execute_status(config_path: Option<&str>) -> Result<()> {
     let manager = create_sync_manager(config_path)?;
-    let status_output = manager.show_status()?;
-    println!("{status_output}");
-    Ok(())
+    let status_display = StatusDisplay::new(&manager);
+    status_display.show_detailed_status()
 }
 
 async fn execute_unprotect(files: Vec<String>, all: bool, config_path: Option<&str>) -> Result<()> {

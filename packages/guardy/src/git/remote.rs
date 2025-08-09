@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
-use git2::{Repository, RepositoryOpenFlags};
 use std::path::{Path, PathBuf};
-use super::GitRepo;
+use std::process::Command;
 
 pub struct RemoteOperations {
     cache_dir: PathBuf,
@@ -12,7 +11,7 @@ impl RemoteOperations {
         Self { cache_dir }
     }
 
-    /// Clone or fetch a repository to the cache directory
+    /// Clone or fetch a repository to the cache directory using system git
     pub fn clone_or_fetch(&self, repo_url: &str, version: &str) -> Result<PathBuf> {
         let repo_name = self.extract_repo_name(repo_url);
         let repo_path = self.cache_dir.join(&repo_name);
@@ -20,16 +19,92 @@ impl RemoteOperations {
         if repo_path.exists() {
             // Repository exists, try to fetch and checkout
             tracing::info!("Fetching updates for {} at {}", repo_name, repo_path.display());
-            let git_repo = GitRepo::open(&repo_path)?;
-            git_repo.fetch_and_checkout(version)?;
+            self.fetch_and_checkout_system_git(&repo_path, version)?;
         } else {
             // Clone the repository
             tracing::info!("Cloning {} to {}", repo_url, repo_path.display());
-            let git_repo = GitRepo::clone(repo_url, &repo_path)?;
-            git_repo.checkout_version(version)?;
+            self.clone_with_system_git(repo_url, &repo_path, version)?;
         }
 
         Ok(repo_path)
+    }
+
+    /// Clone repository using system git command
+    fn clone_with_system_git(&self, repo_url: &str, repo_path: &Path, version: &str) -> Result<()> {
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = repo_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Clone with system git - uses all user's authentication methods
+        let output = Command::new("git")
+            .args(["clone", "--quiet", repo_url])
+            .arg(repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Failed to clone repository '{}': {}", repo_url, error_msg));
+        }
+
+        // Checkout the specified version
+        self.checkout_version_system_git(repo_path, version)?;
+
+        Ok(())
+    }
+
+    /// Fetch and checkout using system git
+    fn fetch_and_checkout_system_git(&self, repo_path: &Path, version: &str) -> Result<()> {
+        // Fetch from origin
+        let output = Command::new("git")
+            .args(["fetch", "--quiet", "origin"])
+            .current_dir(repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Failed to fetch from origin: {}", error_msg));
+        }
+
+        // Checkout the specified version
+        self.checkout_version_system_git(repo_path, version)?;
+        Ok(())
+    }
+
+    /// Checkout a specific version using system git
+    fn checkout_version_system_git(&self, repo_path: &Path, version: &str) -> Result<()> {
+        // Try to checkout the version - git will try branches, tags, and commits
+        let output = Command::new("git")
+            .args(["checkout", "--quiet", version])
+            .current_dir(repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            // Try fetching the specific branch/tag if it's not local
+            let fetch_output = Command::new("git")
+                .args(["fetch", "--quiet", "origin", &format!("{version}:{version}")])
+                .current_dir(repo_path)
+                .output()?;
+
+            if fetch_output.status.success() {
+                // Try checkout again
+                let output = Command::new("git")
+                    .args(["checkout", "--quiet", version])
+                    .current_dir(repo_path)
+                    .output()?;
+
+                if !output.status.success() {
+                    let error_msg = String::from_utf8_lossy(&output.stderr);
+                    return Err(anyhow!("Could not checkout version '{}': {}", version, error_msg));
+                }
+            } else {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                return Err(anyhow!("Could not find version '{}' in repository: {}", version, error_msg));
+            }
+        }
+
+        tracing::info!("Checked out version: {}", version);
+        Ok(())
     }
 
     fn extract_repo_name(&self, repo_url: &str) -> String {
@@ -43,65 +118,3 @@ impl RemoteOperations {
     }
 }
 
-impl GitRepo {
-    /// Open an existing repository
-    pub fn open(repo_path: &Path) -> Result<Self> {
-        let repo = Repository::open_ext(
-            repo_path,
-            RepositoryOpenFlags::empty(),
-            &[] as &[&std::ffi::OsStr],
-        )?;
-        Ok(GitRepo { repo })
-    }
-
-    /// Clone a repository from URL
-    pub fn clone(repo_url: &str, repo_path: &Path) -> Result<Self> {
-        // Convert various URL formats to git URLs
-        let git_url = if repo_url.starts_with("http") || repo_url.starts_with("git@") {
-            repo_url.to_string()
-        } else {
-            // Assume it's github.com/org/repo format
-            format!("https://{repo_url}.git")
-        };
-
-        tracing::info!("Cloning from: {}", git_url);
-
-        let repo = Repository::clone(&git_url, repo_path)?;
-        Ok(GitRepo { repo })
-    }
-
-    /// Fetch from origin and checkout a specific version
-    pub fn fetch_and_checkout(&self, version: &str) -> Result<()> {
-        // Fetch from origin
-        let mut remote = self.repo.find_remote("origin")?;
-        let refspecs = remote.fetch_refspecs()?;
-        let refspecs: Vec<&str> = refspecs.iter().flatten().collect();
-        
-        remote.fetch(&refspecs, None, None)?;
-        
-        self.checkout_version(version)?;
-        Ok(())
-    }
-
-    /// Checkout a specific version (tag, branch, or commit)
-    pub fn checkout_version(&self, version: &str) -> Result<()> {
-        // Try to find the version as a tag, branch, or commit
-        let object = if let Ok(reference) = self.repo.find_reference(&format!("refs/tags/{version}")) {
-            reference.peel_to_commit()?.into_object()
-        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/heads/{version}")) {
-            reference.peel_to_commit()?.into_object()
-        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/remotes/origin/{version}")) {
-            reference.peel_to_commit()?.into_object()
-        } else if let Ok(oid) = git2::Oid::from_str(version) {
-            self.repo.find_object(oid, None)?
-        } else {
-            return Err(anyhow!("Could not find version '{}' in repository", version));
-        };
-
-        self.repo.checkout_tree(&object, None)?;
-        self.repo.set_head_detached(object.id())?;
-
-        tracing::info!("Checked out version: {}", version);
-        Ok(())
-    }
-}

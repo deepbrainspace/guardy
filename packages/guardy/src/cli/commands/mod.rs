@@ -71,7 +71,6 @@ impl Cli {
             std::env::set_current_dir(dir)?;
         }
 
-
         // Set up logging based on verbosity
         setup_logging(self.verbose, self.quiet);
 
@@ -104,6 +103,7 @@ impl Cli {
             }
         }
     }
+
 }
 
 fn setup_logging(verbose: u8, quiet: bool) {
