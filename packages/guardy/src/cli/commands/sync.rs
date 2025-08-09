@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::sync::{SyncStatus, manager::SyncManager, interactive::InteractiveUpdater, status::StatusDisplay};
+use crate::sync::{SyncStatus, manager::SyncManager, status::StatusDisplay};
 
 #[derive(Parser)]
-#[command(about = "Protected file synchronization")]
+#[command(about = "File synchronization from remote repositories")]
 pub struct SyncArgs {
     #[command(subcommand)]
     pub command: SyncSubcommand,
@@ -15,8 +14,8 @@ pub struct SyncArgs {
 
 #[derive(Subcommand)]
 pub enum SyncSubcommand {
-    /// Check if files are in sync with configured repositories
-    Check,
+    /// Show sync status and configuration
+    Status,
     
     /// Update files from configured repositories
     Update {
@@ -32,83 +31,21 @@ pub enum SyncSubcommand {
         #[arg(long)]
         version: Option<String>,
     },
-    
-    /// Show detailed sync status including remote sources and protected files
-    Status,
-    
-    /// Unprotect specific files
-    Unprotect {
-        /// Files to unprotect (can use glob patterns)
-        files: Vec<String>,
-        
-        /// Unprotect all synced files
-        #[arg(long)]
-        all: bool,
-    },
-    
-    /// List all protected files
-    Protected,
-    
-    /// Restore files from a backup
-    Restore {
-        /// Path to backup directory to restore from
-        backup_path: String,
-    },
 }
 
 pub async fn execute(args: SyncArgs, config_path: Option<&str>) -> Result<()> {
     match args.command {
-        SyncSubcommand::Check => execute_check(config_path).await,
+        SyncSubcommand::Status => execute_status(config_path).await,
         SyncSubcommand::Update { force, repo, version } => {
             execute_update(force, repo, version, config_path).await
-        },
-        SyncSubcommand::Status => execute_status(config_path).await,
-        SyncSubcommand::Unprotect { files, all } => {
-            execute_unprotect(files, all, config_path).await
-        },
-        SyncSubcommand::Protected => execute_list_protected(config_path).await,
-        SyncSubcommand::Restore { backup_path } => {
-            execute_restore(backup_path, config_path).await
         },
     }
 }
 
-async fn execute_check(config_path: Option<&str>) -> Result<()> {
+async fn execute_status(config_path: Option<&str>) -> Result<()> {
     let manager = create_sync_manager(config_path)?;
-    
-    let status = manager.check_sync_status()?;
-    
-    match status {
-        SyncStatus::InSync => {
-            output::styled!("{} All files are in sync", 
-                ("✅", "success_symbol")
-            );
-            Ok(())
-        },
-        SyncStatus::OutOfSync { changed_files } => {
-            output::styled!("{} Files are out of sync:", 
-                ("❌", "error_symbol")
-            );
-            for file in &changed_files {
-                let protection_status = if manager.protection_manager.is_protected(file) {
-                    " 🔒"
-                } else {
-                    ""
-                };
-                println!("  • {}{}", output::file_path(file.display().to_string()), protection_status);
-            }
-            std::process::exit(1);
-        },
-        SyncStatus::NotConfigured => {
-            output::styled!("{} No sync configuration found", 
-                ("⚠️", "warning_symbol")
-            );
-            output::styled!("Run {} to bootstrap", 
-                ("guardy sync update --repo=<url> --version=<version>", "property")
-            );
-            std::process::exit(1);
-        }
-    }
+    let status_display = StatusDisplay::new(&manager);
+    status_display.show_detailed_status()
 }
 
 async fn execute_update(force: bool, repo: Option<String>, version: Option<String>, config_path: Option<&str>) -> Result<()> {
@@ -140,126 +77,72 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
     // Regular update case
     let mut manager = create_sync_manager(config_path)?;
     
-    if force {
-        // Force update without interaction
-        output::styled!("{} Force updating all repositories...", 
-            ("⚡", "info_symbol")
-        );
-        let updated_files = manager.update_all_repos(force)?;
-        
-        if updated_files.is_empty() {
-            output::styled!("{} All files were already in sync", 
-                ("ℹ️", "info_symbol")
+    // Check current status first
+    let status = manager.check_sync_status()?;
+    
+    match status {
+        SyncStatus::NotConfigured => {
+            output::styled!("{} No sync configuration found", 
+                ("⚠️", "warning_symbol")
             );
-        } else {
-            output::styled!("{} Successfully updated {} files:", 
-                ("✅", "success_symbol"),
-                (updated_files.len().to_string(), "property")
+            output::styled!("Run {} to bootstrap", 
+                ("guardy sync update --repo=<url> --version=<version>", "property")
             );
-            
-            // Group files by protection status for cleaner display
-            let mut protected_files = Vec::new();
-            let mut unprotected_files = Vec::new();
-            
-            for file in &updated_files {
-                if manager.protection_manager.is_protected(file) {
-                    protected_files.push(file);
-                } else {
-                    unprotected_files.push(file);
+            return Ok(());
+        },
+        SyncStatus::InSync => {
+            if !force {
+                output::styled!("{} All files are already in sync", 
+                    ("✅", "success_symbol")
+                );
+                return Ok(());
+            }
+        },
+        SyncStatus::OutOfSync { ref changed_files } => {
+            if !force {
+                output::styled!("{} {} files will be updated:", 
+                    ("⚠️", "warning_symbol"),
+                    (changed_files.len().to_string(), "property")
+                );
+                
+                for file in changed_files.iter().take(10) {
+                    println!("  • {}", output::file_path(file.display().to_string()));
                 }
-            }
-            
-            // Show protected files first
-            for file in &protected_files {
-                println!("  • {} 🔒", output::file_path(file.display().to_string()));
-            }
-            
-            // Then unprotected files
-            for file in &unprotected_files {
-                println!("  • {}", output::file_path(file.display().to_string()));
+                
+                if changed_files.len() > 10 {
+                    println!("  ... and {} more", changed_files.len() - 10);
+                }
+                
+                println!();
+                output::styled!("Use {} to proceed with update", 
+                    ("--force", "property")
+                );
+                return Ok(());
             }
         }
-    } else {
-        // Interactive update workflow
-        let mut interactive_updater = InteractiveUpdater::new(manager);
-        interactive_updater.run().await?;
     }
     
-    Ok(())
-}
-
-async fn execute_status(config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    let status_display = StatusDisplay::new(&manager);
-    status_display.show_detailed_status()
-}
-
-async fn execute_unprotect(files: Vec<String>, all: bool, config_path: Option<&str>) -> Result<()> {
-    let mut manager = create_sync_manager(config_path)?;
+    // Perform the update
+    output::styled!("{} Updating all repositories...", 
+        ("⚡", "info_symbol")
+    );
     
-    if all {
-        output::styled!("{} Removing protection from all files...", 
-            ("🔓", "info_symbol")
-        );
-        manager.protection_manager.clear_all_protections()?;
-        output::styled!("{} All file protections removed", 
-            ("✅", "success_symbol")
-        );
-    } else if !files.is_empty() {
-        output::styled!("{} Unprotecting {} files...", 
-            ("🔓", "info_symbol"),
-            (files.len().to_string(), "property")
-        );
-        
-        let paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
-        manager.protection_manager.unprotect_files(paths)?;
-        
-        output::styled!("{} Files unprotected", 
-            ("✅", "success_symbol")
-        );
-    } else {
-        return Err(anyhow!("Specify files to unprotect or use --all flag"));
-    }
+    let updated_files = manager.update_all_repos(force)?;
     
-    Ok(())
-}
-
-async fn execute_list_protected(config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    let protected_files = manager.protection_manager.list_protected_files();
-    
-    if protected_files.is_empty() {
-        output::styled!("{} No files are currently protected", 
+    if updated_files.is_empty() {
+        output::styled!("{} No files were updated", 
             ("ℹ️", "info_symbol")
         );
     } else {
-        output::styled!("{} Protected files ({} total):", 
-            ("🔒", "info_symbol"),
-            (protected_files.len().to_string(), "property")
+        output::styled!("{} Successfully updated {} files:", 
+            ("✅", "success_symbol"),
+            (updated_files.len().to_string(), "property")
         );
         
-        for file in protected_files {
+        for file in &updated_files {
             println!("  • {}", output::file_path(file.display().to_string()));
         }
     }
-    
-    Ok(())
-}
-
-async fn execute_restore(backup_path: String, config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    
-    output::styled!("{} Restoring files from backup: {}", 
-        ("📂", "info_symbol"),
-        (&backup_path, "property")
-    );
-    
-    let backup_path = PathBuf::from(backup_path);
-    manager.protection_manager.restore_from_backup(&backup_path)?;
-    
-    output::styled!("{} Files restored successfully", 
-        ("✅", "success_symbol")
-    );
     
     Ok(())
 }
