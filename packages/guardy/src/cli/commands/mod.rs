@@ -57,6 +57,7 @@ pub enum Commands {
     /// Remove all installed hooks
     Uninstall(uninstall::UninstallArgs),
     /// MCP (Model Context Protocol) server management
+    #[command(hide = true)]
     Mcp(mcp::McpArgs),
     /// Protected file synchronization
     Sync(sync::SyncArgs),
