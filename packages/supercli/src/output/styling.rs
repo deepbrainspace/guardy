@@ -140,7 +140,7 @@ pub fn apply_style<T: AsRef<str>>(text: T, style: &str) -> String {
 /// # Fine-Grained Styling Examples
 /// ```rust
 /// use supercli::styled;
-/// 
+///
 /// // Mixed styling with placeholders
 /// styled!("Processing {} files in {}",
 ///     ("150", "number"),
