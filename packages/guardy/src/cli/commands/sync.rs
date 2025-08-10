@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::sync::{SyncStatus, manager::SyncManager, status::StatusDisplay};
+use crate::sync::{manager::SyncManager, status::StatusDisplay};
 
 #[derive(Parser)]
 #[command(about = "File synchronization from remote repositories")]
@@ -78,9 +78,8 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
     // Regular update case
     let mut manager = create_sync_manager(config_path)?;
     
-    // Check if we have any configuration
-    let status = manager.check_sync_status()?;
-    if matches!(status, SyncStatus::NotConfigured) {
+    // Check if we have any configuration (without doing full status check)
+    if manager.config.repos.is_empty() {
         output::styled!("{} No sync configuration found", 
             ("⚠️", "warning_symbol")
         );
@@ -93,44 +92,13 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
     // Perform the update (interactive by default, force bypasses)
     let interactive = !force;
     
-    if force {
-        // Show what will be updated in force mode
-        match status {
-            SyncStatus::InSync => {
-                output::styled!("{} All files are already in sync", 
-                    ("✅", "success_symbol")
-                );
-                output::styled!("Force updating to ensure cache is fresh...", 
-                    ("⚡", "info_symbol")
-                );
-            },
-            SyncStatus::OutOfSync { ref changed_files } => {
-                output::styled!("{} Force updating {} files:", 
-                    ("⚡", "info_symbol"),
-                    (changed_files.len().to_string(), "property")
-                );
-                
-                for file in changed_files.iter().take(10) {
-                    println!("  • {}", output::file_path(file.display().to_string()));
-                }
-                
-                if changed_files.len() > 10 {
-                    println!("  ... and {} more", changed_files.len() - 10);
-                }
-                println!();
-            },
-            _ => {}
-        }
-    }
     
     let updated_files = manager.update_all_repos(interactive).await?;
     
     // Show results for force mode
     if force {
         if updated_files.is_empty() {
-            output::styled!("{} No files were updated", 
-                ("ℹ️", "info_symbol")
-            );
+            output::styled!("<info>  No files were updated");
         } else {
             output::styled!("{} Successfully updated {} files:", 
                 ("✅", "success_symbol"),
