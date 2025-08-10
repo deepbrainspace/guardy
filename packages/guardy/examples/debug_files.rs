@@ -16,9 +16,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for entry in builder.build() {
         let entry = entry?;
         if entry.path().is_file()
-            && let Ok(rel_path) = entry.path().strip_prefix(source) {
-                println!("  {}", rel_path.display());
-            }
+            && let Ok(rel_path) = entry.path().strip_prefix(source)
+        {
+            println!("  {}", rel_path.display());
+        }
     }
 
     // Cleanup
