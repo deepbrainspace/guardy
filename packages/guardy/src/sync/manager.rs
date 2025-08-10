@@ -220,6 +220,7 @@ impl SyncManager {
     /// Main update function that handles both interactive and force modes
     pub async fn update_all_repos(&mut self, interactive: bool) -> Result<Vec<PathBuf>> {
         let mut all_updated_files = Vec::new();
+        let mut all_skipped_files = Vec::new();
         let mut update_all_remaining = false;
         let mut skip_all_remaining = false;
 
@@ -265,6 +266,7 @@ impl SyncManager {
                     output::styled!("{} Skipped {}", 
                         ("⏭️", "info_symbol"),
                         (dst_file.display().to_string(), "property"));
+                    all_skipped_files.push(dst_file.clone());
                     continue;
                 }
                 
@@ -304,6 +306,7 @@ impl SyncManager {
                         output::styled!("{} Skipped {}", 
                             ("⏭️", "info_symbol"),
                             (dst_file.display().to_string(), "property"));
+                        all_skipped_files.push(dst_file.clone());
                     },
                     FileAction::UpdateAll => {
                         self.copy_file(file, &src, dst)?;
@@ -317,6 +320,7 @@ impl SyncManager {
                         output::styled!("{} Skipped {}", 
                             ("⏭️", "info_symbol"),
                             (dst_file.display().to_string(), "property"));
+                        all_skipped_files.push(dst_file.clone());
                         skip_all_remaining = true;
                     },
                     FileAction::Quit => {
@@ -342,13 +346,27 @@ impl SyncManager {
         if interactive {
             println!();
             output::styled!("{}", ("═".repeat(60), "muted"));
-            if all_updated_files.is_empty() {
+            
+            if all_updated_files.is_empty() && all_skipped_files.is_empty() {
+                // Nothing was changed and nothing was skipped = truly up to date
                 output::styled!("{} Everything is up to date", 
                     ("✅", "success_symbol"));
-            } else {
-                output::styled!("{} {} files updated", 
+            } else if all_updated_files.is_empty() && !all_skipped_files.is_empty() {
+                // Nothing updated but files were skipped = files remain out of sync
+                output::styled!("{}  {} files remain out of sync (skipped by user)", 
+                    ("⚠️", "warning_symbol"),
+                    (all_skipped_files.len().to_string(), "property"));
+            } else if !all_updated_files.is_empty() && all_skipped_files.is_empty() {
+                // Files updated and nothing skipped = all changes applied
+                output::styled!("{}  {} files updated", 
                     ("✅", "success_symbol"),
                     (all_updated_files.len().to_string(), "property"));
+            } else {
+                // Both updated and skipped files
+                output::styled!("{}  {} files updated, {} files remain out of sync (skipped)", 
+                    ("⚠️", "warning_symbol"),
+                    (all_updated_files.len().to_string(), "property"),
+                    (all_skipped_files.len().to_string(), "property"));
             }
         }
 
@@ -381,7 +399,7 @@ impl SyncManager {
                         ChangeTag::Delete => {
                             // For deletions, use the old line number
                             let line_number = change.old_index().unwrap_or(0);
-                            print!("\x1b[48;2;150;80;80;97m{line_number:>8} -  ");
+                            print!("\x1b[48;2;100;40;40;97m{line_number:>8} -  ");
                             if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
                                 let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
                                 println!("{escaped}\x1b[0m");
