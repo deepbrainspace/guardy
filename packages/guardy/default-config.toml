@@ -6,11 +6,25 @@ debug = false
 color = true
 interactive = true
 
-[hooks]
-pre_commit = true
-commit_msg = true
-post_checkout = true
-pre_push = true
+[hooks.pre-commit]
+enabled = true
+builtin = ["scan_secrets"]
+custom = []
+
+[hooks.commit-msg]
+enabled = false
+builtin = []
+custom = []
+
+[hooks.post-checkout]
+enabled = false
+builtin = []
+custom = []
+
+[hooks.pre-push]
+enabled = false
+builtin = []
+custom = []
 
 [security]
 # Secret detection patterns (regex)

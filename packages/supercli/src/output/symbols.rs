@@ -29,3 +29,6 @@ pub const ROCKET: &str = "🚀";
 pub const SPARKLES: &str = "✨";
 pub const CELEBRATION: &str = "🎉";
 pub const ALARM: &str = "🚨";
+
+// Brand symbols
+pub const SHIELD: &str = "🛡️";

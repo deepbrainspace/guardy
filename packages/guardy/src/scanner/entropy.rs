@@ -2,10 +2,10 @@
 // Extracted and adapted from ripsecrets: https://github.com/sirwart/ripsecrets
 // Original implementation by sirwart, adapted for Guardy
 
+use memoize::memoize;
 use regex::bytes::Regex;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
-use memoize::memoize;
 
 lazy_static::lazy_static! {
     static ref HEX_STRING_REGEX: Regex = Regex::new("^[0-9a-fA-F]{16,}$").unwrap();
@@ -13,26 +13,30 @@ lazy_static::lazy_static! {
 }
 
 /// Determines if a byte sequence is likely a secret based on entropy analysis
-/// 
+///
 /// This function uses statistical analysis to determine if a string appears random enough
 /// to be a secret. It combines three metrics:
 /// 1. Number of distinct values
-/// 2. Character class distribution 
+/// 2. Character class distribution
 /// 3. Bigram frequency analysis
-/// 
+///
 /// Returns true if the string appears to be randomly generated (likely a secret)
 pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
     let probability = calculate_randomness_probability(data);
-    
+
     // Use tracing for debug output instead of loading config every time
-    tracing::trace!("Testing '{}' - prob: {:.2e}, threshold: {:.2e}", 
-                    String::from_utf8_lossy(data), probability, min_threshold);
-    
+    tracing::trace!(
+        "Testing '{}' - prob: {:.2e}, threshold: {:.2e}",
+        String::from_utf8_lossy(data),
+        probability,
+        min_threshold
+    );
+
     if probability < min_threshold {
         tracing::trace!("Failed basic threshold check");
         return false;
     }
-    
+
     // Additional check: strings without numbers need higher probability
     let mut contains_number = false;
     for &byte in data {
@@ -41,18 +45,21 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
             break;
         }
     }
-    
+
     if !contains_number && probability < min_threshold * 10.0 {
-        tracing::trace!("Failed no-numbers threshold check (needs {:.2e})", min_threshold * 10.0);
+        tracing::trace!(
+            "Failed no-numbers threshold check (needs {:.2e})",
+            min_threshold * 10.0
+        );
         return false;
     }
-    
+
     tracing::trace!("Passed all checks - returning true");
     true
 }
 
 /// Calculate the probability that a string occurred by random chance
-/// 
+///
 /// When we get a potential secret that doesn't match any known secret patterns, we need to make some determination of
 /// whether it's a random string or not. To do that we assume it's random, and then calculate the probability that a few
 /// metrics came about by chance:
@@ -72,14 +79,15 @@ pub fn calculate_randomness_probability(s: &[u8]) -> f64 {
     } else {
         64.0
     };
-    
-    let mut probability = probability_random_distinct_values(s, base) * probability_random_char_class(s, base);
-    
+
+    let mut probability =
+        probability_random_distinct_values(s, base) * probability_random_char_class(s, base);
+
     if base == 64.0 {
         // Bigrams are only calibrated for base64
         probability *= probability_random_bigrams(s);
     }
-    
+
     probability
 }
 
@@ -96,7 +104,7 @@ fn probability_random_bigrams(s: &[u8]) -> f64 {
             num_bigrams += 1;
         }
     }
-    
+
     binomial_probability(
         s.len(),
         num_bigrams,
@@ -119,7 +127,7 @@ fn probability_random_char_class(s: &[u8], base: f64) -> f64 {
         } else {
             char_classes_64
         };
-        
+
         for (min, max) in char_classes {
             let probability = probability_random_char_class_aux(s, *min, *max, base);
             if probability < min_probability {
@@ -259,9 +267,15 @@ mod tests {
     #[test]
     fn test_is_likely_secret() {
         // Should detect real secrets
-        assert!(is_likely_secret(b"sk_test_4eC39HqLyjWDarjtT1zdp7dc", 1.0 / 1e5));
-        assert!(is_likely_secret(b"pk_test_TYooMQauvdEDq54NiTphI7jx", 1.0 / 1e5));
-        
+        assert!(is_likely_secret(
+            b"sk_test_4eC39HqLyjWDarjtT1zdp7dc",
+            1.0 / 1e5
+        ));
+        assert!(is_likely_secret(
+            b"pk_test_TYooMQauvdEDq54NiTphI7jx",
+            1.0 / 1e5
+        ));
+
         // Should ignore common variable names
         assert!(!is_likely_secret(b"API_KEY_CONSTANT", 1.0 / 1e5));
         assert!(!is_likely_secret(b"hello_world", 1.0 / 1e5));
