@@ -2,8 +2,15 @@ use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 use std::fs;
 use ignore::WalkBuilder;
+use dialoguer::{theme::ColorfulTheme, Select};
+use similar::{ChangeTag, TextDiff};
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
+use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::config::GuardyConfig;
+use crate::cli::output;
 use crate::git::remote::RemoteOperations;
 use super::{SyncConfig, SyncStatus, SyncRepo};
 
@@ -11,6 +18,18 @@ pub struct SyncManager {
     pub config: SyncConfig,
     cache_dir: PathBuf,
     remote_ops: RemoteOperations,
+    // For interactive mode
+    syntax_set: SyntaxSet,
+    theme_set: ThemeSet,
+}
+
+#[derive(Debug, Clone)]
+enum FileAction {
+    Update,
+    Skip,
+    UpdateAll,
+    SkipAll,
+    Quit,
 }
 
 impl SyncManager {
@@ -22,7 +41,9 @@ impl SyncManager {
         Ok(Self { 
             config: sync_config, 
             cache_dir, 
-            remote_ops 
+            remote_ops,
+            syntax_set: SyntaxSet::load_defaults_newlines(),
+            theme_set: ThemeSet::load_defaults(),
         })
     }
 
@@ -88,30 +109,52 @@ impl SyncManager {
         Ok(result)
     }
 
-    /// Simple file operations
-    fn copy_files(&self, files: &[PathBuf], src: &Path, dst: &Path) -> Result<Vec<PathBuf>> {
-        files.iter().map(|f| {
-            let src_file = src.join(f);
-            let dst_file = dst.join(f);
-            if let Some(parent) = dst_file.parent() { 
-                fs::create_dir_all(parent)?; 
-            }
-            fs::copy(&src_file, &dst_file)?;
-            Ok(dst_file)
-        }).collect()
-    }
-
+    /// Check which files differ between source and destination
     fn files_differ(&self, files: &[PathBuf], src: &Path, dst: &Path) -> Vec<PathBuf> {
-        files.iter().filter_map(|f| {
+        let mut changed = Vec::new();
+        
+        for f in files {
             let src_file = src.join(f);
             let dst_file = dst.join(f);
-            if !dst_file.exists() || 
-               fs::metadata(&src_file).ok()?.len() != fs::metadata(&dst_file).ok()?.len() {
-                Some(dst_file)
-            } else { 
-                None 
+            
+            tracing::trace!("Checking file: {:?}", f);
+            tracing::trace!("  Source: {:?}", src_file);
+            tracing::trace!("  Dest: {:?}", dst_file);
+            
+            if !dst_file.exists() {
+                tracing::debug!("File {:?} doesn't exist in destination", f);
+                changed.push(f.clone());
+                continue;
             }
-        }).collect()
+            
+            let src_meta = match fs::metadata(&src_file) {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!("Failed to get metadata for source {:?}: {}", src_file, e);
+                    continue;
+                }
+            };
+            
+            let dst_meta = match fs::metadata(&dst_file) {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!("Failed to get metadata for dest {:?}: {}", dst_file, e);
+                    continue;
+                }
+            };
+            
+            let src_len = src_meta.len();
+            let dst_len = dst_meta.len();
+            
+            if src_len != dst_len {
+                tracing::debug!("File {:?} size differs: src={}, dst={}", f, src_len, dst_len);
+                changed.push(f.clone());
+            } else {
+                tracing::trace!("File {:?} unchanged (size={})", f, src_len);
+            }
+        }
+        
+        changed
     }
 
     /// Update cache from remote repository using git pull
@@ -130,21 +173,15 @@ impl SyncManager {
         Ok(repo_path)
     }
 
-    /// Copy repository files from cache to destination
-    fn copy_repo_files(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
-        let src = repo_path.join(&repo.source_path);
-        let dst = Path::new(&repo.dest_path);
-        let files = self.get_files(&src, repo)?;
-        self.copy_files(&files, &src, dst)
-    }
-
-    /// Check if repository is in sync
-    fn check_repo_sync_status(&self, repo: &SyncRepo, repo_path: &Path, changed: &mut Vec<PathBuf>) -> Result<()> {
-        let src = repo_path.join(&repo.source_path);
-        let dst = Path::new(&repo.dest_path);
-        let files = self.get_files(&src, repo)?;
-        changed.extend(self.files_differ(&files, &src, dst));
-        Ok(())
+    /// Copy a single file from source to destination
+    fn copy_file(&self, file: &Path, src: &Path, dst: &Path) -> Result<PathBuf> {
+        let src_file = src.join(file);
+        let dst_file = dst.join(file);
+        if let Some(parent) = dst_file.parent() { 
+            fs::create_dir_all(parent)?; 
+        }
+        fs::copy(&src_file, &dst_file)?;
+        Ok(dst_file)
     }
 
     /// Check sync status of all repositories
@@ -157,7 +194,12 @@ impl SyncManager {
         for repo in &self.config.repos {
             let repo_path = self.cache_dir.join(self.extract_repo_name(&repo.repo));
             if repo_path.exists() {
-                self.check_repo_sync_status(repo, &repo_path, &mut changed_files)?;
+                let src = repo_path.join(&repo.source_path);
+                let dst = Path::new(&repo.dest_path);
+                let files = self.get_files(&src, repo)?;
+                let different = self.files_differ(&files, &src, dst);
+                // Convert to absolute paths for display
+                changed_files.extend(different.iter().map(|f| dst.join(f)));
             }
         }
         
@@ -168,39 +210,223 @@ impl SyncManager {
         }
     }
 
-    /// Update all repositories
-    pub fn update_all_repos(&mut self, force: bool) -> Result<Vec<PathBuf>> {
+    /// Main update function that handles both interactive and force modes
+    pub async fn update_all_repos(&mut self, interactive: bool) -> Result<Vec<PathBuf>> {
         let mut all_updated_files = Vec::new();
+        let mut update_all_remaining = false;
+        let mut skip_all_remaining = false;
 
-        for repo in &self.config.repos {
-            tracing::info!("Updating repository: {}", repo.name);
+        output::styled!("{} Analyzing sync status...", ("📋", "info_symbol"));
+
+        for repo in self.config.repos.clone() {
+            tracing::info!("Processing repository: {}", repo.name);
             
             // Update cache from remote
-            let repo_path = self.update_cache(repo)?;
+            let repo_path = self.update_cache(&repo)?;
             
-            // Check what will change
+            // Get changed files
             let src = repo_path.join(&repo.source_path);
             let dst = Path::new(&repo.dest_path);
-            let files = self.get_files(&src, repo)?;
+            let files = self.get_files(&src, &repo)?;
+            tracing::debug!("Found {} files in source", files.len());
             let changed_files = self.files_differ(&files, &src, dst);
+            tracing::debug!("Found {} changed files", changed_files.len());
             
-            if !changed_files.is_empty() && !force {
-                // In non-force mode, we could add prompting here if needed
-                tracing::warn!("Files will be overwritten. Use --force to proceed.");
+            if changed_files.is_empty() {
+                tracing::info!("No changes detected for repository: {}", repo.name);
                 continue;
             }
-            
-            // Copy files from cache to destination
-            let updated = self.copy_repo_files(repo, &repo_path)?;
-            all_updated_files.extend(updated);
+
+            // Show repository info
+            output::styled!("\n{} Repository: {} ({} files changed)", 
+                ("🔗", "info_symbol"),
+                (&repo.name, "property"),
+                (changed_files.len().to_string(), "property")
+            );
+
+            // Process each changed file
+            for (i, file) in changed_files.iter().enumerate() {
+                let dst_file = dst.join(file);
+                
+                // If we're in "update all" or "skip all" mode, handle accordingly
+                if skip_all_remaining {
+                    output::styled!("{} Skipped {}", 
+                        ("⏭️", "info_symbol"),
+                        (dst_file.display().to_string(), "property"));
+                    continue;
+                }
+                
+                if update_all_remaining || !interactive {
+                    // In force mode or "update all" mode, just update
+                    self.copy_file(file, &src, dst)?;
+                    all_updated_files.push(dst_file.clone());
+                    if interactive {
+                        output::styled!("{} Updated {}", 
+                            ("✅", "success_symbol"),
+                            (dst_file.display().to_string(), "property"));
+                    }
+                    continue;
+                }
+
+                // Interactive mode: show diff and ask
+                println!();
+                output::styled!("{}", ("─".repeat(60), "muted"));
+                output::styled!("File {}/{}: {}", 
+                    ((i + 1).to_string(), "muted"),
+                    (changed_files.len().to_string(), "muted"), 
+                    (dst_file.display().to_string(), "property"));
+
+                // Show diff
+                self.show_diff(&dst_file, &src.join(file))?;
+
+                // Ask user what to do
+                match self.prompt_file_action()? {
+                    FileAction::Update => {
+                        self.copy_file(file, &src, dst)?;
+                        all_updated_files.push(dst_file.clone());
+                        output::styled!("{} Updated {}", 
+                            ("✅", "success_symbol"),
+                            (dst_file.display().to_string(), "property"));
+                    },
+                    FileAction::Skip => {
+                        output::styled!("{} Skipped {}", 
+                            ("⏭️", "info_symbol"),
+                            (dst_file.display().to_string(), "property"));
+                    },
+                    FileAction::UpdateAll => {
+                        self.copy_file(file, &src, dst)?;
+                        all_updated_files.push(dst_file.clone());
+                        output::styled!("{} Updated {}", 
+                            ("✅", "success_symbol"),
+                            (dst_file.display().to_string(), "property"));
+                        update_all_remaining = true;
+                    },
+                    FileAction::SkipAll => {
+                        output::styled!("{} Skipped {}", 
+                            ("⏭️", "info_symbol"),
+                            (dst_file.display().to_string(), "property"));
+                        skip_all_remaining = true;
+                    },
+                    FileAction::Quit => {
+                        output::styled!("{} Update cancelled by user", ("ℹ️", "info_symbol"));
+                        return Ok(all_updated_files);
+                    },
+                }
+            }
+        }
+
+        // Show summary
+        if interactive && !all_updated_files.is_empty() {
+            println!();
+            output::styled!("{}", ("═".repeat(60), "muted"));
+            output::styled!("{} {} files updated", 
+                ("✅", "success_symbol"),
+                (all_updated_files.len().to_string(), "property"));
         }
 
         Ok(all_updated_files)
     }
 
+    /// Show diff between source and destination files
+    fn show_diff(&self, dest_file: &Path, source_file: &Path) -> Result<()> {
+        let dest_content = fs::read_to_string(dest_file).unwrap_or_default();
+        let source_content = fs::read_to_string(source_file)?;
+        
+        println!();
+        output::styled!("{}", ("─".repeat(60), "muted"));
+        
+        let diff = TextDiff::from_lines(&dest_content, &source_content);
+        
+        // Set up syntax highlighting
+        let syntax = self.syntax_set
+            .find_syntax_for_file(dest_file)?
+            .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
+        let theme = &self.theme_set.themes["Solarized (dark)"];
+        
+        for group in diff.grouped_ops(3) {
+            for op in group {
+                for change in diff.iter_changes(&op) {
+                    let line_number = change.new_index().unwrap_or(0);
+                    let line_content = change.value().trim_end_matches('\n');
+                    let mut highlighter = HighlightLines::new(syntax, theme);
+                    
+                    match change.tag() {
+                        ChangeTag::Delete => {
+                            print!("\x1b[48;2;120;50;50;97m{line_number:>8} -  ");
+                            if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
+                                let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                println!("{escaped}\x1b[0m");
+                            } else {
+                                println!("{line_content}\x1b[0m");
+                            }
+                        },
+                        ChangeTag::Insert => {
+                            print!("\x1b[48;2;50;120;50;97m{line_number:>8} +  ");
+                            if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
+                                let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                println!("{escaped}\x1b[0m");
+                            } else {
+                                println!("{line_content}\x1b[0m");
+                            }
+                        },
+                        ChangeTag::Equal => {
+                            print!("{line_number:>8}    ");
+                            if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
+                                let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                println!("{escaped}");
+                            } else {
+                                println!("{line_content}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
 
+    /// Prompt user for action on a file
+    fn prompt_file_action(&self) -> Result<FileAction> {
+        let options = vec![
+            "Yes - Update this file",
+            "No - Skip this file", 
+            "Yes to all remaining files",
+            "Skip all remaining files",
+            "Quit - Stop processing",
+        ];
+
+        println!(); // Add newline before prompt
+        
+        // Create a theme without the prompt prefix to avoid the extra "?"
+        let theme = ColorfulTheme { 
+            prompt_prefix: dialoguer::console::style("".to_string()), 
+            ..Default::default() 
+        };
+        
+        let selection = Select::with_theme(&theme)
+            .with_prompt("What would you like to do?")
+            .items(&options)
+            .default(0)
+            .interact()?;
+
+        Ok(match selection {
+            0 => FileAction::Update,
+            1 => FileAction::Skip,
+            2 => FileAction::UpdateAll,
+            3 => FileAction::SkipAll,
+            4 => FileAction::Quit,
+            _ => unreachable!(),
+        })
+    }
+
+    /// Get the cache directory
+    pub fn get_cache_dir(&self) -> &PathBuf {
+        &self.cache_dir
+    }
+    
     /// Extract repository name from URL
-    fn extract_repo_name(&self, repo_url: &str) -> String {
+    pub fn extract_repo_name(&self, repo_url: &str) -> String {
         repo_url
             .trim_end_matches('/')
             .trim_end_matches(".git")

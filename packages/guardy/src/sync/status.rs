@@ -17,12 +17,17 @@ impl<'a> StatusDisplay<'a> {
             output::styled!("{} No sync repositories configured", 
                 ("⚠️", "warning_symbol")
             );
+            output::styled!("Run {} to bootstrap", 
+                ("guardy sync update --repo=<url> --version=<version>", "property")
+            );
             return Ok(());
         }
 
         output::styled!("{} Sync Configuration", 
             ("📋", "info_symbol")
         );
+        println!("  Repositories: {}", self.manager.config.repos.len());
+        println!("  Cache Directory: {}", self.manager.get_cache_dir().display());
         println!();
 
         // Show each repository configuration

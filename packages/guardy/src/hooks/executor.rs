@@ -41,11 +41,11 @@ impl HookExecutor {
             .ok_or_else(|| anyhow!("Unknown hook: {}", hook_name))?;
         
         if !hook_def.enabled {
-            output::info!(&format!("Hook '{}' is disabled", hook_name));
+            output::info!(&format!("Hook '{hook_name}' is disabled"));
             return Ok(());
         }
         
-        output::info!(&format!("Executing {} hook...", hook_name));
+        output::info!(&format!("Executing {hook_name} hook..."));
         
         // Execute built-in commands
         for builtin_cmd in &hook_def.builtin {
@@ -78,7 +78,7 @@ impl HookExecutor {
                 Ok(())
             }
             unknown => {
-                output::warning!(&format!("Unknown builtin command: {}", unknown));
+                output::warning!(&format!("Unknown builtin command: {unknown}"));
                 Ok(())
             }
         }
@@ -145,21 +145,21 @@ impl HookExecutor {
             let stderr = String::from_utf8_lossy(&output.stderr);
             
             if custom.fail_on_error {
-                output::error!(&format!("Command failed: {}", command_str));
+                output::error!(&format!("Command failed: {command_str}"));
                 if !stderr.is_empty() {
-                    println!("{}", stderr);
+                    println!("{stderr}");
                 }
                 std::process::exit(1);
             } else {
-                output::warning!(&format!("Command failed (continuing): {}", command_str));
+                output::warning!(&format!("Command failed (continuing): {command_str}"));
                 if !stderr.is_empty() {
-                    println!("{}", stderr);
+                    println!("{stderr}");
                 }
             }
         } else {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if !stdout.is_empty() {
-                print!("{}", stdout);
+                print!("{stdout}");
             }
             output::success!(&format!("✓ {}", 
                 if custom.description.is_empty() { &command_str } else { &custom.description }

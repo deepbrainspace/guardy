@@ -17,9 +17,9 @@ pub enum SyncSubcommand {
     /// Show sync status and configuration
     Status,
     
-    /// Update files from configured repositories
+    /// Update files from configured repositories (interactive by default)
     Update {
-        /// Force update, overwriting local changes
+        /// Force update, bypass interactive mode and update all changes without prompting
         #[arg(long)]
         force: bool,
         
@@ -56,8 +56,9 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
             (&repo_url, "property"),
             (&version_str, "id_value")
         );
+        
         let mut manager = SyncManager::bootstrap(&repo_url, &version_str)?;
-        let updated_files = manager.update_all_repos(force)?;
+        let updated_files = manager.update_all_repos(false).await?; // Bootstrap is always non-interactive
         
         if !updated_files.is_empty() {
             output::styled!("{} Synced {} files:", 
@@ -77,31 +78,35 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
     // Regular update case
     let mut manager = create_sync_manager(config_path)?;
     
-    // Check current status first
+    // Check if we have any configuration
     let status = manager.check_sync_status()?;
+    if matches!(status, SyncStatus::NotConfigured) {
+        output::styled!("{} No sync configuration found", 
+            ("⚠️", "warning_symbol")
+        );
+        output::styled!("Run {} to bootstrap", 
+            ("guardy sync update --repo=<url> --version=<version>", "property")
+        );
+        return Ok(());
+    }
     
-    match status {
-        SyncStatus::NotConfigured => {
-            output::styled!("{} No sync configuration found", 
-                ("⚠️", "warning_symbol")
-            );
-            output::styled!("Run {} to bootstrap", 
-                ("guardy sync update --repo=<url> --version=<version>", "property")
-            );
-            return Ok(());
-        },
-        SyncStatus::InSync => {
-            if !force {
+    // Perform the update (interactive by default, force bypasses)
+    let interactive = !force;
+    
+    if force {
+        // Show what will be updated in force mode
+        match status {
+            SyncStatus::InSync => {
                 output::styled!("{} All files are already in sync", 
                     ("✅", "success_symbol")
                 );
-                return Ok(());
-            }
-        },
-        SyncStatus::OutOfSync { ref changed_files } => {
-            if !force {
-                output::styled!("{} {} files will be updated:", 
-                    ("⚠️", "warning_symbol"),
+                output::styled!("Force updating to ensure cache is fresh...", 
+                    ("⚡", "info_symbol")
+                );
+            },
+            SyncStatus::OutOfSync { ref changed_files } => {
+                output::styled!("{} Force updating {} files:", 
+                    ("⚡", "info_symbol"),
                     (changed_files.len().to_string(), "property")
                 );
                 
@@ -112,37 +117,32 @@ async fn execute_update(force: bool, repo: Option<String>, version: Option<Strin
                 if changed_files.len() > 10 {
                     println!("  ... and {} more", changed_files.len() - 10);
                 }
-                
                 println!();
-                output::styled!("Use {} to proceed with update", 
-                    ("--force", "property")
-                );
-                return Ok(());
+            },
+            _ => {}
+        }
+    }
+    
+    let updated_files = manager.update_all_repos(interactive).await?;
+    
+    // Show results for force mode
+    if force {
+        if updated_files.is_empty() {
+            output::styled!("{} No files were updated", 
+                ("ℹ️", "info_symbol")
+            );
+        } else {
+            output::styled!("{} Successfully updated {} files:", 
+                ("✅", "success_symbol"),
+                (updated_files.len().to_string(), "property")
+            );
+            
+            for file in &updated_files {
+                println!("  • {}", output::file_path(file.display().to_string()));
             }
         }
     }
-    
-    // Perform the update
-    output::styled!("{} Updating all repositories...", 
-        ("⚡", "info_symbol")
-    );
-    
-    let updated_files = manager.update_all_repos(force)?;
-    
-    if updated_files.is_empty() {
-        output::styled!("{} No files were updated", 
-            ("ℹ️", "info_symbol")
-        );
-    } else {
-        output::styled!("{} Successfully updated {} files:", 
-            ("✅", "success_symbol"),
-            (updated_files.len().to_string(), "property")
-        );
-        
-        for file in &updated_files {
-            println!("  • {}", output::file_path(file.display().to_string()));
-        }
-    }
+    // Interactive mode shows its own summary
     
     Ok(())
 }

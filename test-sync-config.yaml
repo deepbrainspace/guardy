@@ -1,0 +1,11 @@
+sync:
+  repos:
+    - name: test-repo
+      repo: https://github.com/rust-lang/rustlings.git
+      version: main
+      source_path: exercises
+      dest_path: ./test-sync-output
+      include:
+        - "*.rs"
+      exclude:
+        - "*.toml"
