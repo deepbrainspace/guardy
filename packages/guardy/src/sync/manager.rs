@@ -36,6 +36,13 @@ impl SyncManager {
     pub fn with_config(sync_config: SyncConfig) -> Result<Self> {
         let cache_dir = PathBuf::from(".guardy/cache");
         std::fs::create_dir_all(&cache_dir)?;
+        
+        // Create .gitignore in .guardy directory to ignore all contents
+        let guardy_gitignore = PathBuf::from(".guardy/.gitignore");
+        if !guardy_gitignore.exists() {
+            std::fs::write(&guardy_gitignore, "*\n")?;
+        }
+        
         let remote_ops = RemoteOperations::new(cache_dir.clone());
 
         Ok(Self { 
@@ -216,7 +223,7 @@ impl SyncManager {
         let mut update_all_remaining = false;
         let mut skip_all_remaining = false;
 
-        output::styled!("{} Analyzing sync status...", ("📋", "info_symbol"));
+        output::styled!("<chart> Analyzing sync status...");
 
         // First check if there are any changes at all
         let mut has_any_changes = false;
