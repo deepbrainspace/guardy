@@ -1,3 +1,3 @@
 pub mod html;
 
-pub use html::{ReportGenerator, ReportFormat};
+pub use html::{ReportFormat, ReportGenerator};

@@ -3,7 +3,7 @@
 //! These macros provide the core SuperCLI functionality - semantic output
 //! that automatically adapts to different output styles (color, monochrome, none).
 
-use starbase_styles::color::{success, failure, caution, label, symbol as style_symbol};
+use starbase_styles::color::{caution, failure, label, success, symbol as style_symbol};
 
 #[cfg(feature = "clap")]
 use starbase_styles::color::owo::OwoColorize;

@@ -12,7 +12,7 @@ pub async fn execute(args: VersionArgs) -> Result<()> {
     // Get the git SHA from build time
     let git_sha = option_env!("GIT_SHA").unwrap_or("unknown");
     let git_branch = option_env!("GIT_BRANCH").unwrap_or("unknown");
-    
+
     if args.detailed {
         println!("guardy {} ({})", env!("CARGO_PKG_VERSION"), git_sha);
         println!("Branch: {git_branch}");

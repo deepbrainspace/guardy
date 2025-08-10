@@ -13,9 +13,7 @@ fn main() {
                 .unwrap()
         });
 
-    let git_sha = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let git_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Pass the git SHA to the compiler
     println!("cargo:rustc-env=GIT_SHA={git_sha}");

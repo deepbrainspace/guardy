@@ -1,19 +1,19 @@
 //! Advanced styling functionality for SuperCLI
-//! 
+//!
 //! This module provides fine-grained control over text styling with the `styled!` macro,
 //! allowing different parts of a single line to have different styling treatments.
 
 use starbase_styles::color::{
-    success, failure, caution, label, property, symbol as style_symbol, hash, url, file, shell, id
+    caution, failure, file, hash, id, label, property, shell, success, symbol as style_symbol, url,
 };
 
 #[cfg(feature = "clap")]
 use starbase_styles::color::owo::OwoColorize;
 
-/// Replace symbol tags like <info>, <success> with styled symbols
+/// Replace symbol tags like `<info>`, `<success>` with styled symbols
 pub fn replace_symbols(text: &str) -> String {
     let mut result = String::from(text);
-    
+
     // Map of symbol names to (emoji, style)
     let symbol_map = [
         ("info", ("ℹ️", "info_symbol")),
@@ -30,7 +30,7 @@ pub fn replace_symbols(text: &str) -> String {
         ("folder", ("📁", "info_symbol")),
         ("chart", ("📊", "info_symbol")),
     ];
-    
+
     for (name, (emoji, style)) in &symbol_map {
         let tag = format!("<{name}>");
         if result.contains(&tag) {
@@ -39,7 +39,7 @@ pub fn replace_symbols(text: &str) -> String {
             result = result.replace(&tag, &styled_symbol);
         }
     }
-    
+
     result
 }
 
@@ -62,8 +62,9 @@ pub fn apply_style<T: AsRef<str>>(text: T, style: &str) -> String {
                     "muted" | "dim" | "secondary" => text.to_string(), // No bold for subdued text
                     _ => text.to_string(),
                 }
-            },
-            _ => { // Color mode
+            }
+            _ => {
+                // Color mode
                 match style {
                     "success" | "success_symbol" => success(text),
                     "warning" | "warning_symbol" => caution(text),
@@ -80,8 +81,8 @@ pub fn apply_style<T: AsRef<str>>(text: T, style: &str) -> String {
                     "accent" => property(text), // Use property (lavender) for accents - more vibrant
                     "primary" => text.to_string(), // Primary text stays unstyled in color mode
                     "muted" | "dim" | "secondary" => style_symbol(text), // Subdued styling (lime)
-                    "branch" => id(text), // Git branches in purple
-                    "time" => hash(text), // Time values in green like numbers
+                    "branch" => id(text),       // Git branches in purple
+                    "time" => hash(text),       // Time values in green like numbers
                     "debug" => style_symbol(text), // Debug messages in muted lime
                     _ => text.to_string(),
                 }
@@ -107,8 +108,8 @@ pub fn apply_style<T: AsRef<str>>(text: T, style: &str) -> String {
             "accent" => property(text), // Use property (lavender) for accents - more vibrant
             "primary" => text.to_string(),
             "muted" | "dim" | "secondary" => style_symbol(text), // Subdued styling (lime)
-            "branch" => id(text), // Git branches in purple
-            "time" => hash(text), // Time values in green like numbers
+            "branch" => id(text),                                // Git branches in purple
+            "time" => hash(text),          // Time values in green like numbers
             "debug" => style_symbol(text), // Debug messages in muted lime
             _ => text.to_string(),
         }
@@ -139,7 +140,7 @@ pub fn apply_style<T: AsRef<str>>(text: T, style: &str) -> String {
 /// # Fine-Grained Styling Examples
 /// ```rust
 /// // Mixed styling with placeholders
-/// styled!("Processing {} files in {}", 
+/// styled!("Processing {} files in {}",
 ///     ("150", "number"),
 ///     ("/home/user", "file_path")
 /// );
@@ -153,19 +154,19 @@ macro_rules! styled {
             println!("{}", result);
         }
     };
-    
+
     // Fine-grained styling with tuples (existing functionality)
     ($format:expr, $(($text:expr, $style:expr)),+ $(,)?) => {
         {
             // First replace any symbols in the format string
             let mut result = $crate::output::styling::replace_symbols($format);
-            
+
             // Then do the normal placeholder replacements
             $(
                 let styled_text = $crate::output::styling::apply_style($text, $style);
                 result = result.replacen("{}", &styled_text, 1);
             )+
-            
+
             println!("{}", result);
         }
     };

@@ -1,18 +1,18 @@
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-use std::sync::Arc;
-use anyhow::Result;
+use super::types::{ScanFileResult, ScanResult, ScanStats, Scanner, Warning};
 use crate::cli::output;
 use crate::parallel::{ExecutionStrategy, progress::factories};
-use super::types::{ScanStats, Warning, ScanResult, Scanner, ScanFileResult};
+use anyhow::Result;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
 
 /// Check if a file should be treated as binary using configured extensions
 pub(crate) fn is_binary_file_by_extension(path: &Path, binary_extensions: &[String]) -> bool {
-    if let Some(extension) = path.extension() {
-        if let Some(ext_str) = extension.to_str() {
-            let ext_lower = ext_str.to_lowercase();
-            return binary_extensions.contains(&ext_lower);
-        }
+    if let Some(extension) = path.extension()
+        && let Some(ext_str) = extension.to_str()
+    {
+        let ext_lower = ext_str.to_lowercase();
+        return binary_extensions.contains(&ext_lower);
     }
     false
 }
@@ -21,7 +21,7 @@ pub(crate) fn is_binary_file_by_extension(path: &Path, binary_extensions: &[Stri
 pub(crate) fn is_binary_file_by_content(path: &Path) -> bool {
     use std::fs::File;
     use std::io::Read;
-    
+
     // Try to read a small sample of the file
     if let Ok(mut file) = File::open(path) {
         let mut buffer = vec![0; 512]; // Read first 512 bytes
@@ -42,28 +42,28 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
     if is_binary_file_by_extension(path, binary_extensions) {
         return true;
     }
-    
+
     // For unknown extensions, use content inspection as fallback
     is_binary_file_by_content(path)
 }
 
 /// Directory handling for the scanner - combines filtering and analysis logic
-/// 
+///
 /// # Architecture Responsibilities
-/// 
+///
 /// The DirectoryHandler is responsible for **domain-specific logic** related to file scanning:
-/// 
+///
 /// ## What This Module Does:
 /// - **File Discovery**: Walks directory trees and collects file paths
 /// - **Directory Filtering**: Skips build/cache directories (node_modules, target, etc.)
 /// - **Workload Analysis**: Analyzes file counts and suggests gitignore improvements
 /// - **Domain Adaptation**: Adapts parallel worker counts based on scanning workload characteristics
 /// - **Execution Coordination**: Orchestrates the parallel scanning process
-/// 
+///
 /// ## Worker Count Adaptation Strategy
-/// 
+///
 /// This module implements **domain-specific worker adaptation** based on file scanning characteristics:
-/// 
+///
 /// ```text
 /// File Count Ranges → Worker Adaptation
 /// ≤10 files    → Use min(2, max_workers)        # Minimal parallelism
@@ -71,19 +71,19 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// ≤100 files   → Use 75% of max_workers        # Moderate
 /// >100 files   → Use 100% of max_workers       # Aggressive
 /// ```
-/// 
+///
 /// **Rationale**: Small file counts have overhead that outweighs parallel benefits,
 /// while large file counts benefit from full parallelization.
-/// 
+///
 /// # Integration with Parallel Module
-/// 
+///
 /// This module works in coordination with the parallel module:
-/// 
+///
 /// ```text
 /// ┌─────────────────────────────────────────────────────────────┐
 /// │                   Execution Strategy Flow                   │
 /// └─────────────────────────────────────────────────────────────┘
-/// 
+///
 /// 1. Scanner Config       →  2. Resource Calculation      →  3. Domain Adaptation
 ///    ┌─────────────────┐      ┌──────────────────────────┐     ┌─────────────────────┐
 ///    │ • max_threads   │      │ CPU cores: 16            │     │ File count: 36      │
@@ -91,15 +91,15 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 ///    │ • mode: auto    │      │ (system resource limit)  │     │ (domain adaptation)  │
 ///    └─────────────────┘      └──────────────────────────┘     └─────────────────────┘
 ///                                                                        │
-/// 4. Strategy Decision                          ← ← ← ← ← ← ← ← ← ← ← ← ← ← 
+/// 4. Strategy Decision                          ← ← ← ← ← ← ← ← ← ← ← ← ← ←
 ///    ┌─────────────────────────────────────────┐
 ///    │ auto(file_count=36, threshold=50, workers=6) │
 ///    │ → 36 < 50 → ExecutionStrategy::Sequential    │  
 ///    └─────────────────────────────────────────────┘
 /// ```
-/// 
+///
 /// # Mode-Specific Behavior
-/// 
+///
 /// ## Sequential Mode
 /// ```rust,no_run
 /// use guardy::scanner::types::ScanMode;
@@ -113,7 +113,7 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// - No worker calculation
 /// - Single-threaded execution
 /// - No resource overhead
-/// 
+///
 /// ## Parallel Mode  
 /// ```rust,no_run
 /// use guardy::scanner::types::ScanMode;
@@ -134,7 +134,7 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// ```
 /// - Always uses parallelism
 /// - Worker count adapted to file count
-/// 
+///
 /// ## Auto Mode
 /// ```rust,no_run
 /// use guardy::scanner::types::ScanMode;
@@ -156,12 +156,12 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// ```
 /// - Uses file count threshold to decide sequential vs parallel
 /// - If parallel chosen, uses domain-adapted worker count
-/// 
+///
 /// # Key Methods
-/// 
+///
 /// ## Worker Adaptation
 /// `adapt_workers_for_file_count()` - Adapts worker count based on file scanning domain knowledge
-/// 
+///
 /// ## Unified Scanning
 /// [`DirectoryHandler::scan()`] - Main entry point that orchestrates the entire scanning process
 #[derive(Debug)]
@@ -191,7 +191,14 @@ impl Default for DirectoryHandler {
         Self {
             rust: &["target"],
             nodejs: &["node_modules", "dist", "build", ".next", ".nuxt"],
-            python: &["__pycache__", ".pytest_cache", "venv", ".venv", "env", ".env"],
+            python: &[
+                "__pycache__",
+                ".pytest_cache",
+                "venv",
+                ".venv",
+                "env",
+                ".env",
+            ],
             go: &["vendor"],
             java: &["out"],
             generic: &["cache", ".cache", "tmp", ".tmp", "temp", ".temp"],
@@ -248,16 +255,16 @@ impl DirectoryHandler {
     }
 
     /// Adapt worker count based on file count (domain-specific logic)
-    /// 
+    ///
     /// This method implements file scanning domain knowledge to optimize parallel execution:
-    /// 
+    ///
     /// # Parameters
     /// - `file_count`: Number of files to be scanned
     /// - `max_workers`: Maximum workers available (from resource calculation)
-    /// 
+    ///
     /// # Returns
     /// Optimal worker count for the given file count, constrained by max_workers
-    /// 
+    ///
     /// # Adaptation Strategy
     /// ```text
     /// ≤10 files    → min(2, max_workers)         # Minimal overhead
@@ -265,16 +272,16 @@ impl DirectoryHandler {
     /// ≤100 files   → min(max_workers*3/4, max_workers) # Moderate scaling  
     /// >100 files   → max_workers                 # Full utilization
     /// ```
-    /// 
+    ///
     /// # Rationale
     /// - **Small workloads**: Parallel overhead exceeds benefits
     /// - **Medium workloads**: Conservative parallelism provides good balance
     /// - **Large workloads**: Full parallelism maximizes throughput
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use guardy::scanner::directory::DirectoryHandler;
-    /// 
+    ///
     /// // System has 16 cores, config allows 12 workers
     /// let workers = DirectoryHandler::adapt_workers_for_file_count(36, 12);
     /// assert_eq!(workers, 6); // 36 ≤ 50, so 12/2 = 6
@@ -284,7 +291,7 @@ impl DirectoryHandler {
             // Very small workloads: use minimal parallelism
             std::cmp::min(2, max_workers)
         } else if file_count <= 50 {
-            // Small workloads: use conservative parallelism  
+            // Small workloads: use conservative parallelism
             std::cmp::min(max_workers / 2, max_workers)
         } else if file_count <= 100 {
             // Medium workloads: use moderate parallelism
@@ -297,25 +304,25 @@ impl DirectoryHandler {
     }
 
     /// Unified directory scanning method that orchestrates the entire scanning process
-    /// 
+    ///
     /// This is the main entry point for file scanning that coordinates between system resource
     /// management and domain-specific scanning logic.
-    /// 
+    ///
     /// # Parameters
     /// - `scanner`: Arc-wrapped scanner instance for thread-safe sharing
     /// - `path`: Directory path to scan
     /// - `strategy`: Optional execution strategy override (None uses config-based decision)
-    /// 
+    ///
     /// # Returns
     /// Complete scan results including matches, statistics, and warnings
-    /// 
+    ///
     /// # Execution Flow
-    /// 
+    ///
     /// 1. **Strategy Determination**: Decides execution strategy based on config mode:
     ///    - `Sequential`: Always single-threaded
     ///    - `Parallel`: Always multi-threaded with domain-adapted worker count
     ///    - `Auto`: Uses file count threshold to decide + domain-adapted workers
-    /// 
+    ///
     /// 2. **Resource Calculation**: For parallel modes, calculates optimal workers:
     ///    ```rust,no_run
     ///    use guardy::parallel::ExecutionStrategy;
@@ -327,7 +334,7 @@ impl DirectoryHandler {
     ///        scanner.config.thread_percentage // CPU percentage
     ///    );
     ///    ```
-    /// 
+    ///
     /// 3. **Domain Adaptation**: Adapts workers based on file count:
     ///    ```rust,no_run
     ///    use guardy::scanner::directory::DirectoryHandler;
@@ -335,23 +342,23 @@ impl DirectoryHandler {
     ///    # let max_workers = 12;
     ///    let optimal_workers = DirectoryHandler::adapt_workers_for_file_count(file_count, max_workers);
     ///    ```
-    /// 
+    ///
     /// 4. **Directory Analysis**: Analyzes directories and suggests gitignore improvements
-    /// 
+    ///
     /// 5. **File Collection**: Walks directory tree collecting file paths
-    /// 
+    ///
     /// 6. **Parallel Execution**: Executes file scanning using chosen strategy
-    /// 
+    ///
     /// 7. **Result Aggregation**: Combines results and generates statistics
-    /// 
+    ///
     /// # Configuration Integration
-    /// 
+    ///
     /// The method respects all scanner configuration:
     /// - `mode`: Sequential/Parallel/Auto execution strategy
     /// - `max_threads`: Hard limit on worker count (0 = no limit)
     /// - `thread_percentage`: Percentage of CPU cores to use
     /// - `min_files_for_parallel`: Threshold for auto mode decision
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use std::sync::Arc;
@@ -359,48 +366,54 @@ impl DirectoryHandler {
     /// use guardy::scanner::directory::DirectoryHandler;
     /// use guardy::scanner::Scanner;
     /// use guardy::config::GuardyConfig;
-    /// 
+    ///
     /// # fn example() -> anyhow::Result<()> {
     /// let config = GuardyConfig::load(None, None::<&()>, 0)?;
     /// let scanner = Scanner::new(&config)?;
     /// let directory_handler = DirectoryHandler::new();
     /// let result = directory_handler.scan(
-    ///     Arc::new(scanner), 
-    ///     Path::new("/tmp"), 
+    ///     Arc::new(scanner),
+    ///     Path::new("/tmp"),
     ///     None  // Use config-based strategy
     /// )?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn scan(&self, scanner: Arc<Scanner>, path: &Path, strategy: Option<ExecutionStrategy>) -> Result<ScanResult> {
+    pub fn scan(
+        &self,
+        scanner: Arc<Scanner>,
+        path: &Path,
+        strategy: Option<ExecutionStrategy>,
+    ) -> Result<ScanResult> {
         let start_time = Instant::now();
         let mut warnings: Vec<Warning> = Vec::new();
 
         // Determine execution strategy (smart mode by default)
         let execution_strategy = strategy.unwrap_or_else(|| {
             let file_count = scanner.fast_count_files(path).unwrap_or(0);
-            
+
             match &scanner.config.mode {
                 super::types::ScanMode::Sequential => ExecutionStrategy::Sequential,
-                
+
                 super::types::ScanMode::Parallel | super::types::ScanMode::Auto => {
                     // Calculate optimal workers based on available system resources
                     let max_workers_by_resources = ExecutionStrategy::calculate_optimal_workers(
                         scanner.config.max_threads,
                         scanner.config.thread_percentage,
                     );
-                    
+
                     // Apply domain-specific file count adaptation
-                    let optimal_workers = Self::adapt_workers_for_file_count(file_count, max_workers_by_resources);
-                    
+                    let optimal_workers =
+                        Self::adapt_workers_for_file_count(file_count, max_workers_by_resources);
+
                     match &scanner.config.mode {
-                        super::types::ScanMode::Parallel => ExecutionStrategy::Parallel { 
-                            workers: optimal_workers
+                        super::types::ScanMode::Parallel => ExecutionStrategy::Parallel {
+                            workers: optimal_workers,
                         },
                         super::types::ScanMode::Auto => ExecutionStrategy::auto(
-                            file_count, 
+                            file_count,
                             scanner.config.min_files_for_parallel,
-                            optimal_workers
+                            optimal_workers,
                         ),
                         _ => unreachable!(), // Already handled Sequential above
                     }
@@ -412,35 +425,38 @@ impl DirectoryHandler {
         let file_count = scanner.fast_count_files(path)?;
         match &execution_strategy {
             ExecutionStrategy::Sequential => {
-                output::styled!("{} Scanning {} files...", 
+                output::styled!(
+                    "{} Scanning {} files...",
                     ("🔍", "info_symbol"),
                     (file_count.to_string(), "number")
                 );
-            },
+            }
             ExecutionStrategy::Parallel { workers } => {
-                output::styled!("{} Scanning {} files using {} workers...", 
+                output::styled!(
+                    "{} Scanning {} files using {} workers...",
                     ("⚡", "info_symbol"),
                     (file_count.to_string(), "number"),
                     (workers.to_string(), "accent")
                 );
-            },
+            }
         };
-        
+
         // Analyze directories and display results
         let analysis = self.analyze_directories(path);
         analysis.display();
 
         // Collect all file paths using unified walker logic
         let file_paths = self.collect_file_paths(&scanner, path, &mut warnings)?;
-        
+
         // Create enhanced progress reporter based on strategy
         let enhanced_progress = match &execution_strategy {
             ExecutionStrategy::Sequential => {
                 Some(factories::enhanced_sequential_reporter(file_paths.len()))
-            },
-            ExecutionStrategy::Parallel { workers } => {
-                Some(factories::enhanced_parallel_reporter(file_paths.len(), *workers))
-            },
+            }
+            ExecutionStrategy::Parallel { workers } => Some(factories::enhanced_parallel_reporter(
+                file_paths.len(),
+                *workers,
+            )),
         };
 
         // Get statistics reference for tracking
@@ -455,14 +471,19 @@ impl DirectoryHandler {
                 let enhanced_progress_for_worker = enhanced_progress.clone();
                 move |file_path: &PathBuf, worker_id: usize| -> ScanFileResult {
                     // Update worker bar with current file
-                    if let Some(ref progress) = enhanced_progress_for_worker {
-                        if progress.is_parallel {
-                            progress.update_worker_file(worker_id, &file_path.to_string_lossy());
-                        }
+                    if let Some(ref progress) = enhanced_progress_for_worker
+                        && progress.is_parallel
+                    {
+                        progress.update_worker_file(worker_id, &file_path.to_string_lossy());
                     }
-                    
+
                     // Check if this is a binary file first
-                    if !scanner.config.include_binary && super::directory::is_binary_file(file_path, &scanner.config.binary_extensions) {
+                    if !scanner.config.include_binary
+                        && super::directory::is_binary_file(
+                            file_path,
+                            &scanner.config.binary_extensions,
+                        )
+                    {
                         // Update statistics for binary files
                         if let Some(ref stats) = stats {
                             stats.increment_binary();
@@ -474,8 +495,8 @@ impl DirectoryHandler {
                             error: None,
                         };
                     }
-                    
-                    let result = match scanner.scan_single_path(file_path) {
+
+                    match scanner.scan_single_path(file_path) {
                         Ok(matches) => {
                             // Update statistics - file was successfully scanned
                             if let Some(ref stats) = stats {
@@ -490,7 +511,7 @@ impl DirectoryHandler {
                                 success: true,
                                 error: None,
                             }
-                        },
+                        }
                         Err(e) => {
                             // Update statistics for errors
                             if let Some(ref stats) = stats {
@@ -503,8 +524,7 @@ impl DirectoryHandler {
                                 error: Some(e.to_string()),
                             }
                         }
-                    };
-                    result
+                    }
                 }
             },
             enhanced_progress.as_ref().map(|progress| {
@@ -553,10 +573,13 @@ impl DirectoryHandler {
         // Show timing summary
         let (summary_icon, mode_info) = match &execution_strategy {
             ExecutionStrategy::Sequential => (output::symbols::STOPWATCH, String::new()),
-            ExecutionStrategy::Parallel { workers } => (output::symbols::LIGHTNING, format!(" ({workers} workers)")),
+            ExecutionStrategy::Parallel { workers } => {
+                (output::symbols::LIGHTNING, format!(" ({workers} workers)"))
+            }
         };
 
-        output::styled!("{} Scan completed in {}s ({} files scanned, {} matches found{})", 
+        output::styled!(
+            "{} Scan completed in {}s ({} files scanned, {} matches found{})",
             (summary_icon, "success_symbol"),
             (format!("{:.2}", scan_duration.as_secs_f64()), "time"),
             (stats.files_scanned.to_string(), "number"),
@@ -572,7 +595,12 @@ impl DirectoryHandler {
     }
 
     /// Collect file paths from directory walker
-    fn collect_file_paths(&self, scanner: &Arc<Scanner>, path: &Path, warnings: &mut Vec<Warning>) -> Result<Vec<PathBuf>> {
+    fn collect_file_paths(
+        &self,
+        scanner: &Arc<Scanner>,
+        path: &Path,
+        warnings: &mut Vec<Warning>,
+    ) -> Result<Vec<PathBuf>> {
         let walker = scanner.build_directory_walker(path).build();
         let mut file_paths = Vec::new();
 
@@ -598,11 +626,12 @@ impl DirectoryHandler {
     pub fn analyze_directories(&self, path: &Path) -> DirectoryAnalysis {
         let mut properly_ignored = Vec::new();
         let mut needs_gitignore = Vec::new();
-        
+
         // Helper function to check if a pattern exists in gitignore
         let check_gitignore_pattern = |pattern: &str| -> bool {
             if let Ok(gitignore_content) = std::fs::read_to_string(path.join(".gitignore")) {
-                gitignore_content.lines()
+                gitignore_content
+                    .lines()
                     .map(|line| line.trim())
                     .filter(|line| !line.is_empty() && !line.starts_with('#'))
                     .any(|line| line == pattern || line == pattern.trim_end_matches('/'))
@@ -610,7 +639,7 @@ impl DirectoryHandler {
                 false
             }
         };
-        
+
         // Check all analyzable directories
         for (dir_name, description) in self.analyzable_directories() {
             if path.join(dir_name).exists() {
@@ -622,7 +651,7 @@ impl DirectoryHandler {
                 }
             }
         }
-        
+
         DirectoryAnalysis {
             properly_ignored,
             needs_gitignore,
@@ -643,37 +672,49 @@ impl DirectoryAnalysis {
         if self.properly_ignored.is_empty() && self.needs_gitignore.is_empty() {
             return;
         }
-        
+
         let total_dirs = self.properly_ignored.len() + self.needs_gitignore.len();
-        output::styled!("{} Discovered {} director{}:", 
+        output::styled!(
+            "{} Discovered {} director{}:",
             ("📁", "info_symbol"),
             (total_dirs.to_string(), "number"),
             (if total_dirs == 1 { "y" } else { "ies" }, "primary")
         );
-        
+
         // Show properly ignored directories
         for (dir, description) in &self.properly_ignored {
-            output::styled!("   {} {} ({})", 
+            output::styled!(
+                "   {} {} ({})",
                 ("✔", "success_symbol"),
                 (dir, "file_path"),
                 (description, "muted")
             );
         }
-        
+
         // Show directories that need gitignore rules
         for (dir, description) in &self.needs_gitignore {
-            output::styled!("   {} {} ({})", 
+            output::styled!(
+                "   {} {} ({})",
                 ("⚠️", "warning_symbol"),
                 (dir, "file_path"),
                 (description, "muted")
             );
         }
-        
+
         // Only show gitignore recommendations for directories that need them
         if !self.needs_gitignore.is_empty() {
-            let patterns: Vec<&str> = self.needs_gitignore.iter().map(|(dir, _)| dir.as_str()).collect();
-            output::info!(&format!("Consider adding to .gitignore: {}", 
-                     output::property_name(patterns.join(", "))), output::symbols::LIGHTBULB);
+            let patterns: Vec<&str> = self
+                .needs_gitignore
+                .iter()
+                .map(|(dir, _)| dir.as_str())
+                .collect();
+            output::info!(
+                &format!(
+                    "Consider adding to .gitignore: {}",
+                    output::property_name(patterns.join(", "))
+                ),
+                output::symbols::LIGHTBULB
+            );
         }
     }
 }
@@ -681,19 +722,19 @@ impl DirectoryAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_default_directory_handler() {
         let handler = DirectoryHandler::new();
-        
+
         // Test some known directories
         assert!(handler.should_filter_directory("target"));
         assert!(handler.should_filter_directory("node_modules"));
         assert!(handler.should_filter_directory("__pycache__"));
         assert!(handler.should_filter_directory(".git"));
-        
+
         // Test non-filtered directory
         assert!(!handler.should_filter_directory("src"));
         assert!(!handler.should_filter_directory("lib"));
@@ -703,7 +744,7 @@ mod tests {
     fn test_analyzable_directories() {
         let handler = DirectoryHandler::new();
         let analyzable = handler.analyzable_directories();
-        
+
         // Should include common build directories
         assert!(analyzable.iter().any(|(name, _)| *name == "target"));
         assert!(analyzable.iter().any(|(name, _)| *name == "node_modules"));
@@ -714,12 +755,12 @@ mod tests {
     fn test_directory_analysis() {
         let temp_dir = TempDir::new().unwrap();
         let handler = DirectoryHandler::new();
-        
+
         // Create a target directory (not in gitignore)
         fs::create_dir(temp_dir.path().join("target")).unwrap();
-        
+
         let analysis = handler.analyze_directories(temp_dir.path());
-        
+
         // Should find target directory that needs gitignore
         assert_eq!(analysis.properly_ignored.len(), 0);
         assert_eq!(analysis.needs_gitignore.len(), 1);
@@ -731,13 +772,13 @@ mod tests {
     fn test_directory_analysis_with_gitignore() {
         let temp_dir = TempDir::new().unwrap();
         let handler = DirectoryHandler::new();
-        
+
         // Create target directory and gitignore file
         fs::create_dir(temp_dir.path().join("target")).unwrap();
         fs::write(temp_dir.path().join(".gitignore"), "target/\n").unwrap();
-        
+
         let analysis = handler.analyze_directories(temp_dir.path());
-        
+
         // Should find properly ignored target directory
         assert_eq!(analysis.properly_ignored.len(), 1);
         assert_eq!(analysis.needs_gitignore.len(), 0);

@@ -1,6 +1,5 @@
 use guardy::sync::manager::SyncManager;
-use guardy::sync::{SyncRepo, SyncConfig};
-use std::path::Path;
+use guardy::sync::{SyncConfig, SyncRepo};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create the same sync config as in guardy.yaml
@@ -12,19 +11,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dest_path: ".".to_string(),
         include: vec!["*".to_string()],
         exclude: vec![".git".to_string()],
-        protected: true,
     };
-    
+
     let sync_config = SyncConfig {
         repos: vec![sync_repo],
-        protection: Default::default(),
     };
-    
+
     let manager = SyncManager::with_config(sync_config)?;
-    
+
     println!("=== Calling check_sync_status() ===");
     let status = manager.check_sync_status()?;
     println!("Status: {:?}", status);
-    
+
     Ok(())
 }

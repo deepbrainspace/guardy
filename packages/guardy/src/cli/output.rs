@@ -2,8 +2,4 @@
 pub use supercli::prelude::*;
 
 // Re-export starbase styling functions directly for backward compatibility
-pub use supercli::starbase_styles::color::{
-    file as file_path,
-    property as property_name
-};
-
+pub use supercli::starbase_styles::color::{file as file_path, property as property_name};

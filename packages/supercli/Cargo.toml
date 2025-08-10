@@ -1,12 +1,16 @@
 [package]
 name = "supercli"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Universal CLI output wrapper around starbase-styles for consistent CLI theming across tools"
 license = "MIT"
-authors = ["Nayeem Syed"]
+authors = ["Nayeem Syed <nayeem@deepbrain.space>"]
+repository = "https://github.com/deepbrainspace/guardy"
+homepage = "https://github.com/deepbrainspace/guardy"
+readme = "README.md"
 keywords = ["cli", "output", "starbase", "colors", "terminal"]
 categories = ["command-line-utilities"]
+rust-version = "1.88"
 
 [dependencies]
 starbase_styles = "0.6.3"
