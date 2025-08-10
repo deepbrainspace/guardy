@@ -42,18 +42,19 @@
 //! Guardy can also be used as a library for building custom security tools:
 //!
 //! ```rust,no_run
-//! use guardy::scanner::ScannerConfig;
+//! use guardy::scanner::Scanner;
 //! use guardy::config::GuardyConfig;
+//! use std::path::Path;
 //!
-//! // Create a scanner configuration
-//! let config = GuardyConfig::default();
-//! let scanner_config = ScannerConfig::from_config(&config)?;
+//! // Load configuration
+//! let config = GuardyConfig::load(None, None::<&()>, 0)?;
+//! let scanner = Scanner::new(&config)?;
 //!
 //! // Scan files for secrets
-//! let results = scanner_config.scan_path("src/")?;
+//! let results = scanner.scan_directory(Path::new("src/"), None)?;
 //!
 //! // Process results
-//! for finding in results.findings {
+//! for finding in results.matches {
 //!     println!("Found secret in {}: {}", finding.file_path, finding.secret_type);
 //! }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
