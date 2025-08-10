@@ -15,11 +15,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Files detected by get_files() logic:");
     for entry in builder.build() {
         let entry = entry?;
-        if entry.path().is_file() {
-            if let Ok(rel_path) = entry.path().strip_prefix(source) {
+        if entry.path().is_file()
+            && let Ok(rel_path) = entry.path().strip_prefix(source) {
                 println!("  {}", rel_path.display());
             }
-        }
     }
 
     // Cleanup

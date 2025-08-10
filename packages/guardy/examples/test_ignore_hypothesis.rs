@@ -9,11 +9,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let builder = WalkBuilder::new(source);
     for entry in builder.build() {
         let entry = entry?;
-        if entry.path().is_file() {
-            if let Ok(rel_path) = entry.path().strip_prefix(source) {
+        if entry.path().is_file()
+            && let Ok(rel_path) = entry.path().strip_prefix(source) {
                 println!("  {}", rel_path.display());
             }
-        }
     }
 
     println!("\n=== TEST 2: Disabled auto-ignore discovery ===");
@@ -22,17 +21,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for entry in builder.build() {
         let entry = entry?;
-        if entry.path().is_file() {
-            if let Ok(rel_path) = entry.path().strip_prefix(source) {
+        if entry.path().is_file()
+            && let Ok(rel_path) = entry.path().strip_prefix(source) {
                 println!("  {}", rel_path.display());
             }
-        }
     }
 
     println!("\n=== TEST 3: What's in the cached repo's .gitignore? ===");
     let gitignore_content = fs::read_to_string(source.join(".gitignore"))?;
     println!("Cached .gitignore content:");
-    println!("{}", gitignore_content);
+    println!("{gitignore_content}");
 
     Ok(())
 }

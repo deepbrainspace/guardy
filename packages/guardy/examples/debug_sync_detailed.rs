@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== Calling check_sync_status() ===");
     let status = manager.check_sync_status()?;
-    println!("Status: {:?}", status);
+    println!("Status: {status:?}");
 
     Ok(())
 }
