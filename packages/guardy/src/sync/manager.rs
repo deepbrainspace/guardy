@@ -381,7 +381,7 @@ impl SyncManager {
                         ChangeTag::Delete => {
                             // For deletions, use the old line number
                             let line_number = change.old_index().unwrap_or(0);
-                            print!("\x1b[48;2;120;50;50;97m{line_number:>8} -  ");
+                            print!("\x1b[48;2;150;80;80;97m{line_number:>8} -  ");
                             if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
                                 let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
                                 println!("{escaped}\x1b[0m");
@@ -451,6 +451,73 @@ impl SyncManager {
             4 => FileAction::Quit,
             _ => unreachable!(),
         })
+    }
+
+    /// Show all diffs without any interactive prompts (read-only view)
+    pub async fn show_all_diffs(&mut self) -> Result<()> {
+        output::styled!("<chart> Analyzing sync status...");
+
+        let mut has_any_changes = false;
+
+        for repo in self.config.repos.clone() {
+            tracing::info!("Processing repository: {}", repo.name);
+            
+            // Update cache from remote
+            let repo_path = self.update_cache(&repo)?;
+            
+            // Get changed files
+            let src = repo_path.join(&repo.source_path);
+            let dst = Path::new(&repo.dest_path);
+            let files = self.get_files(&src, &repo)?;
+            tracing::debug!("Found {} files in source", files.len());
+            let changed_files = self.files_differ(&files, &src, dst);
+            tracing::debug!("Found {} changed files", changed_files.len());
+            
+            if changed_files.is_empty() {
+                tracing::info!("No changes detected for repository: {}", repo.name);
+                continue;
+            }
+
+            has_any_changes = true;
+
+            // Show repository info
+            output::styled!("\n{} Repository: {} ({} files changed)", 
+                ("🔗", "info_symbol"),
+                (&repo.name, "property"),
+                (changed_files.len().to_string(), "property")
+            );
+
+            // Show diff for each changed file (no prompts)
+            for (i, file) in changed_files.iter().enumerate() {
+                let dst_file = dst.join(file);
+                
+                println!();
+                output::styled!("{}", ("─".repeat(60), "muted"));
+                output::styled!("File {}/{}: {}", 
+                    ((i + 1).to_string(), "muted"),
+                    (changed_files.len().to_string(), "muted"), 
+                    (dst_file.display().to_string(), "property"));
+
+                // Show diff (no prompts)
+                self.show_diff(&dst_file, &src.join(file))?;
+            }
+        }
+
+        // Show summary
+        if !has_any_changes {
+            println!();
+            output::styled!("{}", ("═".repeat(60), "muted"));
+            output::styled!("{} Everything is up to date", 
+                ("✅", "success_symbol"));
+        } else {
+            println!();
+            output::styled!("{}", ("═".repeat(60), "muted"));
+            output::styled!("{} Showing diffs for {} repositories", 
+                ("📝", "info_symbol"),
+                (self.config.repos.len().to_string(), "property"));
+        }
+
+        Ok(())
     }
 
     /// Get the cache directory
