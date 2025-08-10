@@ -161,6 +161,7 @@ pub mod external;
 pub mod git;
 pub mod hooks;
 pub mod parallel;
+pub mod profiling;
 pub mod reports;
 pub mod scanner;
 pub mod shared;

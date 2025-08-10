@@ -45,6 +45,10 @@ toml = { workspace = true }
 serde_yml = { workspace = true }
 anyhow = { workspace = true }
 
+# Git and validation
+git-conventional = "0.12.8"
+walkdir = "2.5.0"
+
 # Async and logging
 tokio = { version = "1.46.1", features = ["full"] }
 tracing = "0.1.41"

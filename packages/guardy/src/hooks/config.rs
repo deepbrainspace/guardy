@@ -12,6 +12,9 @@ pub struct HookDefinition {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
+    #[serde(default = "default_parallel")]
+    pub parallel: bool,
+
     #[serde(default)]
     pub builtin: Vec<String>,
 
@@ -28,9 +31,22 @@ pub struct CustomCommand {
 
     #[serde(default = "default_fail_on_error")]
     pub fail_on_error: bool,
+
+    #[serde(default)]
+    pub all_files: bool,
+
+    #[serde(default)]
+    pub glob: Vec<String>,
+
+    #[serde(default)]
+    pub stage_fixed: bool,
 }
 
 fn default_enabled() -> bool {
+    true
+}
+
+fn default_parallel() -> bool {
     true
 }
 
@@ -47,6 +63,7 @@ impl Default for HookConfig {
             "pre-commit".to_string(),
             HookDefinition {
                 enabled: true,
+                parallel: true,
                 builtin: vec!["scan_secrets".to_string()],
                 custom: vec![],
             },

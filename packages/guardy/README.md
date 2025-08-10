@@ -51,17 +51,33 @@ Guardy supports both custom commands and built-in actions in hooks:
 hooks:
   pre-commit:
     enabled: true
+    parallel: false  # Run commands in parallel (default: false)
     # Built-in actions
     builtin: ["scan_secrets"]
     # Custom commands
     custom:
-      - command: "echo 'Running pre-commit checks...'"
-        description: "Pre-commit header"
-        fail_on_error: false
+      - command: "cargo fmt --check"
+        description: "Check formatting"
+        fail_on_error: true
+        glob: ["*.rs"]  # Only run on Rust files (optional)
+        
+      - command: "eslint {files} --fix"
+        description: "Fix ESLint issues"
+        all_files: true  # Run on all files matching glob, not just staged
+        glob: ["*.js", "*.jsx", "*.ts", "*.tsx"]
+        stage_fixed: true  # Auto-stage fixed files
+
+  commit-msg:
+    enabled: true
+    builtin: ["validate_commit_msg"]  # Validates conventional commits format
 
   pre-push:
     enabled: true
+    parallel: true  # Run all commands in parallel for speed
     custom:
+      - command: "cargo test"
+        description: "Run tests"
+        fail_on_error: true
       - command: "guardy sync update --force --config ./guardy.yaml"
         description: "Sync protected files before push"
         fail_on_error: true
@@ -217,29 +233,68 @@ Guardy provides flexible git hook management with both built-in actions and cust
 
 ### Built-in Actions
 - `scan_secrets` - Scan staged files for secrets and credentials
-- `validate_commit_msg` - Validate commit message format (placeholder)
+- `validate_commit_msg` - Validate commit messages using conventional commits format
 
-### Hook Configuration
+### Hook Features
+
+#### Parallel Execution
+Run commands in parallel for faster execution (enabled by default):
 ```yaml
 hooks:
-  pre-commit:
-    enabled: true
-    builtin: ["scan_secrets"]
-    custom:
-      - command: "cargo fmt --check"
-        description: "Check code formatting"
-        fail_on_error: true
-      
   pre-push:
-    enabled: true
+    parallel: true  # Default: true - commands run simultaneously with optimal concurrency
     custom:
       - command: "cargo test"
-        description: "Run tests"
-        fail_on_error: true
-      - command: "guardy sync update --force --config ./guardy.yaml"
-        description: "Sync protected files"
-        fail_on_error: true
+      - command: "cargo clippy"
+      - command: "cargo fmt --check"
 ```
+
+Guardy automatically profiles your system and workload to determine optimal parallelism:
+- **Small workloads** (≤3 commands): Sequential execution
+- **Medium workloads** (4-5 commands): Conservative parallelism  
+- **Large workloads** (6+ commands): Full parallelism (capped at 8 concurrent commands)
+- **System-aware**: Respects available CPU cores and limits concurrency appropriately
+
+#### Glob Pattern Filtering
+Target specific file types with glob patterns:
+```yaml
+custom:
+  - command: "prettier --write {files}"
+    glob: ["*.js", "*.css", "*.html"]
+  - command: "black {files}"
+    glob: ["*.py"]
+```
+
+#### All Files Mode
+Process all matching files, not just staged ones:
+```yaml
+custom:
+  - command: "eslint {files} --fix"
+    all_files: true  # Process all JS files in repo
+    glob: ["**/*.js"]
+    stage_fixed: true  # Auto-stage corrected files
+```
+
+#### Conventional Commits Validation
+Ensures commit messages follow the conventional commits format using the `git-conventional` library:
+```yaml
+hooks:
+  commit-msg:
+    enabled: true
+    builtin: ["validate_commit_msg"]
+```
+
+**Supported formats:**
+- `feat(scope): add new feature`
+- `fix: resolve bug in authentication`
+- `docs: update README`
+- `chore(deps): update dependencies`
+
+**Features:**
+- Full conventional commits specification support
+- Helpful error messages with examples
+- Optional scope validation warnings
+- Automatic comment filtering from commit messages
 
 ### Installing Specific Hooks
 ```bash
