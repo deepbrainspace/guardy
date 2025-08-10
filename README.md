@@ -1,20 +1,23 @@
 # Guardy 🛡️
 
-Fast, secure git hooks in Rust with MCP server integration.
+Fast, secure git hooks in Rust with secret scanning and repository synchronization.
 
 ## Overview
 
-Guardy provides native Rust implementations of git hooks with security scanning, code formatting, and MCP server capabilities for AI integration. It replaces bash-based git hooks with high-performance, type-safe alternatives.
+Guardy provides high-performance Rust implementations for three essential repository management needs:
+- **Git Hooks** - Prevent bad commits with automated checks
+- **Secret Scanning** - Detect 40+ types of secrets before they're committed
+- **Repository Sync** - Keep shared configurations synchronized across multiple repositories
 
 ## Features
 
 - 🚀 **Native Rust Performance** - Faster than bash equivalents
-- 🔒 **Comprehensive Security Scanning** - Detects 40+ types of secrets and credentials
-- 🎨 **Code Formatting** - Automatic formatting with NX integration
-- 🔧 **Git-crypt Support** - Encrypted file handling
-- 🤖 **MCP Server** - Model Context Protocol integration for AI tools
-- ⚙️ **Advanced Configuration** - Smart format detection, empty value filtering, nested environment variables
-- 🌊 **Professional CLI** - Claude Code-style output with symbols and colors
+- 🔒 **Comprehensive Security Scanning** - Detects 40+ types of secrets with entropy analysis
+- 🔄 **Repository Synchronization** - Sync shared configs, CI/CD, and build tools across repos
+- 🪝 **Complete Git Hook Support** - Pre-commit, pre-push, commit-msg, and post-checkout hooks
+- ⚙️ **Flexible Configuration** - YAML, TOML, and JSON support with smart defaults
+- 🎯 **Parallel Processing** - Multi-threaded scanning with automatic optimization
+- 🌊 **Professional CLI** - Modern terminal output with progress bars and styled output
 
 ## Quick Start
 
@@ -25,14 +28,17 @@ guardy install
 # Scan files for secrets
 guardy scan src/ --stats
 
+# Show what files have drifted from protected sync
+guardy sync diff
+
+# Update files interactively
+guardy sync
+
 # Check installation status
 guardy status
 
 # Test a hook manually
 guardy run pre-commit
-
-# Start MCP server for AI integration
-guardy mcp start
 ```
 
 ## Security Scanning
@@ -68,21 +74,82 @@ Guardy includes comprehensive secret detection with 40+ built-in patterns:
 - URL credentials (`https://user:pass@host`)
 - Custom configurable patterns
 
-### Usage Examples
+### Scanning Examples
 
 ```bash
-# Scan current directory
-guardy scan
+# Scan current directory with statistics
+guardy scan --stats
 
-# Scan specific files with statistics
-guardy scan src/ config/ --stats
+# Scan specific files and directories
+guardy scan src/ config/ --parallel
 
-# Include binary files in scan
-guardy scan --include-binary
+# Interactive scanning mode
+guardy scan --interactive
 
-# Set custom file size limit
-guardy scan --max-file-size 50
+# Generate HTML report
+guardy scan --output-format html --output report.html
+
+# Include binary files and set custom limits
+guardy scan --include-binary --max-file-size 50
 ```
+
+## Repository Sync
+
+Keep shared configurations, CI/CD workflows, and build tools synchronized across multiple repositories:
+
+### Use Cases
+
+- **Shared CI/CD**: Maintain consistent GitHub Actions across all repositories
+- **Build Configurations**: Sync ESLint, Prettier, TypeScript configs
+- **Documentation Templates**: Keep README structures and contributing guides aligned
+- **Security Policies**: Ensure all repos have latest security configurations
+
+### Configuration
+
+Add sync configuration to your `guardy.yaml`:
+
+```yaml
+sync:
+  repos:
+    - name: "shared-config"
+      repo: "https://github.com/yourorg/shared-configs"
+      version: "v1.2.0"  # Use fixed versions for stability
+      source_path: "."
+      dest_path: "."
+      include: ["*.yml", "*.json", ".editorconfig"]
+      exclude: [".git", "node_modules"]
+    
+    - name: "ci-workflows"
+      repo: "https://github.com/yourorg/ci-templates"
+      version: "v2.0.1"
+      source_path: ".github"
+      dest_path: ".github"
+      include: ["workflows/*.yml"]
+```
+
+### Sync Commands
+
+```bash
+# Show what has changed (diff mode)
+guardy sync diff
+
+# Update files interactively (default behavior)
+guardy sync
+
+# Force update all changes without prompts
+guardy sync --force
+
+# Show sync status for all repositories
+guardy sync status
+```
+
+### Features
+
+- **Version Pinning**: Use specific versions for reproducible syncs
+- **Diff Visualization**: See exactly what changed with colored output
+- **Interactive Updates**: Choose which files to update with y/n prompts
+- **Multiple Sources**: Sync from multiple template repositories
+- **Selective Sync**: Include/exclude patterns for fine-grained control
 
 ## Configuration
 
@@ -227,6 +294,11 @@ let settings = config.get_vec("my_custom_tool.settings")?;
 
 ## Installation
 
+### From Crates.io (Coming Soon)
+```bash
+cargo install guardy
+```
+
 ### From Source
 ```bash
 git clone https://github.com/deepbrainspace/guardy.git
@@ -246,16 +318,12 @@ guardy install
 ### Core Commands
 
 - `guardy install` - Install git hooks into the current repository
+- `guardy scan [paths]` - Scan files for secrets and security issues
+- `guardy sync [command]` - Synchronize shared configurations
 - `guardy run <hook>` - Manually execute a specific hook for testing
 - `guardy status` - Show current installation and configuration status
 - `guardy config` - Configuration management commands
 - `guardy uninstall` - Remove all installed hooks
-
-### MCP Server Commands
-
-- `guardy mcp start` - Start MCP server for AI integration
-- `guardy mcp status` - Show MCP server status
-- `guardy mcp tools` - List available MCP tools
 
 ### Global Options
 
@@ -289,45 +357,31 @@ Guardy implements these git hooks:
 - ✅ Lockfile synchronization validation
 - ✅ Test suite execution (if configured)
 
-## MCP Integration
-
-Guardy includes an MCP (Model Context Protocol) server for seamless AI integration:
-
-```bash
-# Start MCP server
-guardy mcp start --port 8080
-
-# Available MCP tools
-guardy mcp tools
-```
-
-### Available MCP Tools
-- `git-status` - Get repository status
-- `hook-run` - Execute hooks programmatically  
-- `security-scan` - Run security scans on demand
-
 ## Module Organization
 
 Guardy follows a clean modular architecture with clear separation of concerns:
 
 ```
 src/
-├── config/         # Configuration management (Figment-based)
-│   ├── core.rs     # GuardyConfig struct and loading logic + tests
-│   ├── formats.rs  # Export functionality and syntax highlighting + tests
-│   ├── languages.rs # Language detection + tests
-│   └── README.md   # Config module documentation
-├── scanner/        # Secret detection and file analysis
-│   ├── core.rs     # Main Scanner struct and file processing + tests
-│   ├── patterns.rs # Secret patterns and regex compilation + tests
-│   ├── entropy.rs  # Statistical entropy analysis + tests
-│   ├── ignore_intel.rs # Project type detection + tests
-│   └── README.md   # Scanner module documentation
-├── git/           # Git operations and repository management
 ├── cli/           # Command-line interface and output formatting
+├── config/        # Configuration management (superconfig-based)
+├── git/           # Git operations and repository management
 ├── hooks/         # Git hook implementations
-├── mcp/           # Model Context Protocol server
-└── tests/         # Integration tests (cross-module functionality)
+│   ├── config.rs  # Hook configuration
+│   └── executor.rs # Hook execution logic
+├── scanner/       # Secret detection and file analysis
+│   ├── core.rs    # Main Scanner struct and file processing
+│   ├── patterns.rs # Secret patterns and regex compilation
+│   ├── entropy.rs # Statistical entropy analysis
+│   └── types.rs   # Scanner types and configuration
+├── sync/          # Repository synchronization
+│   ├── manager.rs # Sync orchestration
+│   └── status.rs  # Sync status tracking
+├── parallel/      # Parallel execution framework
+│   ├── core.rs    # Execution strategies
+│   └── progress.rs # Progress bars and reporting
+├── reports/       # Output formatting (JSON, HTML, etc.)
+└── shared/        # Shared utilities
 ```
 
 ### Test Organization
@@ -355,27 +409,25 @@ This project uses a Cargo workspace with multiple packages:
 ```
 guardy/
 ├── packages/
-│   ├── guardy/                          # Main application
-│   │   ├── src/                         # Core guardy implementation
-│   │   └── Cargo.toml                   # Package dependencies
-│   └── guardy-figment-providers/        # Custom Figment providers  
-│       ├── src/                         # SmartFormat, SkipEmpty, NestedEnv
-│       ├── tests/                       # Comprehensive provider tests
-│       └── README.md                    # Provider documentation
-├── Cargo.toml                           # Workspace root
-└── target/                              # Shared build artifacts
+│   ├── guardy/                # Main application
+│   │   ├── src/               # Core guardy implementation
+│   │   ├── examples/          # Usage examples
+│   │   └── Cargo.toml         # Package dependencies
+│   └── supercli/              # Universal CLI styling (to be extracted)
+│       ├── src/               # Styling and output utilities
+│       └── Cargo.toml         # Package dependencies
+├── Cargo.toml                 # Workspace root
+└── target/                    # Shared build artifacts
 ```
 
-### Custom Figment Providers Package
+### Related Packages
 
-The `guardy-figment-providers` package contains reusable configuration providers:
-- **Independently testable** with 18 comprehensive tests
-- **Reusable** across other Rust projects
-- **Well-documented** with examples and usage patterns
-- **Future crates.io distribution** ready
+Guardy integrates with these external packages:
+- **[superconfig](https://github.com/deepbrainspace/superconfig)** - Advanced configuration management
+- **supercli** - Professional CLI output styling (currently bundled, to be extracted)
 
 ### Prerequisites
-- Rust 1.70+ (uses 2024 edition)
+- Rust 1.88+ (uses 2024 edition)
 - Git 2.0+
 
 ### Building
@@ -385,7 +437,7 @@ cargo build --release
 
 # Build specific package
 cargo build -p guardy --release
-cargo build -p guardy-figment-providers --release
+cargo build -p supercli --release
 ```
 
 ### Testing
@@ -394,16 +446,16 @@ cargo build -p guardy-figment-providers --release
 cargo test
 
 # Test specific package  
-cargo test -p guardy-figment-providers
 cargo test -p guardy
+cargo test -p supercli
 
-# Test specific provider
-cargo test -p guardy-figment-providers smart_format
+# Run tests with output
+cargo test -- --nocapture
 
 # Test specific modules
-cargo test --lib config      # Test only config module
-cargo test --lib scanner     # Test only scanner module  
-cargo test integration_      # Run only integration tests
+cargo test --lib scanner     # Test only scanner module
+cargo test --lib sync        # Test only sync module  
+cargo test --lib hooks       # Test only hooks module
 ```
 
 ### Contributing
@@ -420,5 +472,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Acknowledgments
 
 - Inspired by [Husky](https://github.com/typicode/husky) for JavaScript
-- Uses [Figment](https://github.com/SergioBenitez/Figment) for configuration management
 - Built with [Clap](https://github.com/clap-rs/clap) for CLI interface
+- Uses [starbase-styles](https://github.com/moonrepo/starbase) for terminal styling
+- Configuration powered by [superconfig](https://github.com/deepbrainspace/superconfig)
