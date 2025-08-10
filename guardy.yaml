@@ -1,0 +1,46 @@
+# Guardy configuration for testing hooks
+# Step 1: Start with minimal configuration
+
+general:
+  debug: false
+  color: true
+
+# Hook configuration - testing custom commands first
+hooks:
+  # Custom hook for testing
+  test-hook:
+    enabled: true
+    custom:
+      - command: "echo 'Test hook executed successfully!'"
+        description: "Simple test hook"
+        fail_on_error: false
+      - command: "date"
+        description: "Show current date"
+        fail_on_error: false
+  
+  # Pre-commit hook with custom command
+  pre-commit:
+    enabled: true
+    custom:
+      - command: "echo '= Running pre-commit checks...'"
+        description: "Pre-commit header"
+        fail_on_error: false
+    builtin: ["scan_secrets"]  # Enable secret scanning
+    
+  # Commit-msg hook - testing conventional commits
+  commit-msg:
+    enabled: true
+    builtin: ["validate_commit_msg"]
+    custom:
+      - command: "echo 'Validating commit message...'"
+        description: "Commit message validation header"
+        fail_on_error: false
+
+# Scanner configuration (commented out for now)
+# scanner:
+#   enabled: true
+#   mode: auto
+
+# Sync configuration (commented out for now)  
+# sync:
+#   repos: []
