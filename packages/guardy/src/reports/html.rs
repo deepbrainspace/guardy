@@ -1,9 +1,9 @@
-use anyhow::Result;
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::scanner::types::{SecretMatch, Warning};
+use anyhow::Result;
 use serde_json::json;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct ReportGenerator;
 
@@ -24,28 +24,38 @@ impl ReportGenerator {
         output_dir: &Path,
         format: ReportFormat,
     ) -> Result<PathBuf> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_secs();
-        
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+
         let (report_filename, content) = match format {
             ReportFormat::Html => {
                 let filename = format!("guardy-report-{timestamp}.html");
-                let content = Self::generate_html_content(matches, warnings, total_files, total_skipped, elapsed)?;
+                let content = Self::generate_html_content(
+                    matches,
+                    warnings,
+                    total_files,
+                    total_skipped,
+                    elapsed,
+                )?;
                 (filename, content)
-            },
+            }
             ReportFormat::Json => {
                 let filename = format!("guardy-report-{timestamp}.json");
-                let content = Self::generate_json_content(matches, warnings, total_files, total_skipped, elapsed)?;
+                let content = Self::generate_json_content(
+                    matches,
+                    warnings,
+                    total_files,
+                    total_skipped,
+                    elapsed,
+                )?;
                 (filename, content)
-            },
+            }
         };
-        
+
         let report_path = output_dir.join(&report_filename);
         fs::write(&report_path, content)?;
         Ok(report_path)
     }
-    
+
     /// Generate JSON report (machine-friendly)
     fn generate_json_content(
         matches: &[&SecretMatch],
@@ -83,10 +93,10 @@ impl ReportGenerator {
                 "message": w.message
             })).collect::<Vec<_>>()
         });
-        
+
         Ok(serde_json::to_string_pretty(&report)?)
     }
-    
+
     /// Generate HTML report (human-friendly, interactive)
     fn generate_html_content(
         matches: &[&SecretMatch],
@@ -97,16 +107,17 @@ impl ReportGenerator {
     ) -> Result<String> {
         let secrets_by_type = Self::group_secrets_by_type(matches);
         let warnings_by_type = Self::group_warnings_by_type(warnings);
-        
+
         let secrets_section = Self::generate_secrets_html_section(&secrets_by_type);
         let warnings_section = Self::generate_warnings_html_section(&warnings_by_type);
-        
+
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
-        let html = format!(r#"<!DOCTYPE html>
+
+        let html = format!(
+            r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -205,28 +216,31 @@ impl ReportGenerator {
             secrets_section,
             warnings_section
         );
-        
+
         Ok(html)
     }
-    
-    fn group_secrets_by_type<'a>(matches: &'a [&'a SecretMatch]) -> Vec<(String, Vec<&'a SecretMatch>)> {
+
+    fn group_secrets_by_type<'a>(
+        matches: &'a [&'a SecretMatch],
+    ) -> Vec<(String, Vec<&'a SecretMatch>)> {
         use std::collections::HashMap;
-        
+
         let mut grouped: HashMap<String, Vec<&'a SecretMatch>> = HashMap::new();
         for secret in matches {
-            grouped.entry(secret.secret_type.clone())
+            grouped
+                .entry(secret.secret_type.clone())
                 .or_default()
                 .push(*secret);
         }
-        
+
         let mut result: Vec<_> = grouped.into_iter().collect();
         result.sort_by(|a, b| b.1.len().cmp(&a.1.len())); // Sort by count descending
         result
     }
-    
+
     fn group_warnings_by_type<'a>(warnings: &'a [&'a Warning]) -> Vec<(String, Vec<&'a Warning>)> {
         use std::collections::HashMap;
-        
+
         let mut grouped: HashMap<String, Vec<&'a Warning>> = HashMap::new();
         for warning in warnings {
             let warning_type = if warning.message.contains("Failed to scan") {
@@ -236,24 +250,23 @@ impl ReportGenerator {
             } else {
                 "Other Warnings".to_string()
             };
-            
-            grouped.entry(warning_type)
-                .or_default()
-                .push(*warning);
+
+            grouped.entry(warning_type).or_default().push(*warning);
         }
-        
+
         let mut result: Vec<_> = grouped.into_iter().collect();
         result.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
         result
     }
-    
+
     fn generate_secrets_html_section(secrets_by_type: &[(String, Vec<&SecretMatch>)]) -> String {
         let mut sections = String::new();
-        
+
         for (secret_type, secrets) in secrets_by_type {
             let section_id = format!("secrets-{}", secret_type.replace(' ', "-").to_lowercase());
-            
-            sections.push_str(&format!(r#"
+
+            sections.push_str(&format!(
+                r#"
         <div class="section">
             <div class="section-header" onclick="toggleSection('{}')">
                 <span>🔑 {} ({} matches)</span>
@@ -271,46 +284,68 @@ impl ReportGenerator {
                         </tr>
                     </thead>
                     <tbody>
-"#, 
-                section_id, secret_type, secrets.len(), 
-                section_id, secret_type, section_id, section_id, section_id, section_id
+"#,
+                section_id,
+                secret_type,
+                secrets.len(),
+                section_id,
+                secret_type,
+                section_id,
+                section_id,
+                section_id,
+                section_id
             ));
-            
+
             for secret in secrets {
-                let file_path = secret.file_path.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-                let line_content = secret.line_content.trim().replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-                
-                sections.push_str(&format!(r#"
+                let file_path = secret
+                    .file_path
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                let line_content = secret
+                    .line_content
+                    .trim()
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+
+                sections.push_str(&format!(
+                    r#"
                         <tr>
                             <td class="file-path">{}</td>
                             <td>{}</td>
                             <td>{}</td>
                         </tr>
-"#, file_path, secret.line_number, line_content));
+"#,
+                    file_path, secret.line_number, line_content
+                ));
             }
-            
-            sections.push_str(r#"
+
+            sections.push_str(
+                r#"
                     </tbody>
                 </table>
             </div>
         </div>
-"#);
+"#,
+            );
         }
-        
+
         sections
     }
-    
+
     fn generate_warnings_html_section(warnings_by_type: &[(String, Vec<&Warning>)]) -> String {
         if warnings_by_type.is_empty() {
             return String::new();
         }
-        
+
         let mut sections = String::new();
-        
+
         for (warning_type, warnings) in warnings_by_type {
             let section_id = format!("warnings-{}", warning_type.replace(' ', "-").to_lowercase());
-            
-            sections.push_str(&format!(r#"
+
+            sections.push_str(&format!(
+                r#"
         <div class="section">
             <div class="section-header" onclick="toggleSection('{}')">
                 <span>⚠️ {} ({} warnings)</span>
@@ -326,28 +361,43 @@ impl ReportGenerator {
                         </tr>
                     </thead>
                     <tbody>
-"#, 
-                section_id, warning_type, warnings.len(),
-                section_id, warning_type, section_id, section_id, section_id, section_id
+"#,
+                section_id,
+                warning_type,
+                warnings.len(),
+                section_id,
+                warning_type,
+                section_id,
+                section_id,
+                section_id,
+                section_id
             ));
-            
+
             for warning in warnings {
-                let message = warning.message.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-                sections.push_str(&format!(r#"
+                let message = warning
+                    .message
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                sections.push_str(&format!(
+                    r#"
                         <tr>
                             <td class="warning-msg">{message}</td>
                         </tr>
-"#));
+"#
+                ));
             }
-            
-            sections.push_str(r#"
+
+            sections.push_str(
+                r#"
                     </tbody>
                 </table>
             </div>
         </div>
-"#);
+"#,
+            );
         }
-        
+
         sections
     }
 }

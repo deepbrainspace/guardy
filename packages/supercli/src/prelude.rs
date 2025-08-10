@@ -1,12 +1,12 @@
 //! SuperCLI Prelude
-//! 
+//!
 //! Import everything you need for CLI styling with a single use statement:
 //! ```rust
 //! use supercli::prelude::*;
 //! ```
 
 // SuperCLI semantic macros - core functionality
-pub use crate::{success, warning, info, error, styled};
+pub use crate::{error, info, styled, success, warning};
 
 // Symbol constants
 pub use crate::output::symbols;

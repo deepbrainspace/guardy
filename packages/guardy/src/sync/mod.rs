@@ -15,7 +15,7 @@ pub struct SyncRepo {
     pub version: String,
     #[serde(default = "default_source_path")]
     pub source_path: String,
-    #[serde(default = "default_dest_path")]  
+    #[serde(default = "default_dest_path")]
     pub dest_path: String,
     #[serde(default)]
     pub include: Vec<String>,
@@ -26,7 +26,9 @@ pub struct SyncRepo {
 #[derive(Debug)]
 pub enum SyncStatus {
     InSync,
-    OutOfSync { changed_files: Vec<std::path::PathBuf> },
+    OutOfSync {
+        changed_files: Vec<std::path::PathBuf>,
+    },
     NotConfigured,
 }
 

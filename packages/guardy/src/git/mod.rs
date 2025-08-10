@@ -3,7 +3,7 @@ pub mod remote;
 // TODO: Add hooks module for hook installation/management
 // TODO: Add commit module for commit operations
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -22,13 +22,12 @@ impl GitRepo {
             return Err(anyhow::anyhow!("Not in a git repository"));
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .context("Git output is not valid UTF-8")?;
+        let stdout = String::from_utf8(output.stdout).context("Git output is not valid UTF-8")?;
 
         let path = PathBuf::from(stdout.trim());
         Ok(GitRepo { path })
     }
-    
+
     pub fn current_branch(&self) -> Result<String> {
         let output = Command::new("git")
             .args(["branch", "--show-current"])
@@ -40,12 +39,11 @@ impl GitRepo {
             return Ok("HEAD".to_string());
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .context("Git output is not valid UTF-8")?;
+        let stdout = String::from_utf8(output.stdout).context("Git output is not valid UTF-8")?;
 
         Ok(stdout.trim().to_string())
     }
-    
+
     pub fn git_dir(&self) -> PathBuf {
         self.path.join(".git")
     }

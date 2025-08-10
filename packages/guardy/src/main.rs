@@ -2,16 +2,15 @@ use anyhow::Result;
 use clap::Parser;
 
 mod cli;
-mod hooks;
-mod git;
-mod scanner;
-mod external;
 mod config;
-mod mcp;
-mod shared;
-mod sync;
+mod external;
+mod git;
+mod hooks;
 mod parallel;
 mod reports;
+mod scanner;
+mod shared;
+mod sync;
 
 use cli::commands::Cli;
 

@@ -48,7 +48,7 @@
 //! error!("Configuration file not found");
 //!
 //! // Fine-grained styling control
-//! styled!("Processing {} files in {}", 
+//! styled!("Processing {} files in {}",
 //!     ("150", "number"),
 //!     ("/home/user", "file_path")
 //! );
@@ -56,6 +56,67 @@
 //! // Use starbase-styles functions directly
 //! println!("Found {}", file("config.toml"));
 //! ```
+//!
+//! ## Advanced Usage
+//!
+//! ### Multiple Styles in One Line
+//!
+//! ```rust
+//! use supercli::prelude::*;
+//!
+//! // Mix multiple styled components
+//! styled!("{} Found {} secrets in {} files ({})",
+//!     ("🔍", "info_symbol"),
+//!     ("5", "error_count"),
+//!     ("127", "file_count"),
+//!     ("2.3s", "duration")
+//! );
+//! ```
+//!
+//! ### Environment Variable Control
+//!
+//! ```bash
+//! # Disable colors completely
+//! export NO_COLOR=1
+//!
+//! # Force monochrome output
+//! export GUARDY_OUTPUT_STYLE=monochrome
+//!
+//! # Disable all output styling
+//! export GUARDY_OUTPUT_STYLE=none
+//! ```
+//!
+//! ### Integration with Clap
+//!
+//! ```rust,ignore
+//! use supercli::clap::create_help_styles;
+//! use clap::Parser;
+//!
+//! #[derive(Parser)]
+//! #[command(styles = create_help_styles())]
+//! struct Cli {
+//!     #[arg(short, long)]
+//!     verbose: bool,
+//! }
+//! ```
+//!
+//! ## Semantic Style Types
+//!
+//! SuperCLI supports all starbase-styles semantic types and adds CLI-specific ones:
+//!
+//! - **Status**: `success`, `warning`, `error`, `info`
+//! - **Data**: `number`, `file_path`, `url`, `email`
+//! - **UI**: `property`, `value`, `symbol`, `muted`
+//! - **Code**: `id`, `hash`, `token`
+//! - **And many more...**
+//!
+//! ## Features
+//!
+//! - **Zero-dependency core**: Only requires starbase-styles
+//! - **Optional clap integration**: Enable with `clap` feature
+//! - **Environment aware**: Respects NO_COLOR and custom style variables
+//! - **Cross-platform**: Works on Windows, macOS, and Linux
+//! - **Performance focused**: Minimal runtime overhead
 
 // Module declarations
 pub mod output;
@@ -72,5 +133,5 @@ pub use starbase_styles;
 pub use clap as clap_crate;
 
 // Re-export our main functionality
-pub use output::macros::{success_impl, warning_impl, info_impl, error_impl};
-pub use output::styling::{apply_style};
+pub use output::macros::{error_impl, info_impl, success_impl, warning_impl};
+pub use output::styling::apply_style;

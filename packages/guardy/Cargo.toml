@@ -1,14 +1,16 @@
 [package]
 name = "guardy"
 version = "0.2.0"
-edition = "2021"
-description = "Fast, secure git hooks in Rust with MCP server integration"
+edition = "2024"
+description = "Fast, secure git hooks in Rust with secret scanning and protected file synchronization"
 license = "MIT"
-authors = ["Nayeem Syed"]
-repository = "https://github.com/deepbrain/guardy"
-readme = "../../README.md"
-keywords = ["git", "hooks", "security", "mcp", "pre-commit"]
+authors = ["Nayeem Syed <nayeem@deepbrain.space>"]
+repository = "https://github.com/deepbrainspace/guardy"
+homepage = "https://github.com/deepbrainspace/guardy"
+readme = "README.md"
+keywords = ["git", "hooks", "security", "scanning", "sync"]
 categories = ["development-tools", "command-line-utilities"]
+rust-version = "1.88"
 
 [lints.clippy]
 # is_multiple_of() is only available in nightly Rust, so disable this lint
@@ -47,9 +49,6 @@ anyhow = { workspace = true }
 tokio = { version = "1.46.1", features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-
-# MCP server
-rmcp = { version = "0.3.0", features = ["server"] }
 
 # Scanner dependencies (ripgrep ecosystem)
 grep = "0.3.2"            # Meta-crate providing unified interface
