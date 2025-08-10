@@ -19,9 +19,9 @@ impl RemoteOperations {
             std::fs::create_dir_all(parent)?;
         }
 
-        // Clone with system git - uses all user's authentication methods
+        // Clone with system git - shallow clone for speed
         let output = Command::new("git")
-            .args(["clone", "--quiet", repo_url])
+            .args(["clone", "--depth", "1", "--quiet", repo_url])
             .arg(repo_path)
             .output()?;
 
@@ -74,9 +74,9 @@ impl RemoteOperations {
     }
 
     /// Clone repository (called when it doesn't exist in cache)
-    pub fn clone_repository(&self, repo_url: &str, repo_name: &str) -> Result<()> {
+    pub fn clone_repository(&self, repo_url: &str, repo_name: &str, version: &str) -> Result<()> {
         let repo_path = self.cache_dir.join(repo_name);
-        self.clone_with_system_git(repo_url, &repo_path, "main")?;
+        self.clone_with_system_git(repo_url, &repo_path, version)?;
         Ok(())
     }
 
@@ -84,9 +84,9 @@ impl RemoteOperations {
     pub fn fetch_and_reset(&self, repo_name: &str, version: &str) -> Result<()> {
         let repo_path = self.cache_dir.join(repo_name);
         
-        // Fetch all branches and tags from origin
+        // Fetch only the specific branch/tag we need with depth 1 (just the latest commit)
         let output = Command::new("git")
-            .args(["fetch", "--all", "--tags", "--prune"])
+            .args(["fetch", "--depth", "1", "origin", version])
             .current_dir(&repo_path)
             .output()?;
 
@@ -122,7 +122,25 @@ impl RemoteOperations {
             .current_dir(&repo_path)
             .output()?;
 
-        tracing::info!("Reset cache to version: {}", version);
+        // Get and log the current commit SHA
+        let sha_output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&repo_path)
+            .output()?;
+        
+        if sha_output.status.success() {
+            let sha = String::from_utf8_lossy(&sha_output.stdout).trim().to_string();
+            tracing::info!("Reset cache to version: {} ({})", version, &sha[..8]);
+            
+            // Store the SHA in .guardy directory for later reference
+            let guardy_dir = PathBuf::from(".guardy");
+            std::fs::create_dir_all(&guardy_dir)?;
+            let sha_file = guardy_dir.join(format!("sync_sha_{repo_name}"));
+            std::fs::write(sha_file, format!("{version}\n{sha}"))?;
+        } else {
+            tracing::info!("Reset cache to version: {}", version);
+        }
+        
         Ok(())
     }
 

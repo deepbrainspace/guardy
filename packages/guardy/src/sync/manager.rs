@@ -163,12 +163,12 @@ impl SyncManager {
         let repo_path = self.cache_dir.join(&repo_name);
 
         if !repo_path.exists() {
-            // Clone if doesn't exist
-            self.remote_ops.clone_repository(&repo.repo, &repo_name)?;
+            // Clone if doesn't exist - pass the version we actually want
+            self.remote_ops.clone_repository(&repo.repo, &repo_name, &repo.version)?;
+        } else {
+            // Only fetch and reset if repo already exists
+            self.remote_ops.fetch_and_reset(&repo_name, &repo.version)?;
         }
-
-        // Always fetch and reset to match remote
-        self.remote_ops.fetch_and_reset(&repo_name, &repo.version)?;
         
         Ok(repo_path)
     }
@@ -218,6 +218,9 @@ impl SyncManager {
 
         output::styled!("{} Analyzing sync status...", ("📋", "info_symbol"));
 
+        // First check if there are any changes at all
+        let mut has_any_changes = false;
+
         for repo in self.config.repos.clone() {
             tracing::info!("Processing repository: {}", repo.name);
             
@@ -236,6 +239,8 @@ impl SyncManager {
                 tracing::info!("No changes detected for repository: {}", repo.name);
                 continue;
             }
+
+            has_any_changes = true;
 
             // Show repository info
             output::styled!("\n{} Repository: {} ({} files changed)", 
@@ -315,13 +320,29 @@ impl SyncManager {
             }
         }
 
+        // If no changes at all, show message early
+        if !has_any_changes {
+            if interactive {
+                println!();
+                output::styled!("{}", ("═".repeat(60), "muted"));
+                output::styled!("{} Everything is up to date", 
+                    ("✅", "success_symbol"));
+            }
+            return Ok(all_updated_files);
+        }
+
         // Show summary
-        if interactive && !all_updated_files.is_empty() {
+        if interactive {
             println!();
             output::styled!("{}", ("═".repeat(60), "muted"));
-            output::styled!("{} {} files updated", 
-                ("✅", "success_symbol"),
-                (all_updated_files.len().to_string(), "property"));
+            if all_updated_files.is_empty() {
+                output::styled!("{} Everything is up to date", 
+                    ("✅", "success_symbol"));
+            } else {
+                output::styled!("{} {} files updated", 
+                    ("✅", "success_symbol"),
+                    (all_updated_files.len().to_string(), "property"));
+            }
         }
 
         Ok(all_updated_files)
@@ -346,12 +367,13 @@ impl SyncManager {
         for group in diff.grouped_ops(3) {
             for op in group {
                 for change in diff.iter_changes(&op) {
-                    let line_number = change.new_index().unwrap_or(0);
                     let line_content = change.value().trim_end_matches('\n');
                     let mut highlighter = HighlightLines::new(syntax, theme);
                     
                     match change.tag() {
                         ChangeTag::Delete => {
+                            // For deletions, use the old line number
+                            let line_number = change.old_index().unwrap_or(0);
                             print!("\x1b[48;2;120;50;50;97m{line_number:>8} -  ");
                             if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
                                 let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
@@ -361,6 +383,8 @@ impl SyncManager {
                             }
                         },
                         ChangeTag::Insert => {
+                            // For insertions, use the new line number
+                            let line_number = change.new_index().unwrap_or(0);
                             print!("\x1b[48;2;50;120;50;97m{line_number:>8} +  ");
                             if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
                                 let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
@@ -370,6 +394,8 @@ impl SyncManager {
                             }
                         },
                         ChangeTag::Equal => {
+                            // Context lines - show the new line number (destination)
+                            let line_number = change.new_index().unwrap_or(0);
                             print!("{line_number:>8}    ");
                             if let Ok(ranges) = highlighter.highlight_line(line_content, &self.syntax_set) {
                                 let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
