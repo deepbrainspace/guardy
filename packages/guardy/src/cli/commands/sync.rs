@@ -9,7 +9,19 @@ use crate::sync::{manager::SyncManager, status::StatusDisplay};
 #[command(about = "File synchronization from remote repositories")]
 pub struct SyncArgs {
     #[command(subcommand)]
-    pub command: SyncSubcommand,
+    pub command: Option<SyncSubcommand>,
+    
+    /// Force update, bypass interactive mode and update all changes without prompting
+    #[arg(long)]
+    pub force: bool,
+    
+    /// Bootstrap from a specific repository (initial setup)
+    #[arg(long)]
+    pub repo: Option<String>,
+    
+    /// Specific version to sync (tag, branch, or commit)
+    #[arg(long)]
+    pub version: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -31,14 +43,24 @@ pub enum SyncSubcommand {
         #[arg(long)]
         version: Option<String>,
     },
+    
+    /// Show differences between local and remote files (what has drifted)
+    Diff,
 }
 
 pub async fn execute(args: SyncArgs, config_path: Option<&str>) -> Result<()> {
     match args.command {
-        SyncSubcommand::Status => execute_status(config_path).await,
-        SyncSubcommand::Update { force, repo, version } => {
-            execute_update(force, repo, version, config_path).await
+        Some(SyncSubcommand::Status) => execute_status(config_path).await,
+        Some(SyncSubcommand::Update { force, repo, version }) => {
+            // Prefer subcommand args over main args
+            let final_force = force || args.force;
+            let final_repo = repo.or(args.repo);
+            let final_version = version.or(args.version);
+            execute_update(final_force, final_repo, final_version, config_path).await
         },
+        Some(SyncSubcommand::Diff) => execute_diff(config_path).await,
+        // Default to update behavior when no subcommand is provided, using main args
+        None => execute_update(args.force, args.repo, args.version, config_path).await,
     }
 }
 
@@ -46,6 +68,25 @@ async fn execute_status(config_path: Option<&str>) -> Result<()> {
     let manager = create_sync_manager(config_path)?;
     let status_display = StatusDisplay::new(&manager);
     status_display.show_detailed_status()
+}
+
+async fn execute_diff(config_path: Option<&str>) -> Result<()> {
+    let mut manager = create_sync_manager(config_path)?;
+    
+    // Check if we have any configuration
+    if manager.config.repos.is_empty() {
+        output::styled!("{} No sync configuration found", 
+            ("⚠️", "warning_symbol")
+        );
+        return Ok(());
+    }
+    
+    output::styled!("{} Checking for differences...", ("🔍", "info_symbol"));
+    
+    // Use the dedicated diff-only method (no interactive prompts)
+    manager.show_all_diffs().await?;
+    
+    Ok(())
 }
 
 async fn execute_update(force: bool, repo: Option<String>, version: Option<String>, config_path: Option<&str>) -> Result<()> {
