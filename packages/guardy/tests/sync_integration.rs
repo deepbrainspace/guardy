@@ -86,27 +86,27 @@ impl SyncTestScenario {
         use std::process::Command;
 
         Command::new("git")
-            .args(&["init"])
+            .args(["init"])
             .current_dir(path)
             .output()?;
 
         Command::new("git")
-            .args(&["config", "user.email", "test@example.com"])
+            .args(["config", "user.email", "test@example.com"])
             .current_dir(path)
             .output()?;
 
         Command::new("git")
-            .args(&["config", "user.name", "Test User"])
+            .args(["config", "user.name", "Test User"])
             .current_dir(path)
             .output()?;
 
         Command::new("git")
-            .args(&["add", "."])
+            .args(["add", "."])
             .current_dir(path)
             .output()?;
 
         Command::new("git")
-            .args(&["commit", "-m", "Initial commit"])
+            .args(["commit", "-m", "Initial commit"])
             .current_dir(path)
             .output()?;
 
@@ -159,7 +159,7 @@ protection:
     pub fn assert_file_content(&self, file: &str, expected: &str) -> Result<()> {
         let file_path = self.target_repo.join(file);
         let actual = fs::read_to_string(file_path)?;
-        assert_eq!(actual, expected, "File content mismatch for {}", file);
+        assert_eq!(actual, expected, "File content mismatch for {file}");
         Ok(())
     }
 }

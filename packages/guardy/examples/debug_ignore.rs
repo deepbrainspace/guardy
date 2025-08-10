@@ -10,12 +10,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let builder = WalkBuilder::new(source);
     for entry in builder.build() {
         let entry = entry?;
-        if let Ok(rel_path) = entry.path().strip_prefix(source) {
-            if rel_path.to_string_lossy() != "" {
+        if let Ok(rel_path) = entry.path().strip_prefix(source)
+            && rel_path.to_string_lossy() != "" {
                 // Skip root
                 println!("  {}", rel_path.display());
             }
-        }
     }
 
     // Test 2: With ignore file
@@ -28,12 +27,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for entry in builder.build() {
         let entry = entry?;
-        if let Ok(rel_path) = entry.path().strip_prefix(source) {
-            if rel_path.to_string_lossy() != "" {
+        if let Ok(rel_path) = entry.path().strip_prefix(source)
+            && rel_path.to_string_lossy() != "" {
                 // Skip root
                 println!("  {}", rel_path.display());
             }
-        }
     }
 
     // Cleanup
