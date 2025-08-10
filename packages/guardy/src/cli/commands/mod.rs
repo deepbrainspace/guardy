@@ -2,27 +2,26 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use supercli::clap::create_help_styles;
 
+pub mod config;
 pub mod install;
 pub mod run;
 pub mod scan;
-pub mod config;
 pub mod status;
-pub mod mcp;
+pub mod sync;
 pub mod uninstall;
 pub mod version;
-pub mod sync;
 
 #[derive(Parser)]
 #[command(
     name = "guardy",
     version = env!("CARGO_PKG_VERSION"),
-    about = "Fast, secure git hooks in Rust with MCP server integration",
-    long_about = "Guardy provides native Rust implementations of git hooks with security scanning, \
-                  code formatting, and MCP server capabilities for AI integration.",
+    about = "Fast, secure git hooks in Rust with secret scanning and file synchronization",
+    long_about = "Guardy provides native Rust implementations of git hooks with security scanning \
+                  and protected file synchronization across repositories.",
     styles = create_help_styles()
 )]
 pub struct Cli {
-    /// Run as if started in <DIR> instead of current working directory
+    /// Run as if started in `<DIR>` instead of current working directory
     #[arg(short = 'C', long = "directory", global = true)]
     pub directory: Option<String>,
 
@@ -56,8 +55,6 @@ pub enum Commands {
     Status(status::StatusArgs),
     /// Remove all installed hooks
     Uninstall(uninstall::UninstallArgs),
-    /// MCP (Model Context Protocol) server management
-    Mcp(mcp::McpArgs),
     /// Protected file synchronization
     Sync(sync::SyncArgs),
     /// Show version information
@@ -71,7 +68,6 @@ impl Cli {
             std::env::set_current_dir(dir)?;
         }
 
-
         // Set up logging based on verbosity
         setup_logging(self.verbose, self.quiet);
 
@@ -80,16 +76,18 @@ impl Cli {
             Some(Commands::Run(args)) => run::execute(args, self.verbose).await,
             Some(Commands::Scan(args)) => {
                 use crate::cli::output;
-                output::styled!("{}: CLI config path: {}", 
+                output::styled!(
+                    "{}: CLI config path: {}",
                     ("DEBUG", "debug"),
                     (format!("{:?}", self.config), "muted")
                 );
                 scan::execute(args, self.verbose, self.config.as_deref()).await
-            },
-            Some(Commands::Config(args)) => config::execute(args, self.config.as_deref(), self.verbose).await,
+            }
+            Some(Commands::Config(args)) => {
+                config::execute(args, self.config.as_deref(), self.verbose).await
+            }
             Some(Commands::Status(args)) => status::execute(args, self.verbose).await,
             Some(Commands::Uninstall(args)) => uninstall::execute(args).await,
-            Some(Commands::Mcp(args)) => mcp::execute(args).await,
             Some(Commands::Sync(args)) => sync::execute(args, self.config.as_deref()).await,
             Some(Commands::Version(args)) => version::execute(args).await,
             None => {
@@ -112,15 +110,14 @@ fn setup_logging(verbose: u8, quiet: bool) {
     }
 
     // Create filter that suppresses debug from ignore/globset crates appropriately
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            match verbose {
-                0 => tracing_subscriber::EnvFilter::new("warn"),
-                1 => tracing_subscriber::EnvFilter::new("info,ignore=warn,globset=warn"),
-                2 => tracing_subscriber::EnvFilter::new("debug,ignore=warn,globset=warn"), 
-                _ => tracing_subscriber::EnvFilter::new("trace"), // -vvv shows everything including globset
-            }
-        });
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        match verbose {
+            0 => tracing_subscriber::EnvFilter::new("warn"),
+            1 => tracing_subscriber::EnvFilter::new("info,ignore=warn,globset=warn"),
+            2 => tracing_subscriber::EnvFilter::new("debug,ignore=warn,globset=warn"),
+            _ => tracing_subscriber::EnvFilter::new("trace"), // -vvv shows everything including globset
+        }
+    });
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)

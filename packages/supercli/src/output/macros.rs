@@ -3,7 +3,7 @@
 //! These macros provide the core SuperCLI functionality - semantic output
 //! that automatically adapts to different output styles (color, monochrome, none).
 
-use starbase_styles::color::{success, failure, caution, label, symbol as style_symbol};
+use starbase_styles::color::{caution, failure, label, success, symbol as style_symbol};
 
 #[cfg(feature = "clap")]
 use starbase_styles::color::owo::OwoColorize;
@@ -13,7 +13,7 @@ pub fn success_impl(message: &str, symbol: &str) {
     #[cfg(feature = "clap")]
     {
         match crate::clap::get_output_style() {
-            "none" => println!("{} {}", symbol, message),
+            "none" => println!("{symbol} {message}"),
             "monochrome" => println!("{} {}", symbol.bold(), message.bold()),
             _ => println!("{} {}", style_symbol(symbol), success(message)), // Color
         }
@@ -48,7 +48,7 @@ pub fn warning_impl(message: &str, symbol: &str) {
     #[cfg(feature = "clap")]
     {
         match crate::clap::get_output_style() {
-            "none" => println!("{} {}", symbol, message),
+            "none" => println!("{symbol} {message}"),
             "monochrome" => println!("{} {}", symbol.bold(), message.bold()),
             _ => println!("{} {}", style_symbol(symbol), caution(message)), // Color
         }
@@ -83,7 +83,7 @@ pub fn info_impl(message: &str, symbol: &str) {
     #[cfg(feature = "clap")]
     {
         match crate::clap::get_output_style() {
-            "none" => println!("{} {}", symbol, message),
+            "none" => println!("{symbol} {message}"),
             "monochrome" => println!("{} {}", symbol.bold(), message.bold()),
             _ => println!("{} {}", style_symbol(symbol), label(message)), // Color
         }
@@ -119,7 +119,7 @@ pub fn error_impl(message: &str, symbol: &str) {
     #[cfg(feature = "clap")]
     {
         match crate::clap::get_output_style() {
-            "none" => println!("{} {}", symbol, message),
+            "none" => println!("{symbol} {message}"),
             "monochrome" => println!("{} {}", symbol.bold(), message.bold()),
             _ => println!("{} {}", style_symbol(symbol), failure(message)), // Color
         }

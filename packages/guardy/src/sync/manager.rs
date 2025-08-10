@@ -1,39 +1,60 @@
-use anyhow::{anyhow, Result};
-use std::path::{Path, PathBuf};
+use anyhow::{Result, anyhow};
+use dialoguer::{Select, theme::ColorfulTheme};
+use ignore::WalkBuilder;
+use similar::{ChangeTag, TextDiff};
 use std::fs;
+use std::path::{Path, PathBuf};
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
+use syntect::util::as_24_bit_terminal_escaped;
 
+use super::{SyncConfig, SyncRepo, SyncStatus};
+use crate::cli::output;
 use crate::config::GuardyConfig;
 use crate::git::remote::RemoteOperations;
-use super::{SyncConfig, SyncStatus, SyncRepo};
-use super::protection::ProtectionManager;
 
 pub struct SyncManager {
-    config: SyncConfig,
+    pub config: SyncConfig,
     cache_dir: PathBuf,
     remote_ops: RemoteOperations,
-    pub protection_manager: ProtectionManager,
+    // For interactive mode
+    syntax_set: SyntaxSet,
+    theme_set: ThemeSet,
+}
+
+#[derive(Debug, Clone)]
+enum FileAction {
+    Update,
+    Skip,
+    UpdateAll,
+    SkipAll,
+    Quit,
 }
 
 impl SyncManager {
     pub fn with_config(sync_config: SyncConfig) -> Result<Self> {
-        // Create cache directory in .guardy/cache/
         let cache_dir = PathBuf::from(".guardy/cache");
         std::fs::create_dir_all(&cache_dir)?;
 
+        // Create .gitignore in .guardy directory to ignore all contents
+        let guardy_gitignore = PathBuf::from(".guardy/.gitignore");
+        if !guardy_gitignore.exists() {
+            std::fs::write(&guardy_gitignore, "*\n")?;
+        }
+
         let remote_ops = RemoteOperations::new(cache_dir.clone());
-        let protection_manager = ProtectionManager::new(sync_config.protection.clone())?;
 
         Ok(Self {
             config: sync_config,
             cache_dir,
             remote_ops,
-            protection_manager,
+            syntax_set: SyntaxSet::load_defaults_newlines(),
+            theme_set: ThemeSet::load_defaults(),
         })
     }
 
-    /// Bootstrap sync from a repository URL and version (for initial setup)
     pub fn bootstrap(repo_url: &str, version: &str) -> Result<Self> {
-        // For bootstrap, we create a minimal config
         let sync_repo = SyncRepo {
             name: "bootstrap".to_string(),
             repo: repo_url.to_string(),
@@ -41,57 +62,168 @@ impl SyncManager {
             source_path: ".".to_string(),
             dest_path: ".".to_string(),
             include: vec!["*".to_string()],
-            exclude: vec![".git/".to_string(), "target/".to_string()],
-            protected: true,
+            exclude: vec![".git".to_string()],
         };
-
-        let sync_config = SyncConfig {
+        Self::with_config(SyncConfig {
             repos: vec![sync_repo],
-            protection: Default::default(),
-        };
-
-        let cache_dir = PathBuf::from(".guardy/cache");
-        std::fs::create_dir_all(&cache_dir)?;
-
-        let remote_ops = RemoteOperations::new(cache_dir.clone());
-        let protection_manager = ProtectionManager::new(sync_config.protection.clone())?;
-
-        Ok(Self {
-            config: sync_config,
-            cache_dir,
-            remote_ops,
-            protection_manager,
         })
     }
 
+    /// Parse sync config from GuardyConfig
+    pub fn parse_sync_config(config: &GuardyConfig) -> Result<SyncConfig> {
+        let sync_value = config
+            .get_section("sync")
+            .map_err(|_| anyhow!("No sync configuration found"))?;
+
+        let sync_config: SyncConfig = serde_json::from_value(sync_value)
+            .map_err(|e| anyhow!("Failed to parse sync configuration: {}", e))?;
+
+        Ok(sync_config)
+    }
+
+    /// Get files matching patterns using ignore crate  
+    fn get_files(&self, source: &Path, repo: &SyncRepo) -> Result<Vec<PathBuf>> {
+        let mut builder = WalkBuilder::new(source);
+
+        // Disable automatic ignore file discovery - only use our custom patterns
+        builder.standard_filters(false);
+
+        // Create syncignore file in .guardy/ directory for patterns
+        let syncignore_file = if !repo.exclude.is_empty() {
+            let ignore_file = self.cache_dir.join(".syncignore");
+            fs::write(&ignore_file, repo.exclude.join("\n"))?;
+            // Copy the syncignore file to the source directory temporarily
+            let source_ignore = source.join(".syncignore");
+            fs::copy(&ignore_file, &source_ignore)?;
+            builder.add_custom_ignore_filename(".syncignore");
+            Some((ignore_file, source_ignore))
+        } else {
+            None
+        };
+
+        let result = builder
+            .build()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().is_file())
+            .filter_map(|entry| {
+                entry
+                    .path()
+                    .strip_prefix(source)
+                    .ok()
+                    .map(|p| p.to_path_buf())
+            })
+            .filter(|path| path.file_name() != Some(".syncignore".as_ref())) // Filter out temp file
+            .collect();
+
+        // Cleanup syncignore files
+        if let Some((ignore_file, source_ignore)) = syncignore_file {
+            let _ = fs::remove_file(ignore_file);
+            let _ = fs::remove_file(source_ignore);
+        }
+
+        Ok(result)
+    }
+
+    /// Check which files differ between source and destination
+    fn files_differ(&self, files: &[PathBuf], src: &Path, dst: &Path) -> Vec<PathBuf> {
+        let mut changed = Vec::new();
+
+        for f in files {
+            let src_file = src.join(f);
+            let dst_file = dst.join(f);
+
+            tracing::trace!("Checking file: {:?}", f);
+            tracing::trace!("  Source: {:?}", src_file);
+            tracing::trace!("  Dest: {:?}", dst_file);
+
+            if !dst_file.exists() {
+                tracing::debug!("File {:?} doesn't exist in destination", f);
+                changed.push(f.clone());
+                continue;
+            }
+
+            let src_meta = match fs::metadata(&src_file) {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!("Failed to get metadata for source {:?}: {}", src_file, e);
+                    continue;
+                }
+            };
+
+            let dst_meta = match fs::metadata(&dst_file) {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!("Failed to get metadata for dest {:?}: {}", dst_file, e);
+                    continue;
+                }
+            };
+
+            let src_len = src_meta.len();
+            let dst_len = dst_meta.len();
+
+            if src_len != dst_len {
+                tracing::debug!(
+                    "File {:?} size differs: src={}, dst={}",
+                    f,
+                    src_len,
+                    dst_len
+                );
+                changed.push(f.clone());
+            } else {
+                tracing::trace!("File {:?} unchanged (size={})", f, src_len);
+            }
+        }
+
+        changed
+    }
+
+    /// Update cache from remote repository using git pull
+    fn update_cache(&self, repo: &SyncRepo) -> Result<PathBuf> {
+        let repo_name = self.extract_repo_name(&repo.repo);
+        let repo_path = self.cache_dir.join(&repo_name);
+
+        if !repo_path.exists() {
+            // Clone if doesn't exist - pass the version we actually want
+            self.remote_ops
+                .clone_repository(&repo.repo, &repo_name, &repo.version)?;
+        } else {
+            // Only fetch and reset if repo already exists
+            self.remote_ops.fetch_and_reset(&repo_name, &repo.version)?;
+        }
+
+        Ok(repo_path)
+    }
+
+    /// Copy a single file from source to destination
+    fn copy_file(&self, file: &Path, src: &Path, dst: &Path) -> Result<PathBuf> {
+        let src_file = src.join(file);
+        let dst_file = dst.join(file);
+        if let Some(parent) = dst_file.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(&src_file, &dst_file)?;
+        Ok(dst_file)
+    }
+
+    /// Check sync status of all repositories
     pub fn check_sync_status(&self) -> Result<SyncStatus> {
         if self.config.repos.is_empty() {
             return Ok(SyncStatus::NotConfigured);
         }
 
-        tracing::info!("Checking sync status for {} repositories", self.config.repos.len());
-        
         let mut changed_files = Vec::new();
-        
         for repo in &self.config.repos {
-            // Check if repository exists in cache
-            let repo_name = self.extract_repo_name(&repo.repo);
-            let repo_path = self.cache_dir.join(&repo_name);
-            
-            if !repo_path.exists() {
-                // Repository not cached - all files are out of sync
-                let dest_path = Path::new(&repo.dest_path);
-                if dest_path.exists() {
-                    // Find files that would be synced from this repo
-                    self.collect_sync_files(repo, dest_path, &mut changed_files)?;
-                }
-                continue;
+            let repo_path = self.cache_dir.join(self.extract_repo_name(&repo.repo));
+            if repo_path.exists() {
+                let src = repo_path.join(&repo.source_path);
+                let dst = Path::new(&repo.dest_path);
+                let files = self.get_files(&src, repo)?;
+                let different = self.files_differ(&files, &src, dst);
+                // Convert to absolute paths for display
+                changed_files.extend(different.iter().map(|f| dst.join(f)));
             }
-            
-            // Compare files between cache and destination
-            self.check_repo_sync_status(repo, &repo_path, &mut changed_files)?;
         }
-        
+
         if changed_files.is_empty() {
             Ok(SyncStatus::InSync)
         } else {
@@ -99,421 +231,370 @@ impl SyncManager {
         }
     }
 
-    pub fn update_all_repos(&mut self, force: bool) -> Result<()> {
-        if self.config.repos.is_empty() {
-            return Err(anyhow!("No repositories configured for sync"));
-        }
+    /// Main update function that handles both interactive and force modes
+    pub async fn update_all_repos(&mut self, interactive: bool) -> Result<Vec<PathBuf>> {
+        let mut all_updated_files = Vec::new();
+        let mut all_skipped_files = Vec::new();
+        let mut update_all_remaining = false;
+        let mut skip_all_remaining = false;
 
-        tracing::info!("Updating {} repositories (force: {})", self.config.repos.len(), force);
-        
-        // Check if we should block modifications to protected files
-        if !force && self.protection_manager.should_block_modifications() {
-            // Collect all files that will be modified
-            let mut files_to_modify = Vec::new();
-            for repo in &self.config.repos {
-                let repo_path = self.remote_ops.clone_or_fetch(&repo.repo, &repo.version)?;
-                let potential_overwrites = self.get_files_to_overwrite(repo, &repo_path)?;
-                files_to_modify.extend(potential_overwrites);
+        output::styled!("<chart> Analyzing sync status...");
+
+        // First check if there are any changes at all
+        let mut has_any_changes = false;
+
+        for repo in self.config.repos.clone() {
+            tracing::info!("Processing repository: {}", repo.name);
+
+            // Update cache from remote
+            let repo_path = self.update_cache(&repo)?;
+
+            // Get changed files
+            let src = repo_path.join(&repo.source_path);
+            let dst = Path::new(&repo.dest_path);
+            let files = self.get_files(&src, &repo)?;
+            tracing::debug!("Found {} files in source", files.len());
+            let changed_files = self.files_differ(&files, &src, dst);
+            tracing::debug!("Found {} changed files", changed_files.len());
+
+            if changed_files.is_empty() {
+                tracing::info!("No changes detected for repository: {}", repo.name);
+                continue;
             }
-            
-            // Validate that no protected files will be modified
-            self.protection_manager.validate_modifications(&files_to_modify)?;
-        }
 
-        for repo in &self.config.repos {
-            tracing::info!("Syncing repo '{}' from '{}' version '{}'", 
-                         repo.name, repo.repo, repo.version);
-            
-            // Clone/fetch the repository to cache
-            let repo_path = self.remote_ops.clone_or_fetch(&repo.repo, &repo.version)?;
-            
-            tracing::info!("Repository cached at: {}", repo_path.display());
-            
-            // Backup existing files before overwriting (if force mode)
-            if force {
-                let dest_path = Path::new(&repo.dest_path);
-                if dest_path.exists() {
-                    let files_to_backup = self.get_files_to_overwrite(repo, &repo_path)?;
-                    if !files_to_backup.is_empty() {
-                        tracing::info!("Backing up {} files before sync", files_to_backup.len());
-                        self.protection_manager.backup_before_sync(&files_to_backup)?;
+            has_any_changes = true;
+
+            // Show repository info
+            output::styled!(
+                "\n{} Repository: {} ({} files changed)",
+                ("🔗", "info_symbol"),
+                (&repo.name, "property"),
+                (changed_files.len().to_string(), "property")
+            );
+
+            // Process each changed file
+            for (i, file) in changed_files.iter().enumerate() {
+                let dst_file = dst.join(file);
+
+                // If we're in "update all" or "skip all" mode, handle accordingly
+                if skip_all_remaining {
+                    output::styled!(
+                        "{} Skipped {}",
+                        ("⏭️", "info_symbol"),
+                        (dst_file.display().to_string(), "property")
+                    );
+                    all_skipped_files.push(dst_file.clone());
+                    continue;
+                }
+
+                if update_all_remaining || !interactive {
+                    // In force mode or "update all" mode, just update
+                    self.copy_file(file, &src, dst)?;
+                    all_updated_files.push(dst_file.clone());
+                    if interactive {
+                        output::styled!(
+                            "{} Updated {}",
+                            ("✅", "success_symbol"),
+                            (dst_file.display().to_string(), "property")
+                        );
+                    }
+                    continue;
+                }
+
+                // Interactive mode: show diff and ask
+                println!();
+                output::styled!("{}", ("─".repeat(60), "muted"));
+                output::styled!(
+                    "File {}/{}: {}",
+                    ((i + 1).to_string(), "muted"),
+                    (changed_files.len().to_string(), "muted"),
+                    (dst_file.display().to_string(), "property")
+                );
+
+                // Show diff
+                self.show_diff(&dst_file, &src.join(file))?;
+
+                // Ask user what to do
+                match self.prompt_file_action()? {
+                    FileAction::Update => {
+                        self.copy_file(file, &src, dst)?;
+                        all_updated_files.push(dst_file.clone());
+                        output::styled!(
+                            "{} Updated {}",
+                            ("✅", "success_symbol"),
+                            (dst_file.display().to_string(), "property")
+                        );
+                    }
+                    FileAction::Skip => {
+                        output::styled!(
+                            "{} Skipped {}",
+                            ("⏭️", "info_symbol"),
+                            (dst_file.display().to_string(), "property")
+                        );
+                        all_skipped_files.push(dst_file.clone());
+                    }
+                    FileAction::UpdateAll => {
+                        self.copy_file(file, &src, dst)?;
+                        all_updated_files.push(dst_file.clone());
+                        output::styled!(
+                            "{} Updated {}",
+                            ("✅", "success_symbol"),
+                            (dst_file.display().to_string(), "property")
+                        );
+                        update_all_remaining = true;
+                    }
+                    FileAction::SkipAll => {
+                        output::styled!(
+                            "{} Skipped {}",
+                            ("⏭️", "info_symbol"),
+                            (dst_file.display().to_string(), "property")
+                        );
+                        all_skipped_files.push(dst_file.clone());
+                        skip_all_remaining = true;
+                    }
+                    FileAction::Quit => {
+                        output::styled!("{} Update cancelled by user", ("ℹ️", "info_symbol"));
+                        return Ok(all_updated_files);
                     }
                 }
             }
-            
-            // Copy files from source to destination and protect them
-            let synced_files = self.copy_repo_files(repo, &repo_path)?;
-            
-            // Protect synced files if configured
-            self.protection_manager.protect_synced_files(repo, synced_files)?;
         }
 
-        Ok(())
-    }
-
-    pub fn show_status(&self) -> Result<String> {
-        let mut output = String::new();
-        
-        output.push_str("Sync Configuration:\n");
-        output.push_str(&format!("  Repositories: {}\n", self.config.repos.len()));
-        output.push_str(&format!("  Cache Directory: {}\n", self.cache_dir.display()));
-        output.push_str(&format!("  Auto Protect: {}\n", self.config.protection.auto_protect_synced));
-        
-        if self.config.repos.is_empty() {
-            output.push_str("\n❌ No repositories configured\n");
-            output.push_str("Run 'guardy sync update --repo=<url> --version=<version>' to bootstrap\n");
-        } else {
-            output.push_str("\nConfigured Repositories:\n");
-            for repo in &self.config.repos {
-                output.push_str(&format!("  • {} ({}@{})\n", repo.name, repo.repo, repo.version));
+        // If no changes at all, show message early
+        if !has_any_changes {
+            if interactive {
+                println!();
+                output::styled!("{}", ("═".repeat(60), "muted"));
+                output::styled!("{} Everything is up to date", ("✅", "success_symbol"));
             }
+            return Ok(all_updated_files);
         }
 
-        Ok(output)
-    }
+        // Show summary
+        if interactive {
+            println!();
+            output::styled!("{}", ("═".repeat(60), "muted"));
 
-
-    /// Copy files from repository to destination with include/exclude patterns
-    fn copy_repo_files(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
-        let source_path = repo_path.join(&repo.source_path);
-        let dest_path = Path::new(&repo.dest_path);
-
-        tracing::info!("Copying files from {} to {}", 
-                      source_path.display(), dest_path.display());
-
-        if !source_path.exists() {
-            return Err(anyhow!("Source path '{}' does not exist in repository", 
-                              repo.source_path));
-        }
-
-        // Build globset for include/exclude patterns
-        let include_set = self.build_globset(&repo.include)?;
-        let exclude_set = self.build_globset(&repo.exclude)?;
-
-        // Track synced files
-        let mut synced_files = Vec::new();
-
-        // Walk through source directory and copy matching files
-        self.copy_directory_recursive(&source_path, dest_path, &include_set, &exclude_set, &mut synced_files)?;
-
-        Ok(synced_files)
-    }
-
-    /// Build a globset from pattern strings
-    fn build_globset(&self, patterns: &[String]) -> Result<globset::GlobSet> {
-        let mut builder = globset::GlobSetBuilder::new();
-        
-        for pattern in patterns {
-            let glob = globset::Glob::new(pattern)
-                .map_err(|e| anyhow!("Invalid glob pattern '{}': {}", pattern, e))?;
-            builder.add(glob);
-        }
-        
-        builder.build()
-           .map_err(|e| anyhow!("Failed to build globset: {}", e))
-    }
-
-    /// Recursively copy directory contents with pattern matching
-    fn copy_directory_recursive(
-        &self,
-        source: &Path,
-        dest: &Path,
-        include_set: &globset::GlobSet,
-        exclude_set: &globset::GlobSet,
-        synced_files: &mut Vec<PathBuf>,
-    ) -> Result<()> {
-        if source.is_file() {
-            return self.copy_single_file(source, dest, include_set, exclude_set, synced_files);
-        }
-
-        for entry in fs::read_dir(source)? {
-            let entry = entry?;
-            let entry_path = entry.path();
-            let file_name = entry.file_name();
-            let dest_path = dest.join(&file_name);
-
-            if entry_path.is_dir() {
-                // Create destination directory if it doesn't exist
-                if !dest_path.exists() {
-                    fs::create_dir_all(&dest_path)?;
-                }
-                
-                // Recursively copy directory contents
-                self.copy_directory_recursive(&entry_path, &dest_path, include_set, exclude_set, synced_files)?;
+            if all_updated_files.is_empty() && all_skipped_files.is_empty() {
+                // Nothing was changed and nothing was skipped = truly up to date
+                output::styled!("{} Everything is up to date", ("✅", "success_symbol"));
+            } else if all_updated_files.is_empty() && !all_skipped_files.is_empty() {
+                // Nothing updated but files were skipped = files remain out of sync
+                output::styled!(
+                    "{}  {} files remain out of sync (skipped by user)",
+                    ("⚠️", "warning_symbol"),
+                    (all_skipped_files.len().to_string(), "property")
+                );
+            } else if !all_updated_files.is_empty() && all_skipped_files.is_empty() {
+                // Files updated and nothing skipped = all changes applied
+                output::styled!(
+                    "{}  {} files updated",
+                    ("✅", "success_symbol"),
+                    (all_updated_files.len().to_string(), "property")
+                );
             } else {
-                self.copy_single_file(&entry_path, &dest_path, include_set, exclude_set, synced_files)?;
+                // Both updated and skipped files
+                output::styled!(
+                    "{}  {} files updated, {} files remain out of sync (skipped)",
+                    ("⚠️", "warning_symbol"),
+                    (all_updated_files.len().to_string(), "property"),
+                    (all_skipped_files.len().to_string(), "property")
+                );
+            }
+        }
+
+        Ok(all_updated_files)
+    }
+
+    /// Show diff between source and destination files
+    fn show_diff(&self, dest_file: &Path, source_file: &Path) -> Result<()> {
+        let dest_content = fs::read_to_string(dest_file).unwrap_or_default();
+        let source_content = fs::read_to_string(source_file)?;
+
+        println!();
+        output::styled!("{}", ("─".repeat(60), "muted"));
+
+        let diff = TextDiff::from_lines(&dest_content, &source_content);
+
+        // Set up syntax highlighting
+        let syntax = self
+            .syntax_set
+            .find_syntax_for_file(dest_file)?
+            .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
+        let theme = &self.theme_set.themes["Solarized (dark)"];
+
+        for group in diff.grouped_ops(3) {
+            for op in group {
+                for change in diff.iter_changes(&op) {
+                    let line_content = change.value().trim_end_matches('\n');
+                    let mut highlighter = HighlightLines::new(syntax, theme);
+
+                    match change.tag() {
+                        ChangeTag::Delete => {
+                            // For deletions, use the old line number
+                            let line_number = change.old_index().unwrap_or(0);
+                            print!("\x1b[48;2;100;40;40;97m{line_number:>8} -  ");
+                            if let Ok(ranges) =
+                                highlighter.highlight_line(line_content, &self.syntax_set)
+                            {
+                                let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                println!("{escaped}\x1b[0m");
+                            } else {
+                                println!("{line_content}\x1b[0m");
+                            }
+                        }
+                        ChangeTag::Insert => {
+                            // For insertions, use the new line number
+                            let line_number = change.new_index().unwrap_or(0);
+                            print!("\x1b[48;2;50;120;50;97m{line_number:>8} +  ");
+                            if let Ok(ranges) =
+                                highlighter.highlight_line(line_content, &self.syntax_set)
+                            {
+                                let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                println!("{escaped}\x1b[0m");
+                            } else {
+                                println!("{line_content}\x1b[0m");
+                            }
+                        }
+                        ChangeTag::Equal => {
+                            // Context lines - show the new line number (destination)
+                            let line_number = change.new_index().unwrap_or(0);
+                            print!("{line_number:>8}    ");
+                            if let Ok(ranges) =
+                                highlighter.highlight_line(line_content, &self.syntax_set)
+                            {
+                                let escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                println!("{escaped}");
+                            } else {
+                                println!("{line_content}");
+                            }
+                        }
+                    }
+                }
             }
         }
 
         Ok(())
     }
 
-    /// Copy a single file if it matches include/exclude patterns
-    fn copy_single_file(
-        &self,
-        source: &Path,
-        dest: &Path,
-        include_set: &globset::GlobSet,
-        exclude_set: &globset::GlobSet,
-        synced_files: &mut Vec<PathBuf>,
-    ) -> Result<()> {
-        let file_name = source.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+    /// Prompt user for action on a file
+    fn prompt_file_action(&self) -> Result<FileAction> {
+        let options = vec![
+            "Yes - Update this file",
+            "No - Skip this file",
+            "Yes to all remaining files",
+            "Skip all remaining files",
+            "Quit - Stop processing",
+        ];
 
-        // Check exclude patterns first
-        if !exclude_set.is_empty() && exclude_set.is_match(file_name) {
-            tracing::debug!("Excluding file: {}", source.display());
-            return Ok(());
-        }
+        println!(); // Add newline before prompt
 
-        // Check include patterns (if any are specified)
-        if !include_set.is_empty() && !include_set.is_match(file_name) {
-            tracing::debug!("File not included: {}", source.display());
-            return Ok(());
-        }
-
-        // Ensure destination directory exists
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        // Copy the file
-        tracing::debug!("Copying file: {} -> {}", source.display(), dest.display());
-        fs::copy(source, dest)?;
-        
-        // Track the synced file
-        synced_files.push(dest.to_path_buf());
-
-        Ok(())
-    }
-
-    pub fn parse_sync_config(guardy_config: &GuardyConfig) -> Result<SyncConfig> {
-        // Try to load sync configuration from guardy config
-        let sync_config = match guardy_config.get_section("sync") {
-            Ok(sync_section) => {
-                serde_json::from_value(sync_section).unwrap_or_default()
-            }
-            Err(_) => SyncConfig::default(),
+        // Create a theme without the prompt prefix to avoid the extra "?"
+        let theme = ColorfulTheme {
+            prompt_prefix: dialoguer::console::style("".to_string()),
+            ..Default::default()
         };
 
-        Ok(sync_config)
+        let selection = Select::with_theme(&theme)
+            .with_prompt("What would you like to do?")
+            .items(&options)
+            .default(0)
+            .interact()?;
+
+        Ok(match selection {
+            0 => FileAction::Update,
+            1 => FileAction::Skip,
+            2 => FileAction::UpdateAll,
+            3 => FileAction::SkipAll,
+            4 => FileAction::Quit,
+            _ => unreachable!(),
+        })
     }
 
-    /// Get list of files that will be overwritten during sync
-    fn get_files_to_overwrite(&self, repo: &SyncRepo, repo_path: &Path) -> Result<Vec<PathBuf>> {
-        let source_path = repo_path.join(&repo.source_path);
-        let dest_path = Path::new(&repo.dest_path);
-        
-        if !source_path.exists() || !dest_path.exists() {
-            return Ok(Vec::new());
+    /// Show all diffs without any interactive prompts (read-only view)
+    pub async fn show_all_diffs(&mut self) -> Result<()> {
+        output::styled!("<chart> Analyzing sync status...");
+
+        let mut has_any_changes = false;
+
+        for repo in self.config.repos.clone() {
+            tracing::info!("Processing repository: {}", repo.name);
+
+            // Update cache from remote
+            let repo_path = self.update_cache(&repo)?;
+
+            // Get changed files
+            let src = repo_path.join(&repo.source_path);
+            let dst = Path::new(&repo.dest_path);
+            let files = self.get_files(&src, &repo)?;
+            tracing::debug!("Found {} files in source", files.len());
+            let changed_files = self.files_differ(&files, &src, dst);
+            tracing::debug!("Found {} changed files", changed_files.len());
+
+            if changed_files.is_empty() {
+                tracing::info!("No changes detected for repository: {}", repo.name);
+                continue;
+            }
+
+            has_any_changes = true;
+
+            // Show repository info
+            output::styled!(
+                "\n{} Repository: {} ({} files changed)",
+                ("🔗", "info_symbol"),
+                (&repo.name, "property"),
+                (changed_files.len().to_string(), "property")
+            );
+
+            // Show diff for each changed file (no prompts)
+            for (i, file) in changed_files.iter().enumerate() {
+                let dst_file = dst.join(file);
+
+                println!();
+                output::styled!("{}", ("─".repeat(60), "muted"));
+                output::styled!(
+                    "File {}/{}: {}",
+                    ((i + 1).to_string(), "muted"),
+                    (changed_files.len().to_string(), "muted"),
+                    (dst_file.display().to_string(), "property")
+                );
+
+                // Show diff (no prompts)
+                self.show_diff(&dst_file, &src.join(file))?;
+            }
         }
-        
-        let include_set = self.build_globset(&repo.include)?;
-        let exclude_set = self.build_globset(&repo.exclude)?;
-        
-        let mut existing_files = Vec::new();
-        find_existing_files(&source_path, dest_path, &include_set, &exclude_set, &mut existing_files)?;
-        
-        Ok(existing_files)
+
+        // Show summary
+        if !has_any_changes {
+            println!();
+            output::styled!("{}", ("═".repeat(60), "muted"));
+            output::styled!("{} Everything is up to date", ("✅", "success_symbol"));
+        } else {
+            println!();
+            output::styled!("{}", ("═".repeat(60), "muted"));
+            output::styled!(
+                "{} Showing diffs for {} repositories",
+                ("📝", "info_symbol"),
+                (self.config.repos.len().to_string(), "property")
+            );
+        }
+
+        Ok(())
     }
 
-    /// Extract repository name from URL for caching
-    fn extract_repo_name(&self, repo_url: &str) -> String {
+    /// Get the cache directory
+    pub fn get_cache_dir(&self) -> &PathBuf {
+        &self.cache_dir
+    }
+
+    /// Extract repository name from URL
+    pub fn extract_repo_name(&self, repo_url: &str) -> String {
         repo_url
+            .trim_end_matches('/')
             .trim_end_matches(".git")
             .split('/')
             .next_back()
             .unwrap_or("unknown")
             .to_string()
     }
-
-    /// Check sync status for a single repository
-    fn check_repo_sync_status(&self, repo: &SyncRepo, repo_path: &Path, changed_files: &mut Vec<PathBuf>) -> Result<()> {
-        let source_path = repo_path.join(&repo.source_path);
-        let dest_path = Path::new(&repo.dest_path);
-
-        if !source_path.exists() {
-            return Ok(()); // Nothing to sync
-        }
-
-        // Build pattern matchers
-        let include_set = self.build_globset(&repo.include)?;
-        let exclude_set = self.build_globset(&repo.exclude)?;
-
-        // Compare files
-        self.compare_directories(&source_path, dest_path, &include_set, &exclude_set, changed_files)?;
-
-        Ok(())
-    }
-
-    /// Collect files that would be synced from a repository
-    fn collect_sync_files(&self, repo: &SyncRepo, dest_path: &Path, changed_files: &mut Vec<PathBuf>) -> Result<()> {
-        if !dest_path.exists() {
-            return Ok(());
-        }
-
-        // Build pattern matchers
-        let include_set = self.build_globset(&repo.include)?;
-        let exclude_set = self.build_globset(&repo.exclude)?;
-
-        // Walk through destination and collect files that would be synced
-        collect_matching_files(dest_path, &include_set, &exclude_set, changed_files)?;
-        
-        Ok(())
-    }
-
-    /// Compare source and destination directories for differences
-    fn compare_directories(
-        &self,
-        source: &Path,
-        dest: &Path,
-        include_set: &globset::GlobSet,
-        exclude_set: &globset::GlobSet,
-        changed_files: &mut Vec<PathBuf>,
-    ) -> Result<()> {
-        if source.is_file() {
-            return self.compare_single_file(source, dest, include_set, exclude_set, changed_files);
-        }
-
-        for entry in fs::read_dir(source)? {
-            let entry = entry?;
-            let entry_path = entry.path();
-            let file_name = entry.file_name();
-            let dest_path = dest.join(&file_name);
-
-            if entry_path.is_dir() {
-                if dest_path.exists() {
-                    self.compare_directories(&entry_path, &dest_path, include_set, exclude_set, changed_files)?;
-                } else {
-                    // Directory doesn't exist in destination - mark as changed
-                    changed_files.push(dest_path);
-                }
-            } else {
-                self.compare_single_file(&entry_path, &dest_path, include_set, exclude_set, changed_files)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Compare a single file between source and destination
-    fn compare_single_file(
-        &self,
-        source: &Path,
-        dest: &Path,
-        include_set: &globset::GlobSet,
-        exclude_set: &globset::GlobSet,
-        changed_files: &mut Vec<PathBuf>,
-    ) -> Result<()> {
-        let file_name = source.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-
-        // Check exclude patterns first
-        if !exclude_set.is_empty() && exclude_set.is_match(file_name) {
-            return Ok(());
-        }
-
-        // Check include patterns (if any are specified)
-        if !include_set.is_empty() && !include_set.is_match(file_name) {
-            return Ok(());
-        }
-
-        // Check if file exists and has different content
-        if !dest.exists() {
-            changed_files.push(dest.to_path_buf());
-        } else {
-            // Compare file contents using metadata first (size and modification time)
-            let source_metadata = fs::metadata(source)?;
-            let dest_metadata = fs::metadata(dest)?;
-
-            if source_metadata.len() != dest_metadata.len() {
-                changed_files.push(dest.to_path_buf());
-            } else {
-                // For more accurate comparison, we could compare file contents
-                // but for now, size comparison is sufficient for most cases
-                // TODO: Add optional content hash comparison for accuracy
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Find files that already exist in destination (free function for recursion)
-fn find_existing_files(
-    source: &Path,
-    dest: &Path,
-    include_set: &globset::GlobSet,
-    exclude_set: &globset::GlobSet,
-    existing_files: &mut Vec<PathBuf>,
-) -> Result<()> {
-    if source.is_file() {
-        if dest.exists() {
-            existing_files.push(dest.to_path_buf());
-        }
-        return Ok(());
-    }
-    
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let entry_path = entry.path();
-        let file_name = entry.file_name();
-        let dest_path = dest.join(&file_name);
-        
-        if entry_path.is_dir() {
-            if dest_path.exists() {
-                find_existing_files(&entry_path, &dest_path, include_set, exclude_set, existing_files)?;
-            }
-        } else {
-            let file_name_str = file_name.to_str().unwrap_or("");
-            
-            // Check patterns
-            if !exclude_set.is_empty() && exclude_set.is_match(file_name_str) {
-                continue;
-            }
-            if !include_set.is_empty() && !include_set.is_match(file_name_str) {
-                continue;
-            }
-            
-            if dest_path.exists() {
-                existing_files.push(dest_path);
-            }
-        }
-    }
-    
-    Ok(())
-}
-
-/// Collect files matching include/exclude patterns (free function for recursion)
-fn collect_matching_files(
-    path: &Path,
-    include_set: &globset::GlobSet,
-    exclude_set: &globset::GlobSet,
-    changed_files: &mut Vec<PathBuf>,
-) -> Result<()> {
-    if path.is_file() {
-        let file_name = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-
-        // Check if file matches patterns
-        if !exclude_set.is_empty() && exclude_set.is_match(file_name) {
-            return Ok(());
-        }
-
-        if !include_set.is_empty() && !include_set.is_match(file_name) {
-            return Ok(());
-        }
-
-        changed_files.push(path.to_path_buf());
-    } else if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            collect_matching_files(&entry.path(), include_set, exclude_set, changed_files)?;
-        }
-    }
-
-    Ok(())
 }

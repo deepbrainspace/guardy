@@ -19,3 +19,7 @@ Thumbs.db
 
 # Fake test values (contains fake secrets for testing)
 fake_test_values.yml
+
+# Generated reports
+guardy-report-*.html
+guardy-report-*.json

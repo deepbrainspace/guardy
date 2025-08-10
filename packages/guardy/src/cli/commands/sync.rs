@@ -1,237 +1,177 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::sync::{SyncStatus, manager::SyncManager};
+use crate::sync::{manager::SyncManager, status::StatusDisplay};
 
 #[derive(Parser)]
-#[command(about = "Protected file synchronization")]
+#[command(about = "File synchronization from remote repositories")]
 pub struct SyncArgs {
     #[command(subcommand)]
-    pub command: SyncSubcommand,
+    pub command: Option<SyncSubcommand>,
+
+    /// Force update, bypass interactive mode and update all changes without prompting
+    #[arg(long)]
+    pub force: bool,
+
+    /// Bootstrap from a specific repository (initial setup)
+    #[arg(long)]
+    pub repo: Option<String>,
+
+    /// Specific version to sync (tag, branch, or commit)
+    #[arg(long)]
+    pub version: Option<String>,
 }
 
 #[derive(Subcommand)]
 pub enum SyncSubcommand {
-    /// Check if files are in sync with configured repositories
-    Check,
-    
-    /// Update files from configured repositories
+    /// Show sync status and configuration
+    Status,
+
+    /// Update files from configured repositories (interactive by default)
     Update {
-        /// Force update, overwriting local changes
+        /// Force update, bypass interactive mode and update all changes without prompting
         #[arg(long)]
         force: bool,
-        
+
         /// Bootstrap from a specific repository (initial setup)
         #[arg(long)]
         repo: Option<String>,
-        
+
         /// Specific version to sync (tag, branch, or commit)
         #[arg(long)]
         version: Option<String>,
     },
-    
-    /// Show sync configuration and current status
-    Show,
-    
-    /// Unprotect specific files
-    Unprotect {
-        /// Files to unprotect (can use glob patterns)
-        files: Vec<String>,
-        
-        /// Unprotect all synced files
-        #[arg(long)]
-        all: bool,
-    },
-    
-    /// List all protected files
-    Protected,
-    
-    /// Restore files from a backup
-    Restore {
-        /// Path to backup directory to restore from
-        backup_path: String,
-    },
+
+    /// Show differences between local and remote files (what has drifted)
+    Diff,
 }
 
 pub async fn execute(args: SyncArgs, config_path: Option<&str>) -> Result<()> {
     match args.command {
-        SyncSubcommand::Check => execute_check(config_path).await,
-        SyncSubcommand::Update { force, repo, version } => {
-            execute_update(force, repo, version, config_path).await
-        },
-        SyncSubcommand::Show => execute_show(config_path).await,
-        SyncSubcommand::Unprotect { files, all } => {
-            execute_unprotect(files, all, config_path).await
-        },
-        SyncSubcommand::Protected => execute_list_protected(config_path).await,
-        SyncSubcommand::Restore { backup_path } => {
-            execute_restore(backup_path, config_path).await
-        },
-    }
-}
-
-async fn execute_check(config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    
-    let status = manager.check_sync_status()?;
-    
-    match status {
-        SyncStatus::InSync => {
-            output::styled!("{} All files are in sync", 
-                ("✅", "success_symbol")
-            );
-            Ok(())
-        },
-        SyncStatus::OutOfSync { changed_files } => {
-            output::styled!("{} Files are out of sync:", 
-                ("❌", "error_symbol")
-            );
-            for file in &changed_files {
-                let protection_status = if manager.protection_manager.is_protected(file) {
-                    " 🔒"
-                } else {
-                    ""
-                };
-                println!("  • {}{}", output::file_path(file.display().to_string()), protection_status);
-            }
-            std::process::exit(1);
-        },
-        SyncStatus::NotConfigured => {
-            output::styled!("{} No sync configuration found", 
-                ("⚠️", "warning_symbol")
-            );
-            output::styled!("Run {} to bootstrap", 
-                ("guardy sync update --repo=<url> --version=<version>", "property")
-            );
-            std::process::exit(1);
+        Some(SyncSubcommand::Status) => execute_status(config_path).await,
+        Some(SyncSubcommand::Update {
+            force,
+            repo,
+            version,
+        }) => {
+            // Prefer subcommand args over main args
+            let final_force = force || args.force;
+            let final_repo = repo.or(args.repo);
+            let final_version = version.or(args.version);
+            execute_update(final_force, final_repo, final_version, config_path).await
         }
+        Some(SyncSubcommand::Diff) => execute_diff(config_path).await,
+        // Default to update behavior when no subcommand is provided, using main args
+        None => execute_update(args.force, args.repo, args.version, config_path).await,
     }
 }
 
-async fn execute_update(force: bool, repo: Option<String>, version: Option<String>, config_path: Option<&str>) -> Result<()> {
+async fn execute_status(config_path: Option<&str>) -> Result<()> {
+    let manager = create_sync_manager(config_path)?;
+    let status_display = StatusDisplay::new(&manager);
+    status_display.show_detailed_status()
+}
+
+async fn execute_diff(config_path: Option<&str>) -> Result<()> {
+    let mut manager = create_sync_manager(config_path)?;
+
+    // Check if we have any configuration
+    if manager.config.repos.is_empty() {
+        output::styled!("{} No sync configuration found", ("⚠️", "warning_symbol"));
+        return Ok(());
+    }
+
+    output::styled!("{} Checking for differences...", ("🔍", "info_symbol"));
+
+    // Use the dedicated diff-only method (no interactive prompts)
+    manager.show_all_diffs().await?;
+
+    Ok(())
+}
+
+async fn execute_update(
+    force: bool,
+    repo: Option<String>,
+    version: Option<String>,
+    config_path: Option<&str>,
+) -> Result<()> {
     // Handle bootstrap case
     if let (Some(repo_url), Some(version_str)) = (repo, version) {
-        output::styled!("{} Bootstrapping sync from {} @ {}", 
+        output::styled!(
+            "{} Bootstrapping sync from {} @ {}",
             ("🚀", "info_symbol"),
             (&repo_url, "property"),
             (&version_str, "id_value")
         );
+
         let mut manager = SyncManager::bootstrap(&repo_url, &version_str)?;
-        manager.update_all_repos(force)?;
-        output::styled!("{} Bootstrap complete", 
-            ("✅", "success_symbol")
-        );
+        let updated_files = manager.update_all_repos(false).await?; // Bootstrap is always non-interactive
+
+        if !updated_files.is_empty() {
+            output::styled!(
+                "{} Synced {} files:",
+                ("📝", "info_symbol"),
+                (updated_files.len().to_string(), "property")
+            );
+            for file in &updated_files {
+                println!("  • {}", output::file_path(file.display().to_string()));
+            }
+        }
+        output::styled!("{} Bootstrap complete", ("✅", "success_symbol"));
         return Ok(());
     }
 
     // Regular update case
     let mut manager = create_sync_manager(config_path)?;
-    
+
+    // Check if we have any configuration (without doing full status check)
+    if manager.config.repos.is_empty() {
+        output::styled!("{} No sync configuration found", ("⚠️", "warning_symbol"));
+        output::styled!(
+            "Run {} to bootstrap",
+            (
+                "guardy sync update --repo=<url> --version=<version>",
+                "property"
+            )
+        );
+        return Ok(());
+    }
+
+    // Perform the update (interactive by default, force bypasses)
+    let interactive = !force;
+
+    let updated_files = manager.update_all_repos(interactive).await?;
+
+    // Show results for force mode
     if force {
-        output::styled!("{} Force updating all repositories...", 
-            ("⚡", "info_symbol")
-        );
-    } else {
-        output::styled!("{} Updating all repositories...", 
-            ("📥", "info_symbol")
-        );
-    }
-    
-    manager.update_all_repos(force)?;
-    output::styled!("{} All repositories updated", 
-        ("✅", "success_symbol")
-    );
-    
-    Ok(())
-}
+        if updated_files.is_empty() {
+            output::styled!("<info>  No files were updated");
+        } else {
+            output::styled!(
+                "{} Successfully updated {} files:",
+                ("✅", "success_symbol"),
+                (updated_files.len().to_string(), "property")
+            );
 
-async fn execute_show(config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    let status_output = manager.show_status()?;
-    println!("{status_output}");
-    Ok(())
-}
-
-async fn execute_unprotect(files: Vec<String>, all: bool, config_path: Option<&str>) -> Result<()> {
-    let mut manager = create_sync_manager(config_path)?;
-    
-    if all {
-        output::styled!("{} Removing protection from all files...", 
-            ("🔓", "info_symbol")
-        );
-        manager.protection_manager.clear_all_protections()?;
-        output::styled!("{} All file protections removed", 
-            ("✅", "success_symbol")
-        );
-    } else if !files.is_empty() {
-        output::styled!("{} Unprotecting {} files...", 
-            ("🔓", "info_symbol"),
-            (files.len().to_string(), "property")
-        );
-        
-        let paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
-        manager.protection_manager.unprotect_files(paths)?;
-        
-        output::styled!("{} Files unprotected", 
-            ("✅", "success_symbol")
-        );
-    } else {
-        return Err(anyhow!("Specify files to unprotect or use --all flag"));
-    }
-    
-    Ok(())
-}
-
-async fn execute_list_protected(config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    let protected_files = manager.protection_manager.list_protected_files();
-    
-    if protected_files.is_empty() {
-        output::styled!("{} No files are currently protected", 
-            ("ℹ️", "info_symbol")
-        );
-    } else {
-        output::styled!("{} Protected files ({} total):", 
-            ("🔒", "info_symbol"),
-            (protected_files.len().to_string(), "property")
-        );
-        
-        for file in protected_files {
-            println!("  • {}", output::file_path(file.display().to_string()));
+            for file in &updated_files {
+                println!("  • {}", output::file_path(file.display().to_string()));
+            }
         }
     }
-    
-    Ok(())
-}
+    // Interactive mode shows its own summary
 
-async fn execute_restore(backup_path: String, config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
-    
-    output::styled!("{} Restoring files from backup: {}", 
-        ("📂", "info_symbol"),
-        (&backup_path, "property")
-    );
-    
-    let backup_path = PathBuf::from(backup_path);
-    manager.protection_manager.restore_from_backup(&backup_path)?;
-    
-    output::styled!("{} Files restored successfully", 
-        ("✅", "success_symbol")
-    );
-    
     Ok(())
 }
 
 fn create_sync_manager(config_path: Option<&str>) -> Result<SyncManager> {
     let config = GuardyConfig::load::<()>(config_path, None, 0)
         .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
-    
+
     // Extract sync config using the proper parsing method
     let sync_config = SyncManager::parse_sync_config(&config)?;
-    
+
     // Create sync manager with parsed config
     SyncManager::with_config(sync_config)
 }
