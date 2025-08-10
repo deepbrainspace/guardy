@@ -42,7 +42,49 @@ guardy install
 
 This installs git hooks and creates a default configuration.
 
-### 2. Configure scanning (optional)
+### 2. Configure hooks
+
+Guardy supports both custom commands and built-in actions in hooks:
+
+```yaml
+# guardy.yaml
+hooks:
+  pre-commit:
+    enabled: true
+    # Built-in actions
+    builtin: ["scan_secrets"]
+    # Custom commands
+    custom:
+      - command: "echo 'Running pre-commit checks...'"
+        description: "Pre-commit header"
+        fail_on_error: false
+
+  pre-push:
+    enabled: true
+    custom:
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Sync protected files before push"
+        fail_on_error: true
+```
+
+### 3. Configure repository sync (optional)
+
+Keep files synchronized from upstream repositories:
+
+```yaml
+# guardy.yaml
+sync:
+  repos:
+    - name: "shared-configs"
+      repo: "https://github.com/your-org/shared-configs"
+      version: "v1.0.0"  # Can be tag, branch, or commit
+      source_path: ".github"
+      dest_path: "./.github"
+      include: ["**/*"]
+      exclude: ["*.md"]
+```
+
+### 4. Configure scanning (optional)
 
 ```yaml
 # guardy.yaml
@@ -120,14 +162,16 @@ scanner:
   
 # Git hooks configuration
 hooks:
-  pre_commit:
+  pre-commit:
     enabled: true
-    commands:
-      - scan
-  pre_push:
+    builtin: ["scan_secrets"]  # Built-in secret scanning
+    custom: []  # Add custom commands here
+  pre-push:
     enabled: true
-    commands:
-      - scan --staged
+    custom:
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Sync protected files"
+        fail_on_error: true
 
 # File synchronization
 sync:
@@ -167,6 +211,48 @@ for finding in results.findings {
 }
 ```
 
+## Git Hooks Integration
+
+Guardy provides flexible git hook management with both built-in actions and custom commands:
+
+### Built-in Actions
+- `scan_secrets` - Scan staged files for secrets and credentials
+- `validate_commit_msg` - Validate commit message format (placeholder)
+
+### Hook Configuration
+```yaml
+hooks:
+  pre-commit:
+    enabled: true
+    builtin: ["scan_secrets"]
+    custom:
+      - command: "cargo fmt --check"
+        description: "Check code formatting"
+        fail_on_error: true
+      
+  pre-push:
+    enabled: true
+    custom:
+      - command: "cargo test"
+        description: "Run tests"
+        fail_on_error: true
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Sync protected files"
+        fail_on_error: true
+```
+
+### Installing Specific Hooks
+```bash
+# Install all hooks
+guardy install
+
+# Install specific hooks
+guardy install --hooks pre-commit,pre-push
+
+# Force overwrite existing hooks
+guardy install --force
+```
+
 ## Protected File Synchronization
 
 Keep configuration files synchronized across multiple repositories:
@@ -183,12 +269,39 @@ guardy sync --force         # Apply all changes automatically
 guardy sync --repo=https://github.com/org/configs --version=main
 ```
 
+### Automating Sync with Hooks
+
+Integrate sync into your git workflow to ensure files stay synchronized:
+
+```yaml
+# guardy.yaml
+sync:
+  repos:
+    - name: "shared-configs"
+      repo: "https://github.com/org/shared-configs"
+      version: "v1.0.0"
+      source_path: ".github"
+      dest_path: "./.github"
+      include: ["**/*"]
+
+hooks:
+  pre-push:
+    enabled: true
+    custom:
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Ensure configs are synchronized before push"
+        fail_on_error: true
+```
+
+This ensures protected files are always synchronized before pushing changes.
+
 Features:
 - **Diff visualization** with syntax highlighting
 - **Interactive updates** with per-file control
 - **Selective sync** with include/exclude patterns
 - **Version pinning** to specific tags or commits
 - **Multi-repository** configuration support
+- **Automatic restoration** of modified protected files
 
 ## Examples
 
@@ -208,14 +321,18 @@ guardy scan --format=json src/ > scan-results.json
 ### Custom git hooks
 
 ```yaml
-# .git/hooks/pre-commit (managed by Guardy)
+# guardy.yaml
 hooks:
-  pre_commit:
+  pre-commit:
     enabled: true
-    commands:
-      - scan --staged
-      - run: "cargo fmt -- --check"
-      - run: "cargo clippy -- -D warnings"
+    builtin: ["scan_secrets"]
+    custom:
+      - command: "cargo fmt -- --check"
+        description: "Check formatting"
+        fail_on_error: true
+      - command: "cargo clippy -- -D warnings"
+        description: "Run clippy"
+        fail_on_error: true
 ```
 
 ### File sync with filters
