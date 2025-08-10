@@ -13,18 +13,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match builder.build() {
         Ok(gitignore) => {
             println!("✅ Built in-memory gitignore successfully");
-            
+
             // Test if the gitignore actually works by testing a path
             let test_path = std::path::Path::new("/tmp/.git");
             let is_ignored = gitignore.matched(test_path, false).is_ignore();
-            println!("  - Testing path '/tmp/.git': {}", if is_ignored { "IGNORED ✅" } else { "NOT IGNORED ❌" });
+            println!(
+                "  - Testing path '/tmp/.git': {}",
+                if is_ignored {
+                    "IGNORED ✅"
+                } else {
+                    "NOT IGNORED ❌"
+                }
+            );
 
             // Test if WalkBuilder can use custom ignore files
             let mut walk_builder = WalkBuilder::new("/tmp");
             walk_builder.standard_filters(false); // Disable default filters
             walk_builder.add_custom_ignore_filename(".test-ignore");
             println!("✅ WalkBuilder configured with custom ignore filename");
-            
+
             // Check if there's a method to add the gitignore object directly
             println!("WalkBuilder methods available:");
             println!("- standard_filters()");
