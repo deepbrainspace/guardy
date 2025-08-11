@@ -22,24 +22,39 @@ graph TD
     B -->|Ignored| Z[Skip File]
     B -->|Not Ignored| C{File Size Check}
     C -->|"&gt; 50MB (configurable)"| Z[Skip File]
-    C -->|"≤ 50MB"| D{Binary Detection}
-    D -->|Binary File| Z
-    D -->|Text File| G[Load Full Content]
+    C -->|"≤ 50MB"| D1{Extension Check}
+    D1 -->|".exe, .jpg, .zip, etc<br/>168 extensions"| Z
+    D1 -->|Unknown Extension| D2{Content Inspection}
+    D2 -->|Binary Content<br/>content_inspector| Z
+    D2 -->|Text Content| G[Load Full Content]
     G --> H[Keyword Prefilter using Aho-Corasick]
     H -->|No Keywords| Z[Skip File]
     H -->|Keywords Found| I[Regex Pattern Matching on Filtered Patterns]
-    I --> J[Collect Matches]
-    J --> K[Drop matches with 'guardy:allow' comment]
-    K --> L[Final Results]
+    I --> J[Drop matches with 'guardy:allow' comment]
+    J -->|Allowed| M[Skip Match]
+    J -->|Not Allowed| K[Apply Entropy Analysis]
+    K -->|Low Entropy| M[Drop False Positives]
+    K -->|High Entropy| L[Collect Matches]
+    L --> N[Final Results]
     
     style A fill:#e1f5fe
-    style D fill:#f3e5f5
+    style D1 fill:#f3e5f5
+    style D2 fill:#f3e5f5
     style G fill:#fff3e0
     style H fill:#e8f5e8
     style I fill:#fff3e0
-    style J fill:#ffebee
-    style K fill:#e8f5e8
+    style J fill:#e8f5e8
+    style K fill:#ffcccc
+    style L fill:#ffebee
+    style N fill:#c8e6c9
 ```
+
+**🔴 CRITICAL: Entropy Analysis Integration**
+- **Step J**: After pattern matching, apply entropy analysis to validate randomness
+- **Multi-metric validation**: Distinct values, character distribution, bigram frequency  
+- **Configurable thresholds**: Default 1.0/1e5, with 10x requirement for non-numeric strings
+- **Performance**: Memoized calculations, precompiled regex patterns
+- **Preserved exactly**: All 488 bigram patterns, probability calculations unchanged
 
 ### Module Structure
 ```
@@ -83,7 +98,7 @@ src/
 - **Tuning**: Configurable thresholds (default: 1.0/1e5), numbers requirement heuristics
 - **🚨 CRITICAL**: Extensively tested with real-world data, must preserve exact logic
 
-#### 1.1. **Enhanced File Size Configuration** (UPDATED)
+#### 1.1. **Enhanced File Size Configuration**
 - **Default Maximum File Size**: 50MB
 - **Override Capability**: `--max-file-size-mb` flag allows per-scan customization
 - **Modern Development**: Accommodates larger bundle files, generated code, and data files
@@ -101,11 +116,15 @@ src/
 - **Inline directives**: Single `guardy:allow` directive like Gitleaks
 - **🚨 CRITICAL**: Simple, efficient ignore system optimized for performance
 
-#### 4. **Binary File Detection** (binary.rs)
-- **Dual-mode Detection**: Extension-based (279 extensions!) + content inspection
-- **Content Inspector Integration**: Uses `content_inspector` crate for accuracy
-- **Memory Efficiency**: Avoids loading large binary files unnecessarily
-- **🚨 CRITICAL**: Prevents scanning of images, compiled code, compressed files
+#### 4. **Two-Stage Binary File Detection** (binary.rs)
+- **Stage 1 - Extension Check**: O(1) HashSet lookup of 168 known binary extensions
+  - Instant rejection of `.exe`, `.jpg`, `.zip`, `.dll`, `.so`, `.dylib`, etc.
+  - No file I/O needed - just filename check
+- **Stage 2 - Content Inspection**: Only for unknown extensions
+  - Uses `content_inspector` crate (reads first 512 bytes)
+  - Detects binary content even without extension (e.g., renamed files)
+- **Performance Impact**: ~95% of binary files caught by extension check alone
+- **🚨 CRITICAL**: This two-stage approach prevents unnecessary I/O and regex processing
 
 #### 6. **Configuration System Integration** (core.rs)
 - **SuperConfig Integration**: YAML/TOML/JSON support with complex merging
@@ -412,20 +431,41 @@ src/
           let mut all_matches = Vec::new();
           
           for pattern in active_patterns {
-              match pattern.class {
+              let pattern_matches = match pattern.class {
                   PatternClass::Specific => {
-                      // Fast path for high-confidence patterns
-                      all_matches.extend(self.scan_specific_pattern(content, pattern, &test_ranges)?);
+                      // Fast path for high-confidence patterns (still uses entropy for validation)
+                      self.scan_specific_pattern(content, pattern, &test_ranges)?
                   },
                   PatternClass::Contextual => {
-                      // Include entropy analysis for context
-                      all_matches.extend(self.scan_contextual_pattern(content, pattern, &test_ranges)?);
+                      // Include entropy analysis for context-based patterns
+                      self.scan_contextual_pattern(content, pattern, &test_ranges)?
                   },
                   PatternClass::AlwaysRun => {
                       // Entropy-heavy patterns, run regardless of keywords
-                      all_matches.extend(self.scan_entropy_pattern(content, pattern, &test_ranges)?);
+                      self.scan_entropy_pattern(content, pattern, &test_ranges)?
                   }
-              }
+              };
+              
+              // First filter out 'guardy:allow' comments (cheap operation)
+              let allowed_matches: Vec<_> = pattern_matches.into_iter()
+                  .filter(|m| !m.line_content.contains("guardy:allow"))
+                  .collect();
+              
+              // Then apply entropy analysis to remaining matches (expensive operation)
+              let validated_matches = if config.enable_entropy_analysis {
+                  allowed_matches.into_iter()
+                      .filter(|m| {
+                          self.entropy_analyzer.is_likely_secret(
+                              m.matched_text.as_bytes(),
+                              config.min_entropy_threshold
+                          )
+                      })
+                      .collect()
+              } else {
+                  allowed_matches
+              };
+              
+              all_matches.extend(validated_matches);
           }
           
           Ok(self.deduplicate_and_rank(all_matches))
@@ -500,11 +540,12 @@ src/
               .map(|&idx| &self.pattern_library.combined_patterns[idx])
               .collect();
               
-          // Step 2: Single-pass pattern matching (includes multi-line)
-          let mut matches = self.engine.scan_with_patterns(content, path, &active_patterns, &self.config)?;
-          
-          // Step 3: Post-filter inline ignore directives
-          matches.retain(|m| !m.line_content.contains("guardy:allow"));
+          // Step 2: Single-pass pattern matching
+          // Note: scan_with_patterns internally handles:
+          //   - Pattern matching
+          //   - 'guardy:allow' filtering (cheap, done first)
+          //   - Entropy analysis (expensive, done after filtering)
+          let matches = self.engine.scan_with_patterns(content, path, &active_patterns, &self.config)?;
           
           Ok(matches)
       }
