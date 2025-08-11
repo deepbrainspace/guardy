@@ -119,7 +119,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     use regex::Regex;
 
     // Load configuration (CLI overrides handled separately due to SuperConfig limitations)
-    // TODO: Fix SuperConfig bug where nested JSON objects and arrays in CLI overrides 
+    // TODO: Fix SuperConfig bug where nested JSON objects and arrays in CLI overrides
     // cause "invalid type: sequence, expected a map" errors and prevent proper merging
     let config = GuardyConfig::load(config_path, None::<serde_json::Value>, verbose_level)?;
 

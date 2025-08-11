@@ -30,7 +30,6 @@ impl Default for ProfilingConfig {
 pub struct WorkloadProfiler;
 
 impl WorkloadProfiler {
-
     /// Adapt worker count based on workload characteristics
     ///
     /// This method implements domain-agnostic workload adaptation that can be used
@@ -78,7 +77,7 @@ impl WorkloadProfiler {
     /// The adapter function receives `(item_count, max_workers)` and returns optimal worker count.
     ///
     /// # Examples
-    /// 
+    ///
     /// ## Conservative File Processing
     /// ```rust
     /// use guardy::profiling::{WorkloadProfiler, ProfilingConfig};
@@ -135,7 +134,6 @@ impl WorkloadProfiler {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,28 +142,27 @@ mod tests {
     fn test_workload_adaptation() {
         // Test small workload
         assert_eq!(WorkloadProfiler::adapt_workers_to_workload(5, 8), 2);
-        
+
         // Test medium workload
         assert_eq!(WorkloadProfiler::adapt_workers_to_workload(30, 8), 4);
-        
+
         // Test large workload
         assert_eq!(WorkloadProfiler::adapt_workers_to_workload(75, 8), 6);
-        
+
         // Test very large workload
         assert_eq!(WorkloadProfiler::adapt_workers_to_workload(150, 8), 8);
     }
 
-
     #[test]
     fn test_custom_adapter() {
         let config = ProfilingConfig::default();
-        
+
         let strategy = WorkloadProfiler::profile_with_adapter(
             100,
             &config,
             |_count, max_workers| max_workers / 3, // Custom: always use 1/3 of workers
         );
-        
+
         if let ExecutionStrategy::Parallel { workers } = strategy {
             assert!(workers > 0);
         }
@@ -178,7 +175,7 @@ mod tests {
             thread_percentage: 100,
             min_items_for_parallel: 5,
         };
-        
+
         // Test conservative file I/O adapter
         let strategy = WorkloadProfiler::profile_with_adapter(
             50, // 50 files to process
@@ -190,9 +187,9 @@ mod tests {
                 } else {
                     std::cmp::max(1, max_workers / 2)
                 }
-            }
+            },
         );
-        
+
         // Should be parallel but with reduced workers
         if let ExecutionStrategy::Parallel { workers } = strategy {
             assert!(workers <= 4); // Should be less than or equal to half of 8
@@ -207,7 +204,7 @@ mod tests {
             thread_percentage: 100,
             min_items_for_parallel: 10,
         };
-        
+
         // Test memory-limited adapter
         let strategy = WorkloadProfiler::profile_with_adapter(
             1000, // Large workload
@@ -216,9 +213,9 @@ mod tests {
                 // Memory constraint: never use more than 4 workers
                 let memory_limit = 4;
                 std::cmp::min(max_workers, memory_limit)
-            }
+            },
         );
-        
+
         // Should be parallel but capped at memory limit
         if let ExecutionStrategy::Parallel { workers } = strategy {
             assert_eq!(workers, 4); // Should be capped at 4
@@ -232,7 +229,7 @@ mod tests {
             thread_percentage: 100,
             min_items_for_parallel: 5,
         };
-        
+
         // Test adapter that forces sequential for certain conditions
         let strategy = WorkloadProfiler::profile_with_adapter(
             100, // Normally would be parallel
@@ -244,9 +241,9 @@ mod tests {
                 } else {
                     8 // Otherwise use 8 workers
                 }
-            }
+            },
         );
-        
+
         // Even though we have 100 items (above threshold), custom adapter forces 1 worker
         if let ExecutionStrategy::Parallel { workers } = strategy {
             assert_eq!(workers, 1);
@@ -260,7 +257,7 @@ mod tests {
             thread_percentage: 100,
             min_items_for_parallel: 5,
         };
-        
+
         // Test network-aware adapter that limits concurrency to avoid rate limiting
         let strategy = WorkloadProfiler::profile_with_adapter(
             200, // Many network requests
@@ -269,13 +266,13 @@ mod tests {
                 // Network operations: scale based on rate limiting considerations
                 let rate_limit_safe_workers = match count {
                     0..=19 => 2,
-                    20..=99 => 4, 
+                    20..=99 => 4,
                     _ => std::cmp::min(max_workers / 2, 6), // Use half available, max 6
                 };
                 std::cmp::min(rate_limit_safe_workers, max_workers)
-            }
+            },
         );
-        
+
         // Should be parallel but limited for network considerations
         if let ExecutionStrategy::Parallel { workers } = strategy {
             assert_eq!(workers, 6); // Should be 6 for 200 items
