@@ -122,8 +122,8 @@ src/
 - **🚨 CRITICAL**: Production-tested with 100k+ file repositories
 
 #### 8. **Parallel Integration** (directory.rs)
-- **Resource Calculation**: CPU core detection, thread percentage application
-- **Domain Adaptation**: File-count-based worker scaling (≤10 files → minimal, >100 → full)
+- **Resource Calculation**: CPU core detection, thread percentage application  
+- **Performance-First Approach**: Maximum worker utilization regardless of file count
 - **Progress Reporting**: Worker-specific progress with strategy icons (⏳ sequential, ⚡ parallel)
 - **🚨 CRITICAL**: Tight integration with existing parallel execution framework
 
@@ -208,12 +208,14 @@ src/
   }
   ```
 
-#### Task 1.5: Directory Orchestration
+#### Task 1.5: Directory Orchestration with Performance-First Parallel Processing
 - **File**: `src/scan/directory.rs`
-- **Purpose**: High-level directory walking and scan orchestration  
+- **Purpose**: High-level directory walking and scan orchestration with optimized parallel execution  
 - **Source**: Extract from `src/scanner/directory.rs` (DirectoryHandler + orchestration logic)
-- **Key Features**:
+- **Worker Allocation Strategy**:
   ```rust
+  use crate::parallel::{ExecutionStrategy, progress::factories};
+  
   pub struct ScanOrchestrator {
       binary_detector: BinaryDetector,
       file_processor: FileProcessor,  
@@ -223,7 +225,35 @@ src/
   impl ScanOrchestrator {
       pub fn scan_directory(&self, path: &Path, strategy: ExecutionStrategy) -> Result<ScanResult>
       pub fn collect_file_paths(&self, path: &Path) -> Result<Vec<PathBuf>>
-      pub fn adapt_worker_count(&self, file_count: usize, max_workers: usize) -> usize
+      
+      /// Performance-first worker allocation - use maximum available workers
+      pub fn determine_optimal_workers(&self, _file_count: usize, max_workers: usize) -> usize {
+          max_workers  // Always use maximum available workers for best performance
+      }
+      
+      pub fn determine_execution_strategy(&self, file_count: usize, config: &ScannerConfig) -> ExecutionStrategy {
+          match config.scan_mode {
+              ScanMode::Sequential => ExecutionStrategy::Sequential,
+              ScanMode::Parallel => {
+                  let max_workers = ExecutionStrategy::calculate_optimal_workers(
+                      config.max_threads,     // User override (0 = no limit)
+                      config.thread_percentage // % of CPU cores (default 75%)
+                  );
+                  ExecutionStrategy::Parallel { workers: max_workers }
+              },
+              ScanMode::Auto => {
+                  let max_workers = ExecutionStrategy::calculate_optimal_workers(
+                      config.max_threads, 
+                      config.thread_percentage
+                  );
+                  ExecutionStrategy::auto(
+                      file_count,
+                      config.min_files_for_parallel, // Default: 5 files
+                      max_workers                     // Use all available workers
+                  )
+              }
+          }
+      }
   }
   ```
 
@@ -403,16 +433,19 @@ src/
   }
   ```
 
-#### Task 3.2: Main Scanner Core
+#### Task 3.2: Main Scanner Core with Parallel Integration
 - **File**: `src/scan/core.rs`
-- **Purpose**: Primary scanner orchestrator
-- **Architecture**: Single-pass scanning with intelligent filtering
+- **Purpose**: Primary scanner orchestrator with parallel execution
+- **Architecture**: Single-pass scanning with intelligent filtering and parallel processing
 - **Implementation**:
   ```rust
+  use crate::parallel::ExecutionStrategy;
+  
   pub struct OptimizedScanner {
       prefilter: KeywordPrefilter,
       engine: MatchingEngine,
       pattern_library: PatternLibrary,
+      orchestrator: ScanOrchestrator,
       config: ScannerConfig,
   }
   
@@ -444,6 +477,19 @@ src/
           // Step 3: Load entire file content
           let content = self.engine.file_processor.load_file_content(path)?;
           self.scan_content(&content, path)
+      }
+      
+      pub fn scan_paths(&self, paths: &[String]) -> Result<Vec<SecretMatch>> {
+          // Step 1: Collect all file paths from input paths (directories and files)
+          let file_paths = self.orchestrator.collect_file_paths_from_inputs(paths)?;
+          
+          // Step 2: Determine execution strategy based on file count
+          let strategy = self.orchestrator.determine_execution_strategy(file_paths.len(), &self.config);
+          
+          // Step 3: Execute scanning with chosen strategy
+          self.orchestrator.scan_files_with_strategy(&file_paths, strategy, |file_path| {
+              self.scan_file(file_path)
+          })
       }
       
       pub fn scan_content(&self, content: &str, path: &Path) -> Result<Vec<SecretMatch>> {
@@ -492,9 +538,18 @@ src/
       pub prefilter_threshold: f32,          // Default: 0.1
       pub max_multiline_size: usize,         // Default: 1MB
       
-      // Parallel processing
-      pub max_threads: usize,                // Default: 0 (auto-detect)
-      pub thread_percentage: u8,             // Default: 75
+      // Parallel processing (integrated with existing parallel module)
+      pub max_threads: usize,                // Default: 0 (auto-detect, no hard limit)
+      pub thread_percentage: u8,             // Default: 75 (75% of available CPU cores)
+      pub min_files_for_parallel: usize,     // Default: 5 (optimal threshold for I/O-bound file scanning)
+      pub scan_mode: ScanMode,               // Default: Auto (Sequential/Parallel/Auto)
+      
+      // Worker Allocation Strategy:
+      // 1. System Detection: detect available CPU cores using num_cpus::get()
+      // 2. Percentage Application: apply thread_percentage (e.g., 75% of 16 cores = 12 workers)
+      // 3. User Override: respect max_threads if set (0 = no override)
+      // 4. Threshold Decision: use parallel if file_count >= min_files_for_parallel
+      // 5. Performance-First: always use maximum calculated workers (no file-count scaling)
   }
   
   impl Default for ScanConfig {
@@ -525,8 +580,9 @@ src/
               pattern_classification: true,
               prefilter_threshold: 0.1,
               max_multiline_size: 1024 * 1024,
-              max_threads: 0,
-              thread_percentage: 75,
+              max_threads: 0,                 // No hard limit - use percentage calculation
+              thread_percentage: 75,              // Use 75% of available CPU cores  
+              min_files_for_parallel: 5,          // Lower threshold for I/O-bound scanning
           }
       }
   }
