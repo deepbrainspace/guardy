@@ -21,32 +21,16 @@ graph TD
     A[File Input] --> B{Path Ignore Check}
     B -->|Ignored| Z[Skip File]
     B -->|Not Ignored| C{File Size Check}
-    C -->|"&gt; 50MB (configurable)"| Z[Skip File - Size Limit]
+    C -->|"&gt; 50MB (configurable)"| Z[Skip File]
     C -->|"≤ 50MB"| D{Binary Detection}
     D -->|Binary File| Z
-    D -->|Text File| E{File Size Routing}
-    E -->|"&lt; 20MB"| F[Load Full Content]
-    E -->|"&gt; 20MB"| G[Stream in Chunks]
-    F --> H[Chunk Processing]
-    G --> H
-    H --> I[Test Block Detection]
-    I --> J[Remove Test Ranges]
-    J --> K[Single-Pass Pattern Matching]
-    K --> L{Line Ignore Checks}
-    L -->|Ignore Pattern Match| Z2[Skip Line]
-    L -->|Comment Ignore| Z2
-    L -->|guardy:ignore-next| Z2
-    L -->|Clean Line| M[NEW: Keyword Prefilter]
-    M -->|No Keywords| Z2
-    M -->|Keywords Found| N[NEW: Pattern Classification]
-    N --> O[Single-line Patterns<br/>Line Regex]
-    N --> P[Multi-line Patterns<br/>Content Regex + Entropy]
-    N --> Q[Entropy-Only Patterns<br/>Full Entropy Analysis]
-    O --> R[Collect Match]
-    P --> R
-    Q --> R
-    R --> S[Deduplicate & Rank]
-    S --> T[Final Results]
+    D -->|Text File| G[Load Full Content]
+    G --> H[Keyword Prefilter using Aho-Corasick]
+    H -->|No Keywords| Z[Skip File]
+    H -->|Keywords Found| I[Regex Pattern Matching on Filtered Patterns]
+    I --> J[Collect Matches]
+    J --> K[Drop matches with 'guardy:allow' comment]
+    K --> L[Final Results]
     
     style A fill:#e1f5fe
     style M fill:#f3e5f5
