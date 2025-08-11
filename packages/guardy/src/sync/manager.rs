@@ -81,7 +81,7 @@ impl SyncManager {
         Ok(sync_config)
     }
 
-    /// Get files matching patterns using ignore crate  
+    /// Get files matching patterns using ignore crate
     fn get_files(&self, source: &Path, repo: &SyncRepo) -> Result<Vec<PathBuf>> {
         let mut builder = WalkBuilder::new(source);
 

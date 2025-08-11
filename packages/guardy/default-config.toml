@@ -37,7 +37,7 @@ patterns = [
 # Files to exclude from secret scanning
 exclude_files = [
     "*.lock",
-    "*.log", 
+    "*.log",
     ".husky/*",
 ]
 
@@ -72,7 +72,7 @@ tools = ["git-status", "hook-run", "security-scan"]
 [scanner]
 # Processing mode settings
 mode = "auto"               # "auto", "parallel", or "sequential" (auto = smart default)
-max_threads = 0             # 0 = auto-detect (75% of CPU cores), or specify exact number  
+max_threads = 0             # 0 = auto-detect (75% of CPU cores), or specify exact number
 thread_percentage = 75      # Percentage of CPU cores to use (1-100)
 min_files_for_parallel = 50 # Minimum files before auto mode uses parallel processing
 
@@ -91,7 +91,7 @@ ignore_paths = [
     "*_test.py",
     # TypeScript/JavaScript test files
     "*.test.ts",
-    "*.test.js", 
+    "*.test.js",
     "*.spec.ts",
     "*.spec.js"
 ]
@@ -102,7 +102,7 @@ ignore_patterns = [
 ]
 ignore_comments = [
     "guardy:ignore",
-    "guardy:ignore-line", 
+    "guardy:ignore-line",
     "guardy:ignore-next"
 ]
 # Intelligent test code detection
@@ -112,7 +112,7 @@ test_attributes = [
     "#[*test]",
     "#[bench]",
     "#[cfg(test)]",
-    # Python test patterns  
+    # Python test patterns
     "def test_*",
     "class Test*",
     "@pytest.*",
@@ -127,7 +127,7 @@ test_modules = [
     "mod test {",
     # Python
     "class Test",
-    # TypeScript/JavaScript  
+    # TypeScript/JavaScript
     "describe(",
     "__tests__"
 ]
