@@ -38,7 +38,7 @@
 //!   - Number of commands to execute
 //!   - Available system resources (CPU cores)
 //!   - Hook-specific characteristics (I/O vs CPU-bound)
-//! - **Adaptive Scaling**: 
+//! - **Adaptive Scaling**:
 //!   - Small workloads (≤3 commands): Sequential execution
 //!   - Medium workloads (4-5 commands): Conservative parallelism
 //!   - Large workloads (6+ commands): Full parallelism (capped at 8)

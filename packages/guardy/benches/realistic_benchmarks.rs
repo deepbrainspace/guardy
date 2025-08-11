@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
-use std::hint::black_box;
 
 /// Configuration for realistic benchmarks
 struct BenchConfig {
@@ -17,13 +17,13 @@ impl BenchConfig {
             "{}/target/release/guardy",
             env!("CARGO_MANIFEST_DIR").replace("/packages/guardy", "")
         );
-        
+
         let gitleaks_available = Command::new("gitleaks")
             .arg("version")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
-            
+
         let lefthook_available = Command::new("lefthook")
             .arg("--version")
             .output()
@@ -55,25 +55,25 @@ fn get_test_projects() -> Vec<String> {
 fn bench_guardy_scanning(c: &mut Criterion) {
     let config = BenchConfig::new();
     let projects = get_test_projects();
-    
+
     if projects.is_empty() {
         println!("⚠️ No test projects found. Run 'make bench-setup' first.");
         return;
     }
-    
+
     println!("🔍 Benchmarking Guardy scanning performance...");
-    
+
     let mut group = c.benchmark_group("guardy_scanning");
     group.measurement_time(Duration::from_secs(15));
     group.sample_size(10);
-    
+
     for project_path in projects {
         let project_name = Path::new(&project_path)
             .file_name()
             .unwrap()
             .to_string_lossy()
             .replace("-project", "");
-            
+
         group.bench_with_input(
             BenchmarkId::new("scan", &project_name),
             &project_path,
@@ -84,37 +84,37 @@ fn bench_guardy_scanning(c: &mut Criterion) {
                         .current_dir(path)
                         .output()
                         .expect("Failed to run guardy scan");
-                    
+
                     black_box(output.status.success())
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark Gitleaks vs Guardy if available
 fn bench_scanning_comparison(c: &mut Criterion) {
     let config = BenchConfig::new();
-    
+
     if !config.gitleaks_available {
         println!("⚠️ Gitleaks not available. Install with 'make bench-prepare'.");
         return;
     }
-    
+
     let projects = get_test_projects();
     if projects.is_empty() {
         println!("⚠️ No test projects found. Run 'make bench-setup' first.");
         return;
     }
-    
+
     println!("⚔️  Benchmarking Guardy vs Gitleaks...");
-    
+
     let mut group = c.benchmark_group("scanning_comparison");
     group.measurement_time(Duration::from_secs(20));
     group.sample_size(10);
-    
+
     // Use medium project for comparison
     if let Some(medium_project) = projects.iter().find(|p| p.contains("medium")) {
         group.bench_with_input(
@@ -127,29 +127,37 @@ fn bench_scanning_comparison(c: &mut Criterion) {
                         .current_dir(path)
                         .output()
                         .expect("Failed to run guardy");
-                    
+
                     black_box(output.status.success())
                 });
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("gitleaks", "medium"),
             medium_project,
             |b, path| {
                 b.iter(|| {
                     let output = Command::new("gitleaks")
-                        .args(["detect", "--source", ".", "--no-git", "--quiet", "--exit-code", "0"])
+                        .args([
+                            "detect",
+                            "--source",
+                            ".",
+                            "--no-git",
+                            "--quiet",
+                            "--exit-code",
+                            "0",
+                        ])
                         .current_dir(path)
                         .output()
                         .expect("Failed to run gitleaks");
-                    
+
                     black_box(output.status.success())
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
@@ -157,18 +165,18 @@ fn bench_scanning_comparison(c: &mut Criterion) {
 fn bench_parallel_scaling(c: &mut Criterion) {
     let config = BenchConfig::new();
     let projects = get_test_projects();
-    
+
     if projects.is_empty() {
         println!("⚠️ No test projects found. Run 'make bench-setup' first.");
         return;
     }
-    
+
     println!("⚡ Benchmarking parallel worker scaling...");
-    
+
     let mut group = c.benchmark_group("parallel_scaling");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(10);
-    
+
     // Use largest available project
     if let Some(test_project) = projects.last() {
         for workers in [1, 2, 4, 8] {
@@ -183,14 +191,14 @@ fn bench_parallel_scaling(c: &mut Criterion) {
                             .current_dir(path)
                             .output()
                             .expect("Failed to run guardy");
-                        
+
                         black_box(output.status.success())
                     });
                 },
             );
         }
     }
-    
+
     group.finish();
 }
 
@@ -198,14 +206,28 @@ fn bench_parallel_scaling(c: &mut Criterion) {
 fn print_bench_info() {
     println!("🚀 Guardy Realistic Benchmarks");
     println!("=============================");
-    
+
     let config = BenchConfig::new();
-    
+
     println!("🔧 Tool Status:");
     println!("  Guardy:   ✅ {}", config.guardy_path);
-    println!("  Gitleaks: {}", if config.gitleaks_available { "✅ Available" } else { "❌ Not found" });
-    println!("  Lefthook: {}", if config.lefthook_available { "✅ Available" } else { "❌ Not found" });
-    
+    println!(
+        "  Gitleaks: {}",
+        if config.gitleaks_available {
+            "✅ Available"
+        } else {
+            "❌ Not found"
+        }
+    );
+    println!(
+        "  Lefthook: {}",
+        if config.lefthook_available {
+            "✅ Available"
+        } else {
+            "❌ Not found"
+        }
+    );
+
     let projects = get_test_projects();
     println!("\n📊 Test Projects:");
     if projects.is_empty() {
@@ -220,23 +242,21 @@ fn print_bench_info() {
             }
         }
     }
-    
+
     println!("\n🎯 Benchmark Categories:");
     println!("  🔍 Scanning Performance - Guardy across different project sizes");
     if config.gitleaks_available {
         println!("  ⚔️  Tool Comparison - Guardy vs Gitleaks");
     }
     println!("  ⚡ Parallel Scaling - Worker thread performance");
-    
+
     println!();
 }
 
 fn setup_criterion() -> Criterion {
     print_bench_info();
-    
-    Criterion::default()
-        .with_output_color(true)
-        .with_plots()
+
+    Criterion::default().with_output_color(true).with_plots()
 }
 
 criterion_group!(

@@ -179,9 +179,12 @@ impl Scanner {
         text == pattern
     }
 
-    pub fn parse_scanner_config_with_cli_overrides(config: &GuardyConfig, args: &crate::cli::commands::scan::ScanArgs) -> Result<ScannerConfig> {
+    pub fn parse_scanner_config_with_cli_overrides(
+        config: &GuardyConfig,
+        args: &crate::cli::commands::scan::ScanArgs,
+    ) -> Result<ScannerConfig> {
         let mut scanner_config = Self::parse_scanner_config(config)?;
-        
+
         // Apply CLI overrides directly (bypassing SuperConfig issues)
         scanner_config.enable_entropy_analysis = !args.no_entropy;
         if let Some(threshold) = args.entropy_threshold {
@@ -191,53 +194,77 @@ impl Scanner {
         scanner_config.follow_symlinks = args.follow_symlinks;
         scanner_config.ignore_test_code = !args.no_ignore_tests;
         scanner_config.max_file_size_mb = args.max_file_size;
-        
+
         // Extend ignore lists with CLI values
-        scanner_config.ignore_patterns.extend(args.ignore_patterns.clone());
-        scanner_config.ignore_paths.extend(args.ignore_paths.clone());
-        scanner_config.ignore_comments.extend(args.ignore_comments.clone());
-        
+        scanner_config
+            .ignore_patterns
+            .extend(args.ignore_patterns.clone());
+        scanner_config
+            .ignore_paths
+            .extend(args.ignore_paths.clone());
+        scanner_config
+            .ignore_comments
+            .extend(args.ignore_comments.clone());
+
         if let Some(mode) = &args.mode {
             scanner_config.mode = mode.clone();
         }
-        
-        tracing::debug!("CLI OVERRIDE: Final enable_entropy_analysis = {}", scanner_config.enable_entropy_analysis);
+
+        tracing::debug!(
+            "CLI OVERRIDE: Final enable_entropy_analysis = {}",
+            scanner_config.enable_entropy_analysis
+        );
         Ok(scanner_config)
     }
 
     pub fn parse_scanner_config(config: &GuardyConfig) -> Result<ScannerConfig> {
         let mut scanner_config = ScannerConfig::default();
-        
+
         // Now using flattened keys, so scanner section won't exist as nested object
 
         // Override defaults with config values if present
         if let Ok(entropy_enabled) = config.get_section("scanner.entropy_analysis")
             && let Some(enabled) = entropy_enabled.as_bool()
         {
-            tracing::debug!("ENTROPY CONFIG: Found scanner.entropy_analysis = {}", enabled);
+            tracing::debug!(
+                "ENTROPY CONFIG: Found scanner.entropy_analysis = {}",
+                enabled
+            );
             scanner_config.enable_entropy_analysis = enabled;
         }
-        
+
         // Support CLI override key name - direct access due to SuperConfig limitation with arrays
         if let Ok(full_config) = config.get_full_config() {
-            tracing::debug!("ENTROPY CONFIG: Full config keys: {:?}", 
-                full_config.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-            
+            tracing::debug!(
+                "ENTROPY CONFIG: Full config keys: {:?}",
+                full_config
+                    .as_object()
+                    .map(|o| o.keys().collect::<Vec<_>>())
+            );
+
             if let Some(val) = full_config.get("scanner.enable_entropy_analysis") {
                 tracing::debug!("ENTROPY CONFIG: Found value: {:?}", val);
                 if let Some(enabled) = val.as_bool() {
-                    tracing::debug!("ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (direct access)", enabled);
+                    tracing::debug!(
+                        "ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (direct access)",
+                        enabled
+                    );
                     scanner_config.enable_entropy_analysis = enabled;
                 }
             } else {
-                tracing::debug!("ENTROPY CONFIG: scanner.enable_entropy_analysis not found in full config");
+                tracing::debug!(
+                    "ENTROPY CONFIG: scanner.enable_entropy_analysis not found in full config"
+                );
             }
         }
-        
+
         // Fallback to standard get_section for traditional config files
         if let Ok(entropy_enabled) = config.get_section("scanner.enable_entropy_analysis") {
             if let Some(enabled) = entropy_enabled.as_bool() {
-                tracing::debug!("ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (get_section)", enabled);
+                tracing::debug!(
+                    "ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (get_section)",
+                    enabled
+                );
                 scanner_config.enable_entropy_analysis = enabled;
             }
         }
@@ -326,7 +353,10 @@ impl Scanner {
             scanner_config.min_files_for_parallel = files as usize;
         }
 
-        tracing::debug!("ENTROPY CONFIG: Final enable_entropy_analysis = {}", scanner_config.enable_entropy_analysis);
+        tracing::debug!(
+            "ENTROPY CONFIG: Final enable_entropy_analysis = {}",
+            scanner_config.enable_entropy_analysis
+        );
         Ok(scanner_config)
     }
 

@@ -44,7 +44,9 @@ pub struct ScanResult {
 }
 
 /// Scanning mode for determining parallelization strategy
-#[derive(Debug, Clone, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default)]
+#[derive(
+    Debug, Clone, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default,
+)]
 pub enum ScanMode {
     /// Always use sequential processing
     Sequential,
