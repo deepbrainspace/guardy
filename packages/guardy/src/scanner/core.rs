@@ -260,13 +260,14 @@ impl Scanner {
 
         // Fallback to standard get_section for traditional config files
         if let Ok(entropy_enabled) = config.get_section("scanner.enable_entropy_analysis")
-            && let Some(enabled) = entropy_enabled.as_bool() {
-                tracing::debug!(
-                    "ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (get_section)",
-                    enabled
-                );
-                scanner_config.enable_entropy_analysis = enabled;
-            }
+            && let Some(enabled) = entropy_enabled.as_bool()
+        {
+            tracing::debug!(
+                "ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (get_section)",
+                enabled
+            );
+            scanner_config.enable_entropy_analysis = enabled;
+        }
 
         if let Ok(threshold) = config.get_section("scanner.entropy_threshold")
             && let Some(thresh) = threshold.as_f64()

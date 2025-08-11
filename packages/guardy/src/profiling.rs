@@ -274,8 +274,11 @@ mod tests {
         );
 
         // Should be parallel but limited for network considerations
+        // The exact number depends on system CPU cores, so test that it's limited appropriately
         if let ExecutionStrategy::Parallel { workers } = strategy {
-            assert_eq!(workers, 6); // Should be 6 for 200 items
+            assert!(workers >= 2 && workers <= 6, "Expected 2-6 workers, got {}", workers);
+        } else {
+            panic!("Expected Parallel strategy for 200 items");
         }
     }
 }
