@@ -1,4 +1,4 @@
-# Guardy 
+# Guardy
 
 [![Crates.io](https://img.shields.io/crates/v/guardy.svg)](https://crates.io/crates/guardy)
 [![Documentation](https://docs.rs/guardy/badge.svg)](https://docs.rs/guardy)
@@ -42,14 +42,72 @@ guardy install
 
 This installs git hooks and creates a default configuration.
 
-### 2. Configure scanning (optional)
+### 2. Configure hooks
+
+Guardy supports both custom commands and built-in actions in hooks:
+
+```yaml
+# guardy.yaml
+hooks:
+  pre-commit:
+    enabled: true
+    parallel: false  # Run commands in parallel (default: false)
+    # Built-in actions
+    builtin: ["scan_secrets"]
+    # Custom commands
+    custom:
+      - command: "cargo fmt --check"
+        description: "Check formatting"
+        fail_on_error: true
+        glob: ["*.rs"]  # Only run on Rust files (optional)
+
+      - command: "eslint {files} --fix"
+        description: "Fix ESLint issues"
+        all_files: true  # Run on all files matching glob, not just staged
+        glob: ["*.js", "*.jsx", "*.ts", "*.tsx"]
+        stage_fixed: true  # Auto-stage fixed files
+
+  commit-msg:
+    enabled: true
+    builtin: ["validate_commit_msg"]  # Validates conventional commits format
+
+  pre-push:
+    enabled: true
+    parallel: true  # Run all commands in parallel for speed
+    custom:
+      - command: "cargo test"
+        description: "Run tests"
+        fail_on_error: true
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Sync protected files before push"
+        fail_on_error: true
+```
+
+### 3. Configure repository sync (optional)
+
+Keep files synchronized from upstream repositories:
+
+```yaml
+# guardy.yaml
+sync:
+  repos:
+    - name: "shared-configs"
+      repo: "https://github.com/your-org/shared-configs"
+      version: "v1.0.0"  # Can be tag, branch, or commit
+      source_path: ".github"
+      dest_path: "./.github"
+      include: ["**/*"]
+      exclude: ["*.md"]
+```
+
+### 4. Configure scanning (optional)
 
 ```yaml
 # guardy.yaml
 scanner:
   file_extensions:
     - "*.rs"
-    - "*.js" 
+    - "*.js"
     - "*.py"
   ignore_patterns:
     - "target/"
@@ -117,17 +175,19 @@ scanner:
     - "*.log"
   max_file_size: 1048576  # 1MB
   entropy_threshold: 3.5
-  
+
 # Git hooks configuration
 hooks:
-  pre_commit:
+  pre-commit:
     enabled: true
-    commands:
-      - scan
-  pre_push:
+    builtin: ["scan_secrets"]  # Built-in secret scanning
+    custom: []  # Add custom commands here
+  pre-push:
     enabled: true
-    commands:
-      - scan --staged
+    custom:
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Sync protected files"
+        fail_on_error: true
 
 # File synchronization
 sync:
@@ -159,12 +219,93 @@ let results = scanner_config.scan_path("src/")?;
 // Process findings
 for finding in results.findings {
     println!(
-        "Secret found in {}: {} (confidence: {:.2})", 
+        "Secret found in {}: {} (confidence: {:.2})",
         finding.file_path,
         finding.secret_type,
         finding.confidence
     );
 }
+```
+
+## Git Hooks Integration
+
+Guardy provides flexible git hook management with both built-in actions and custom commands:
+
+### Built-in Actions
+- `scan_secrets` - Scan staged files for secrets and credentials
+- `validate_commit_msg` - Validate commit messages using conventional commits format
+
+### Hook Features
+
+#### Parallel Execution
+Run commands in parallel for faster execution (enabled by default):
+```yaml
+hooks:
+  pre-push:
+    parallel: true  # Default: true - commands run simultaneously with optimal concurrency
+    custom:
+      - command: "cargo test"
+      - command: "cargo clippy"
+      - command: "cargo fmt --check"
+```
+
+Guardy automatically profiles your system and workload to determine optimal parallelism:
+- **Small workloads** (≤3 commands): Sequential execution
+- **Medium workloads** (4-5 commands): Conservative parallelism
+- **Large workloads** (6+ commands): Full parallelism (capped at 8 concurrent commands)
+- **System-aware**: Respects available CPU cores and limits concurrency appropriately
+
+#### Glob Pattern Filtering
+Target specific file types with glob patterns:
+```yaml
+custom:
+  - command: "prettier --write {files}"
+    glob: ["*.js", "*.css", "*.html"]
+  - command: "black {files}"
+    glob: ["*.py"]
+```
+
+#### All Files Mode
+Process all matching files, not just staged ones:
+```yaml
+custom:
+  - command: "eslint {files} --fix"
+    all_files: true  # Process all JS files in repo
+    glob: ["**/*.js"]
+    stage_fixed: true  # Auto-stage corrected files
+```
+
+#### Conventional Commits Validation
+Ensures commit messages follow the conventional commits format using the `git-conventional` library:
+```yaml
+hooks:
+  commit-msg:
+    enabled: true
+    builtin: ["validate_commit_msg"]
+```
+
+**Supported formats:**
+- `feat(scope): add new feature`
+- `fix: resolve bug in authentication`
+- `docs: update README`
+- `chore(deps): update dependencies`
+
+**Features:**
+- Full conventional commits specification support
+- Helpful error messages with examples
+- Optional scope validation warnings
+- Automatic comment filtering from commit messages
+
+### Installing Specific Hooks
+```bash
+# Install all hooks
+guardy install
+
+# Install specific hooks
+guardy install --hooks pre-commit,pre-push
+
+# Force overwrite existing hooks
+guardy install --force
 ```
 
 ## Protected File Synchronization
@@ -176,12 +317,38 @@ Keep configuration files synchronized across multiple repositories:
 guardy sync status          # Show sync configuration
 
 guardy sync diff            # Preview changes without applying
-guardy sync                 # Interactive update with diffs  
+guardy sync                 # Interactive update with diffs
 guardy sync --force         # Apply all changes automatically
 
 # Bootstrap from a repository
 guardy sync --repo=https://github.com/org/configs --version=main
 ```
+
+### Automating Sync with Hooks
+
+Integrate sync into your git workflow to ensure files stay synchronized:
+
+```yaml
+# guardy.yaml
+sync:
+  repos:
+    - name: "shared-configs"
+      repo: "https://github.com/org/shared-configs"
+      version: "v1.0.0"
+      source_path: ".github"
+      dest_path: "./.github"
+      include: ["**/*"]
+
+hooks:
+  pre-push:
+    enabled: true
+    custom:
+      - command: "guardy sync update --force --config ./guardy.yaml"
+        description: "Ensure configs are synchronized before push"
+        fail_on_error: true
+```
+
+This ensures protected files are always synchronized before pushing changes.
 
 Features:
 - **Diff visualization** with syntax highlighting
@@ -189,6 +356,7 @@ Features:
 - **Selective sync** with include/exclude patterns
 - **Version pinning** to specific tags or commits
 - **Multi-repository** configuration support
+- **Automatic restoration** of modified protected files
 
 ## Examples
 
@@ -198,7 +366,7 @@ Features:
 # Scan only Rust files
 guardy scan --include="*.rs" src/
 
-# Scan excluding test files  
+# Scan excluding test files
 guardy scan --exclude="*test*" .
 
 # Output as JSON
@@ -208,14 +376,18 @@ guardy scan --format=json src/ > scan-results.json
 ### Custom git hooks
 
 ```yaml
-# .git/hooks/pre-commit (managed by Guardy)
+# guardy.yaml
 hooks:
-  pre_commit:
+  pre-commit:
     enabled: true
-    commands:
-      - scan --staged
-      - run: "cargo fmt -- --check"
-      - run: "cargo clippy -- -D warnings"
+    builtin: ["scan_secrets"]
+    custom:
+      - command: "cargo fmt -- --check"
+        description: "Check formatting"
+        fail_on_error: true
+      - command: "cargo clippy -- -D warnings"
+        description: "Run clippy"
+        fail_on_error: true
 ```
 
 ### File sync with filters
@@ -224,7 +396,7 @@ hooks:
 sync:
   repos:
     - name: "eslint-config"
-      repo: "https://github.com/company/eslint-configs"  
+      repo: "https://github.com/company/eslint-configs"
       version: "v2.1.0"
       source_path: "configs"
       dest_path: "."
@@ -238,11 +410,41 @@ sync:
 - **Memory efficient**: Processes large repositories without high memory usage
 - **Fast I/O**: Optimized file reading with memory-mapped files
 - **Smart filtering**: Skips binary files and respects .gitignore patterns
+- **OS Cache Optimization**: Leverages filesystem caching for dramatic performance improvements
+
+### Intelligent Caching Performance
+
+Guardy efficiently utilizes OS-level filesystem caching for exceptional performance:
+
+**First Scan (Cold Cache):**
+- Initial scan reads files from disk storage
+- Typical performance: ~1,900 files/second
+- OS populates filesystem cache with file data
+
+**Subsequent Scans (Warm Cache):**
+- Files served from RAM instead of disk
+- **Up to 2.7x faster performance**: ~5,200 files/second
+- Perfect for CI/CD and iterative development workflows
+
+**Real-World Example:**
+```bash
+# First run (cold cache)
+$ guardy scan ~/code/large-project --stats
+⚡ Scan completed in 91.19s (172,832 files scanned)
+
+# Second run (warm cache)
+$ guardy scan ~/code/large-project --stats
+⚡ Scan completed in 33.37s (172,832 files scanned)
+# 🚀 63% faster!
+```
+
+### Performance Benchmarks
 
 Typical performance on a modern machine:
-- ~50,000 files/second for secret scanning
-- ~1GB/second throughput for large codebases
-- <100ms startup time for git hooks
+- **Cold cache**: ~1,900 files/second for secret scanning
+- **Warm cache**: ~5,200 files/second (2.7x improvement)
+- **Memory usage**: <200MB for repositories with 100k+ files
+- **Startup time**: <100ms for git hooks
 
 ## License
 

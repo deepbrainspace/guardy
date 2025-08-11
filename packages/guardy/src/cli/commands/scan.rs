@@ -118,24 +118,10 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     use crate::scanner::patterns::SecretPatterns;
     use regex::Regex;
 
-    // Create scanner-specific config overrides
-    let scanner_overrides = serde_json::json!({
-        "scanner": {
-            "mode": args.mode,
-            "max_file_size_mb": args.max_file_size,
-            "include_binary": args.include_binary,
-            "follow_symlinks": args.follow_symlinks,
-            "enable_entropy_analysis": !args.no_entropy,
-            "min_entropy_threshold": args.entropy_threshold,
-            "ignore_test_code": !args.no_ignore_tests,
-            "ignore_patterns": args.ignore_patterns,
-            "ignore_paths": args.ignore_paths,
-            "ignore_comments": args.ignore_comments
-        }
-    });
-
-    // Load configuration with CLI overrides
-    let config = GuardyConfig::load(config_path, Some(scanner_overrides), verbose_level)?;
+    // Load configuration (CLI overrides handled separately due to SuperConfig limitations)
+    // TODO: Fix SuperConfig bug where nested JSON objects and arrays in CLI overrides
+    // cause "invalid type: sequence, expected a map" errors and prevent proper merging
+    let config = GuardyConfig::load(config_path, None::<serde_json::Value>, verbose_level)?;
 
     // Load patterns and add custom ones
     let mut patterns = SecretPatterns::new(&config)?;
@@ -185,8 +171,8 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         }
     }
 
-    // Extract scanner config using the proper parsing method
-    let scanner_config = Scanner::parse_scanner_config(&config)?;
+    // Extract scanner config using the proper parsing method, passing CLI args directly
+    let scanner_config = Scanner::parse_scanner_config_with_cli_overrides(&config, &args)?;
 
     // Create scanner with loaded config
     let scanner = Scanner::with_config(patterns, scanner_config)?;

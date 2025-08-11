@@ -65,7 +65,7 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
 /// metrics came about by chance:
 ///
 /// 1. Number of distinct values. Non-random text is generally going to have much fewer distinct values than random text.
-/// 2. Number of numbers. It's very common to have very few numbers in non-random text.  
+/// 2. Number of numbers. It's very common to have very few numbers in non-random text.
 /// 3. Number of bigrams. If we take a sample of roughly 10% of possible bigrams that are common in source code, we should
 ///    expect that a random string should have about 10% of those bigrams.
 ///

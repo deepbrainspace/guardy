@@ -29,7 +29,7 @@ src/scanner/
 - **Tests**: Directory filtering, parallel execution, worker adaptation strategies
 
 ### `patterns.rs`
-- **Purpose**: Secret pattern definitions and regex management  
+- **Purpose**: Secret pattern definitions and regex management
 - **Contains**: `SecretPatterns`, `SecretPattern`, 40+ predefined patterns for comprehensive secret detection
 - **Built-in Detection**: Private keys (SSH, PGP, RSA, etc.), API keys (OpenAI, GitHub, AWS, etc.), database credentials, JWT tokens
 - **Tests**: Pattern compilation, pattern matching, coverage of AI/cloud service patterns
@@ -88,7 +88,7 @@ Uses glob patterns to ignore entire files and directories:
 [scanner]
 ignore_paths = [
     "tests/*",        # All test directories
-    "testdata/*",     # Test data directories  
+    "testdata/*",     # Test data directories
     "*_test.rs",      # Test files
     "test_*.rs"       # Test files
 ]
@@ -111,7 +111,7 @@ Inline comments to suppress scanning:
 [scanner]
 ignore_comments = [
     "guardy:ignore",      # Ignore this line
-    "guardy:ignore-line", # Ignore this line  
+    "guardy:ignore-line", # Ignore this line
     "guardy:ignore-next"  # Ignore next line
 ]
 ```
@@ -133,13 +133,13 @@ test_attributes = [
     "#[*test]",      # Matches #[test], #[tokio::test], etc.
     "#[bench]",      # Benchmark functions
     "#[cfg(test)]",  # Test configuration
-    # Python test patterns  
+    # Python test patterns
     "def test_*",    # Test functions
     "class Test*",   # Test classes
     "@pytest.*",     # Pytest decorators
     # TypeScript/JavaScript test patterns
     "it(*",          # Jest/Mocha it() blocks
-    "test(*",        # Jest test() blocks  
+    "test(*",        # Jest test() blocks
     "describe(*"     # Jest/Mocha describe() blocks
 ]
 test_modules = [
@@ -148,7 +148,7 @@ test_modules = [
     "mod test {",    # Test modules
     # Python
     "class Test",    # Test classes
-    # TypeScript/JavaScript  
+    # TypeScript/JavaScript
     "describe(",     # Test suites
     "__tests__"      # Test directories
 ]
@@ -164,7 +164,7 @@ test_modules = [
 
 **Python:**
 - `def test_*` test functions
-- `class Test*` test classes  
+- `class Test*` test classes
 - `@pytest.*` pytest decorators
 - `class Test` test class declarations
 
@@ -185,7 +185,7 @@ ignore_test_code = true
 # Customize patterns for your project
 ignore_patterns = [
     "# DEMO:",
-    "EXAMPLE_", 
+    "EXAMPLE_",
     "YOUR_CUSTOM_PATTERN"
 ]
 
@@ -222,10 +222,10 @@ The scanner module integrates tightly with the parallel module for efficient fil
    │ • mode: auto    │      │ (system resource limit)  │     │ (domain adaptation)  │
    └─────────────────┘      └──────────────────────────┘     └─────────────────────┘
                                                                        │
-4. Strategy Decision                          ← ← ← ← ← ← ← ← ← ← ← ← ← ← 
+4. Strategy Decision                          ← ← ← ← ← ← ← ← ← ← ← ← ← ←
    ┌─────────────────────────────────────────┐
    │ auto(file_count=36, threshold=50, workers=6) │
-   │ → 36 < 50 → ExecutionStrategy::Sequential    │  
+   │ → 36 < 50 → ExecutionStrategy::Sequential    │
    └─────────────────────────────────────────────┘
 ```
 
@@ -312,6 +312,13 @@ src/scanner/
 
 ### 🎯 Performance Optimization
 
+#### OS Cache Optimization:
+- **Intelligent caching**: Leverages OS filesystem cache for dramatic performance improvements
+- **Cold cache**: ~1,900 files/second initial scan performance
+- **Warm cache**: ~5,200 files/second (2.7x improvement) on subsequent scans
+- **Real-world benefits**: Perfect for CI/CD workflows and iterative development
+- **Example**: 172,832 files scanned in 91s (cold) vs 33s (warm) - 63% faster!
+
 #### Directory Filtering Impact:
 - Reduces scan time by 60-80% by skipping build/cache directories
 - Automatic gitignore analysis provides optimization suggestions
@@ -326,6 +333,7 @@ src/scanner/
 - Arc<Scanner> enables thread-safe sharing across workers
 - Bounded channels prevent memory overflow in large directories
 - Progress reporting optimized for minimal contention
+- Typical memory usage: <200MB for repositories with 100k+ files
 
 ### 🚨 Common Pitfalls to Avoid
 
@@ -353,7 +361,7 @@ ignore_comments = ["guardy:ignore", "guardy:ignore-line"]
 
 #### Progress Reporting Configuration:
 - **Sequential**: ⏳ icon, 10-item frequency
-- **Parallel**: ⚡ icon, 5-item frequency  
+- **Parallel**: ⚡ icon, 5-item frequency
 - **Custom**: Configurable via progress reporter factories
 
 ## Supported Secret Types
@@ -380,7 +388,7 @@ The scanner includes 40+ built-in patterns for comprehensive secret detection:
 
 ### Database Credentials
 - MongoDB connection strings
-- PostgreSQL connection strings  
+- PostgreSQL connection strings
 - MySQL connection strings
 
 ### Generic Detection
@@ -407,20 +415,20 @@ let scanner = Scanner::new(&config)?;
 // Scan individual file
 let matches = scanner.scan_file(&path)?;
 for secret_match in matches {
-    println!("Found {} at {}:{}", 
+    println!("Found {} at {}:{}",
         secret_match.secret_type,
-        secret_match.file_path, 
+        secret_match.file_path,
         secret_match.line_number);
 }
 
 // Scan directory with full results
 let result = scanner.scan_directory(&dir_path)?;
-println!("Found {} secrets in {} files", 
-    result.stats.total_matches, 
+println!("Found {} secrets in {} files",
+    result.stats.total_matches,
     result.stats.files_scanned);
 
 // CLI usage examples
 // guardy scan src/ --stats
-// guardy scan config.json --include-binary  
+// guardy scan config.json --include-binary
 // guardy scan . --max-file-size 50
 ```

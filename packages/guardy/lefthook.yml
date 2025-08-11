@@ -1,0 +1,21 @@
+pre-commit:
+  commands:
+    lint-check:
+      run: echo "Running lints..." && sleep 0.1
+      stage_fixed: true
+    type-check:
+      run: echo "Running type check..." && sleep 0.05
+      stage_fixed: true
+    test-quick:
+      run: echo "Running quick tests..." && sleep 0.2
+      stage_fixed: true
+    secret-scan:
+      run: echo "Scanning for secrets..." && sleep 0.1
+      stage_fixed: true
+
+pre-push:
+  commands:
+    full-test:
+      run: echo "Running full test suite..." && sleep 0.5
+    security-audit:
+      run: echo "Security audit..." && sleep 0.3
