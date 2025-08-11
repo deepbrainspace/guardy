@@ -22,4 +22,10 @@ fake_test_values.yml
 
 # Generated reports
 guardy-report-*.html
+<<<<<<< HEAD
 guardy-report-*.json
+=======
+guardy-report-*.json
+
+test-data
+>>>>>>> feat/benchmark

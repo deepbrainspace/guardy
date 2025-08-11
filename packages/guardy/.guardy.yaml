@@ -1,0 +1,24 @@
+hooks:
+  pre-commit:
+    - name: "lint-check"
+      command: "echo 'Running lints...' && sleep 0.1"
+    - name: "type-check"  
+      command: "echo 'Running type check...' && sleep 0.05"
+    - name: "test-quick"
+      command: "echo 'Running quick tests...' && sleep 0.2"
+    - name: "secret-scan"
+      command: "echo 'Scanning for secrets...' && sleep 0.1"
+
+  pre-push:
+    - name: "full-test"
+      command: "echo 'Running full test suite...' && sleep 0.5"
+    - name: "security-audit"
+      command: "echo 'Security audit...' && sleep 0.3"
+
+scanning:
+  enabled: true
+  paths: [".", "!node_modules", "!.git"]
+  
+parallelism:
+  enabled: true
+  max_workers: 8

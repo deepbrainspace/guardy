@@ -44,7 +44,11 @@ pub struct ScanResult {
 }
 
 /// Scanning mode for determining parallelization strategy
+<<<<<<< HEAD
 #[derive(Debug, Clone, PartialEq, clap::ValueEnum, serde::Serialize, Default)]
+=======
+#[derive(Debug, Clone, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default)]
+>>>>>>> feat/benchmark
 pub enum ScanMode {
     /// Always use sequential processing
     Sequential,
@@ -56,7 +60,12 @@ pub enum ScanMode {
 }
 
 /// Configuration for the scanner
+<<<<<<< HEAD
 #[derive(Debug, Clone)]
+=======
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+>>>>>>> feat/benchmark
 pub struct ScannerConfig {
     pub enable_entropy_analysis: bool,
     pub min_entropy_threshold: f64,

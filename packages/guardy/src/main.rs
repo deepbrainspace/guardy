@@ -7,6 +7,10 @@ mod external;
 mod git;
 mod hooks;
 mod parallel;
+<<<<<<< HEAD
+=======
+mod profiling;
+>>>>>>> feat/benchmark
 mod reports;
 mod scanner;
 mod shared;

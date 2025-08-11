@@ -312,6 +312,16 @@ src/scanner/
 
 ### 🎯 Performance Optimization
 
+<<<<<<< HEAD
+=======
+#### OS Cache Optimization:
+- **Intelligent caching**: Leverages OS filesystem cache for dramatic performance improvements
+- **Cold cache**: ~1,900 files/second initial scan performance
+- **Warm cache**: ~5,200 files/second (2.7x improvement) on subsequent scans
+- **Real-world benefits**: Perfect for CI/CD workflows and iterative development
+- **Example**: 172,832 files scanned in 91s (cold) vs 33s (warm) - 63% faster!
+
+>>>>>>> feat/benchmark
 #### Directory Filtering Impact:
 - Reduces scan time by 60-80% by skipping build/cache directories
 - Automatic gitignore analysis provides optimization suggestions
@@ -326,6 +336,10 @@ src/scanner/
 - Arc<Scanner> enables thread-safe sharing across workers
 - Bounded channels prevent memory overflow in large directories
 - Progress reporting optimized for minimal contention
+<<<<<<< HEAD
+=======
+- Typical memory usage: <200MB for repositories with 100k+ files
+>>>>>>> feat/benchmark
 
 ### 🚨 Common Pitfalls to Avoid
 
