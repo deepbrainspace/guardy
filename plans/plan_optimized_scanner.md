@@ -26,39 +26,240 @@ This plan outlines the implementation of a next-generation scanner (`scan2`) bas
 
 ## 🏗️ Architecture Overview
 
-### High-Level Design
+### Complete Scanning Algorithm (From Current Scanner Analysis)
+
+Based on analysis of the existing scanner, here's the complete scanning algorithm we need to implement:
 
 ```mermaid
 graph TD
-    A[File Input] --> B{Path Ignore Check}
-    B -->|Ignored| Z[Skip File]
-    B -->|Not Ignored| C{File Size Check}
-    C -->|"&gt; 50MB (configurable)"| Z[Skip File]
-    C -->|"≤ 50MB"| D1{Extension Check}
-    D1 -->|".exe, .jpg, .zip, etc<br/>168 extensions"| Z
-    D1 -->|Unknown Extension| D2{Content Inspection}
-    D2 -->|Binary Content<br/>content_inspector| Z
-    D2 -->|Text Content| G[Load Full Content]
-    G --> H[Keyword Prefilter using Aho-Corasick]
-    H -->|No Keywords| Z[Skip File]
-    H -->|Keywords Found| I[Regex Pattern Matching on Filtered Patterns]
-    I --> J[Drop matches with 'guardy:allow' comment]
-    J -->|Allowed| M[Skip Match]
-    J -->|Not Allowed| K[Apply Entropy Analysis]
-    K -->|Low Entropy| M[Drop False Positives]
-    K -->|High Entropy| L[Collect Matches]
-    L --> N[Final Results]
+    A[Input Paths] --> B[Fast File Count]
+    B --> C[Calculate Execution Strategy]
+    C --> D[Directory Analysis & Warnings]
+    D --> E[Collect File Paths via WalkBuilder]
+    E --> F[Execute Strategy: Sequential or Parallel]
+    
+    F --> G[For Each File: Worker Process]
+    
+    G --> H1{Path Ignore Check}
+    H1 -->|Ignored| Z[Skip File]
+    H1 -->|Not Ignored| H2{File Size Check}
+    H2 -->|"> 50MB"| Z
+    H2 -->|"≤ 50MB"| H3{Binary Detection}
+    H3 -->|"Binary (Extension + Content)"| Z1[Skip or Include based on config]
+    H3 -->|"Text"| H4[Load File Content]
+    
+    H4 --> PM[PATTERN MATCHING PIPELINE]
+    
+    subgraph PM[" "]
+        PM1[Aho-Corasick Prefilter on Content]
+        PM2[Get Active Patterns with Keywords Found]
+        PM3[FOR EACH Active Pattern:]
+        PM4[Run Regex Pattern.find_iter on Content]
+        PM5[FOR EACH Regex Match:]
+        PM6{Line contains 'guardy:allow'?}
+        PM7{Pass Entropy Analysis?}
+        PM8[Add to Final Matches]
+        
+        PM1 --> PM2
+        PM2 --> PM3
+        PM3 --> PM4
+        PM4 --> PM5
+        PM5 --> PM6
+        PM6 -->|Yes| PM9[Skip Match]
+        PM6 -->|No| PM7
+        PM7 -->|Yes| PM8
+        PM7 -->|No| PM9[Skip Match]
+        PM9 --> PM10[Next Match]
+        PM10 --> PM5
+        PM8 --> PM11[Next Pattern]
+        PM11 --> PM3
+    end
+    
+    PM8 --> I[Aggregate Results from All Workers]
+    I --> J[Generate Statistics & Final Report]
     
     style A fill:#e1f5fe
-    style D1 fill:#f3e5f5
-    style D2 fill:#f3e5f5
-    style G fill:#fff3e0
-    style H fill:#e8f5e8
-    style I fill:#fff3e0
-    style J fill:#e8f5e8
-    style K fill:#ffcccc
-    style L fill:#ffebee
-    style N fill:#c8e6c9
+    style C fill:#fff3e0
+    style E fill:#e8f5e8
+    style F fill:#ffebee
+    style G fill:#f3e5f5
+    style H4 fill:#fff3e0
+    style PM1 fill:#e8f5e8
+    style PM2 fill:#e8f5e8
+    style PM4 fill:#fff3e0
+    style PM6 fill:#ffcccc
+    style PM7 fill:#ffcccc
+    style PM8 fill:#c8e6c9
+    style J fill:#c8e6c9
+```
+
+### Detailed Algorithm Steps
+
+#### **Phase 1: Setup & Strategy Determination**
+1. **Input Processing**: Parse input paths (files/directories)
+2. **Fast File Count**: Lightweight directory traversal to count files
+3. **Strategy Calculation**: 
+   - Calculate max workers based on CPU cores & thread percentage
+   - Apply domain-specific adaptation based on file count
+   - Choose Sequential/Parallel based on mode & file count threshold
+4. **Directory Analysis**: Analyze directory structure, suggest .gitignore improvements
+
+#### **Phase 2: File Collection**  
+5. **WalkBuilder Setup**: Configure ignore::WalkBuilder with:
+   - `.gitignore` respect (git_ignore, git_global, git_exclude)
+   - Symlink following based on config
+   - Directory filtering (node_modules, target, etc.)
+6. **Collect File Paths**: Walk directory tree and collect all candidate file paths
+
+#### **Phase 3: Parallel Execution**
+7. **Worker Allocation**: Distribute file paths across available workers
+8. **Progress Tracking**: Set up enhanced progress reporting (sequential ⏳ vs parallel ⚡)
+
+#### **Phase 4: Per-File Processing Pipeline**
+For each file (executed by worker):
+
+9. **Path-Level Filtering**:
+   - Path ignore check (GlobSet matching against config.ignore_paths)
+   - File size check (against config.max_file_size_mb)
+   - Binary detection (extension check → content inspection)
+
+10. **Content Loading**: Load full file content (whole file, not streaming)
+
+11. **Pattern Matching Pipeline** (THE KEY OPTIMIZATION):
+    ```
+    a) Aho-Corasick Prefilter:
+       - Run keyword automaton against entire file content
+       - Get list of patterns whose keywords are present
+       - Skip ~85% of patterns that have no matching keywords
+    
+    b) FOR EACH active pattern (with keywords found):
+       - Run regex pattern.find_iter() on full content
+       
+       c) FOR EACH regex match found:
+          - Get line containing match
+          - Check if line contains 'guardy:allow' → Skip if yes
+          - Apply entropy analysis → Skip if low entropy
+          - Create SecretMatch with precise location info
+          - Add to final matches list
+    ```
+
+12. **Result Collection**: Return all matches that passed all filters
+
+#### **Phase 5: Result Aggregation & Progress Management**
+13. **Aggregate Results**: Combine results from all workers
+14. **Generate Statistics**: Files scanned/skipped, duration, match counts
+15. **Create Final Report**: ScanResult with matches, stats, and warnings
+
+### Visual Progress & Logging Integration
+
+#### **Progress Reporting System** (Using existing `parallel::progress` module):
+
+**Sequential Mode** (⏳):
+```
+🔍 [00:01:23] ████████████████████████░░░░  1,234/1,500 files ⠈ 📊 Scanned: 1,200 | With Secrets: 15 | Skipped: 34 | Binary: 89
+```
+
+**Parallel Mode** (⚡):
+```
+[Worker 01] ████████████████████████░░░░   312/400 📄 ...src/main.rs
+[Worker 02] ███████████████████████████░   375/400 📄 ...lib/config.rs  
+[Worker 03] ████████████████████████████   400/400 📄 ...tests/unit.rs
+[Worker 04] ████████████████████████░░░░   298/400 📄 ...docs/api.md
+
+Overall:
+[00:01:45] ████████████████████████░░░░  1,385/1,600 files (86%)
+📊 Scanned: 1,301 | With Secrets: 23 | Skipped: 84 | Binary: 121
+```
+
+#### **Progress Integration Points**:
+
+1. **Strategy Selection Display**:
+   ```rust
+   match execution_strategy {
+       ExecutionStrategy::Sequential => output::styled!("🔍 Scanning {} files...", file_count),
+       ExecutionStrategy::Parallel { workers } => output::styled!("⚡ Scanning {} files using {} workers...", file_count, workers),
+   }
+   ```
+
+2. **Per-Worker Updates** (Parallel mode):
+   ```rust
+   // In worker closure
+   progress.update_worker_file(worker_id, &file_path.to_string_lossy());
+   
+   // Statistics updates
+   stats.increment_scanned(); // After successful scan
+   stats.increment_with_secrets(); // If matches found
+   stats.increment_skipped(); // On errors
+   stats.increment_binary(); // For binary files
+   ```
+
+3. **Progress Updates** (Two-tier system):
+   ```rust
+   // Progress bar position: Every 5 files (responsive but not too frequent)
+   if current % 5 == 0 || current == total {
+       progress.update_overall(current, total);
+   }
+   
+   // Statistics message: Every 100 files (reduce visual spam)
+   if completed % 100 == 0 || completed == total {
+       // Update "📊 Scanned: X | With Secrets: Y | Skipped: Z | Binary: W"
+   }
+   
+   // Current file display: Every file (real-time feedback)
+   progress.update_worker_file(worker_id, &file_path);
+   ```
+
+#### **Logging Levels** (Using existing CLI verbose system):
+
+**Level 0 (Default)**:
+- Only show results and errors
+- Progress bars active
+- No debug information
+
+**Level 1 (`-v`)**:
+- Show pattern information: `📋 GitHub Token - GitHub Personal Access Token`
+- Show file-level information for found secrets
+- Show warning summaries
+
+**Level 2 (`-vv`)**:
+- Debug-level logging enabled
+- Show detailed configuration
+- Show detailed directory analysis
+- Show per-pattern statistics
+
+**Level 3+ (`-vvv`)**:
+- Trace-level logging 
+- Show all internal operations
+- Show globset/ignore operations
+
+**Quiet Mode (`-q`)**:
+- Suppress all progress bars
+- Only show final results and errors
+- No visual feedback during processing
+
+#### **Integration with New Scanner**:
+
+```rust
+// In src/scan/core.rs
+impl Scanner {
+    pub fn scan_with_progress(&self, paths: &[String], verbose_level: u8, quiet: bool) -> Result<ScanResult> {
+        // Step 1: Setup progress reporting based on strategy and quiet mode
+        let progress = if quiet {
+            None
+        } else {
+            match execution_strategy {
+                ExecutionStrategy::Sequential => Some(factories::enhanced_sequential_reporter(file_count)),
+                ExecutionStrategy::Parallel { workers } => Some(factories::enhanced_parallel_reporter(file_count, workers)),
+            }
+        };
+
+        // Step 2: Execute with progress integration
+        // Step 3: Handle verbose-level outputs
+        if verbose_level > 0 {
+            // Show pattern information, file details, etc.
+        }
+    }
+}
 ```
 
 **🔴 CRITICAL: Entropy Analysis Integration**
