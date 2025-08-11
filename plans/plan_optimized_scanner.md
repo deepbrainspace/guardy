@@ -26,6 +26,92 @@ This plan outlines the implementation of a next-generation scanner (`scan2`) bas
 
 ## 🏗️ Architecture Overview
 
+### Object-Oriented Design Principles
+
+The scan2 implementation follows proper object-oriented design with clear separation of responsibilities. Each module represents a single responsibility object with well-defined interfaces:
+
+#### Module Structure & Responsibilities
+
+```
+src/scan/
+├── mod.rs           // Public API exports
+├── types.rs         // Shared types/structs (ScanResult, ScannerConfig, etc.)
+├── core.rs          // Core - main orchestrator & coordination
+├── directory.rs     // Directory - traversal, walking & file collection
+├── file.rs          // File - individual file processing & content loading
+├── pattern.rs       // Pattern - secret patterns & regex management
+├── secret.rs        // Secret - match representation & creation
+├── strategy.rs      // Strategy - execution strategies & threading coordination
+├── progress.rs      // Progress - visual progress tracking & reporting
+├── entropy.rs       // Entropy - entropy analysis algorithms
+└── filters/
+    ├── mod.rs
+    ├── directory/   // Directory-level filters (applied before content processing)
+    │   ├── mod.rs
+    │   ├── path.rs      // PathFilter - ignore patterns & directory exclusions
+    │   ├── size.rs      // SizeFilter - file size limits
+    │   └── binary.rs    // BinaryFilter - binary file detection
+    └── content/     // Content-level filters (applied after regex matching)
+        ├── mod.rs
+        ├── context.rs   // ContextFilter - Aho-Corasick keyword prefilter
+        ├── comment.rs   // CommentFilter - guardy:allow comment filtering
+        └── entropy.rs   // EntropyFilter - entropy validation filtering
+```
+
+#### Object Responsibilities & Interactions
+
+**Core Objects:**
+- **Core**: Main orchestrator - coordinates all scanning phases, manages configuration, aggregates results
+- **Directory**: File system operations - traversal, walking, file collection, directory analysis
+- **File**: Individual file operations - content loading, binary detection, single file processing pipeline
+- **Pattern**: Pattern management - regex compilation, pattern loading, pattern matching coordination
+- **Secret**: Match representation - secret match creation, validation, metadata management
+- **Strategy**: Execution coordination - threading, parallel execution, worker allocation, performance optimization
+- **Progress**: Visual feedback - progress bars, statistics display, user interaction
+- **Entropy**: Statistical analysis - entropy calculations, randomness validation
+
+**Filter Hierarchy (Two-Level Architecture):**
+
+1. **Directory-Level Filters** (Pre-Processing):
+   - Applied before file content is loaded
+   - Fast filtering to reduce I/O operations
+   - **PathFilter**: Ignore patterns, directory exclusions
+   - **SizeFilter**: File size validation
+   - **BinaryFilter**: Binary file detection (extension + content inspection)
+
+2. **Content-Level Filters** (Post-Processing):
+   - Applied after regex pattern matching
+   - More sophisticated analysis on potential matches
+   - **ContextFilter**: Aho-Corasick keyword prefiltering (THE KEY OPTIMIZATION)
+   - **CommentFilter**: Inline comment-based ignoring (guardy:allow)
+   - **EntropyFilter**: Statistical entropy validation
+
+#### Integration Flow & Data Flow
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    Object Interaction Flow                     │
+└─────────────────────────────────────────────────────────────────┘
+
+1. Core.scan_with_progress()
+   ├── Strategy.calculate_execution_strategy()
+   ├── Directory.collect_file_paths()
+   ├── Progress.create_reporter()
+   └── Strategy.execute_parallel()
+       └── [For Each Worker Thread]
+           └── File.process_single_file()
+               ├── Directory Filters (PathFilter, SizeFilter, BinaryFilter)
+               ├── File.load_content()
+               ├── Pattern.find_matches()
+               ├── Content Filters (ContextFilter, CommentFilter, EntropyFilter)
+               └── Secret.create_match()
+
+Threading & Progress Integration:
+- Strategy.rs: Handles ExecutionStrategy, crossbeam channels, worker coordination
+- Progress.rs: Handles indicatif progress bars, statistics display, visual updates
+- Core.rs: Coordinates between Strategy and Progress ("use this strategy with this progress reporter")
+```
+
 ### Complete Scanning Algorithm (From Current Scanner Analysis)
 
 Based on analysis of the existing scanner, here's the complete scanning algorithm we need to implement:
@@ -280,27 +366,29 @@ src/
 │   ├── mod.rs            # Existing scanner interface  
 │   ├── core.rs           # Current scanner implementation
 │   └── ...               # All existing scanner modules
-├── scan/                 # New scanner architecture (clean, no marketing terms)
-│   ├── mod.rs            # Public API exports
-│   ├── types.rs          # Core data structures and configuration
-│   ├── core.rs           # Main scanner with complete mermaid diagram flow implementation
-│   ├── patterns/         # Pattern management
-│   │   ├── mod.rs        # Pattern library management and public API
-│   │   └── loader.rs     # Pattern definitions (~40 Guardy + ~30 selected patterns)
-│   ├── file_filters/     # Type 1: File-level filtering (pre-content)
-│   │   ├── mod.rs        # File filter chain orchestration
-│   │   ├── path.rs       # Path ignore checking
-│   │   ├── size.rs       # File size checking (50MB limit)
-│   │   └── binary.rs     # Binary file detection (extension + content)
-│   ├── content_filters/  # Type 2: Pattern-level filtering (post-content)
-│   │   ├── mod.rs        # Content filter chain orchestration
-│   │   ├── prefilter.rs  # Aho-Corasick keyword filtering
-│   │   ├── ignore.rs     # Inline 'guardy:allow' comment filtering
-│   │   └── entropy.rs    # Entropy analysis filtering (exact copy from legacy)
-│   └── processing/       # Core processing (non-filtering)
-│       ├── mod.rs        # Processing orchestration
-│       ├── content.rs    # File content loading
-│       └── matching.rs   # Regex pattern matching engine
+├── scan/                 # New scanner architecture (clean, OOP design)
+│   ├── mod.rs           # Public API exports
+│   ├── types.rs         # Shared types/structs (ScanResult, ScannerConfig, etc.)
+│   ├── core.rs          # Core - main orchestrator & coordination
+│   ├── directory.rs     # Directory - traversal, walking & file collection
+│   ├── file.rs          # File - individual file processing & content loading
+│   ├── pattern.rs       # Pattern - secret patterns & regex management
+│   ├── secret.rs        # Secret - match representation & creation
+│   ├── strategy.rs      # Strategy - execution strategies & threading coordination
+│   ├── progress.rs      # Progress - visual progress tracking & reporting
+│   ├── entropy.rs       # Entropy - entropy analysis algorithms
+│   └── filters/
+│       ├── mod.rs
+│       ├── directory/   # Directory-level filters (applied before content processing)
+│       │   ├── mod.rs
+│       │   ├── path.rs      # PathFilter - ignore patterns & directory exclusions
+│       │   ├── size.rs      # SizeFilter - file size limits
+│       │   └── binary.rs    # BinaryFilter - binary file detection
+│       └── content/     # Content-level filters (applied after regex matching)
+│           ├── mod.rs
+│           ├── context.rs   # ContextFilter - Aho-Corasick keyword prefilter
+│           ├── comment.rs   # CommentFilter - guardy:allow comment filtering
+│           └── entropy.rs   # EntropyFilter - entropy validation filtering
 └── [all existing modules] # Keep all existing: config/, git/, hooks/, parallel/, etc.
 ```
 
