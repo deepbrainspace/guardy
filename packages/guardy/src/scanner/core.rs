@@ -520,11 +520,7 @@ impl Scanner {
         let detector = TestDetector::new(&self.config);
         let ignore_ranges = detector.build_ignore_ranges(&lines, path);
 
-        // First, scan for multi-line patterns on the entire file content
-        let multiline_matches = self.scan_content_multiline(&content, path);
-        matches.extend(multiline_matches);
-
-        // Then, scan line by line for single-line patterns
+        // Collect line-by-line matches first
         for (line_number, line) in lines.iter().enumerate() {
             // Check if this line is in an ignored range
             if ignore_ranges
@@ -551,8 +547,7 @@ impl Scanner {
             matches.extend(line_matches);
         }
 
-        // Remove duplicates that might occur from both scanning methods
-        self.deduplicate_matches(matches)
+        Ok(matches)
     }
 
     fn scan_line(&self, line: &str, file_path: &Path, line_number: usize) -> Vec<SecretMatch> {
