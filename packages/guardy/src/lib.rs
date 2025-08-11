@@ -163,6 +163,7 @@ pub mod hooks;
 pub mod parallel;
 pub mod profiling;
 pub mod reports;
-pub mod scanner;
+pub mod scan;        // New optimized scanner (scan2)
+pub mod scanner;     // Legacy scanner (preserve)
 pub mod shared;
 pub mod sync;

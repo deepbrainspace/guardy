@@ -1,5 +1,17 @@
 # Plan: Optimized Scanner Implementation (scan2)
 
+## 🔄 Working Method
+
+**Critical Implementation Protocol:**
+1. **Explain First**: Always explain exactly what will be implemented before starting any work
+2. **Get Approval**: Wait for user approval before proceeding with implementation  
+3. **Test Yourself**: After implementing, test the functionality yourself thoroughly
+4. **User Testing Instructions**: Provide clear instructions for user to test the implementation
+5. **Continue After Approval**: Only move to the next step after receiving user approval
+6. **Update Plan**: Keep this plan document updated with progress throughout implementation
+
+This ensures quality, transparency, and user confidence throughout the development process.
+
 ## 📋 Overview
 
 This plan outlines the implementation of a next-generation scanner (`scan2`) based on Aho-Corasick + keyword prefiltering strategy, inspired by Gitleaks' proven approach. The goal is to achieve **~5x performance improvement** while maintaining comprehensive pattern coverage.
@@ -59,27 +71,36 @@ graph TD
 ### Module Structure
 ```
 src/
-├── scanner/                 # Legacy scanner (preserve until migration complete)
-│   ├── mod.rs              # Existing scanner interface  
-│   ├── core.rs             # Current scanner implementation
-│   └── ...                 # All existing scanner modules
-├── scan/                   # New optimized scanner architecture
-│   ├── mod.rs              # Public API exports
-│   ├── core.rs             # Main scanner orchestrator
-│   ├── prefilter.rs        # Aho-Corasick keyword filtering
-│   ├── patterns/
-│   │   ├── mod.rs          # Pattern library management
-│   │   ├── classification.rs # Smart pattern categorization
-│   │   ├── gitleaks.rs     # Imported Gitleaks patterns (150+ total)
-│   │   └── guardy.rs       # Migrated Guardy patterns (40+)
-│   ├── engine.rs           # Single-pass pattern matching engine
-│   ├── config.rs           # Configuration & CLI integration
-│   ├── entropy.rs          # Advanced entropy analysis (migrated)
-│   ├── file_handler.rs     # Simple whole-file loading (from core.rs)
-│   ├── binary.rs           # Binary file detection (from directory.rs) 
-│   ├── directory.rs        # Directory orchestration & walking (from directory.rs)
-│   ├── ignore.rs           # Simplified inline ignore system
-│   └── types.rs            # All data structures and types
+├── cli/commands/           # CLI integration (following existing patterns)
+│   ├── scan.rs            # Existing scan command
+│   ├── scan2.rs           # NEW - Development scan2 command
+│   └── ...                # Other existing commands
+├── scanner/               # Legacy scanner (preserve until migration complete)
+│   ├── mod.rs            # Existing scanner interface  
+│   ├── core.rs           # Current scanner implementation
+│   └── ...               # All existing scanner modules
+├── scan/                 # New scanner architecture (clean, no marketing terms)
+│   ├── mod.rs            # Public API exports
+│   ├── types.rs          # Core data structures and configuration
+│   ├── core.rs           # Main scanner with complete mermaid diagram flow implementation
+│   ├── patterns/         # Pattern management
+│   │   ├── mod.rs        # Pattern library management and public API
+│   │   └── loader.rs     # Pattern definitions (~40 Guardy + ~30 selected patterns)
+│   ├── file_filters/     # Type 1: File-level filtering (pre-content)
+│   │   ├── mod.rs        # File filter chain orchestration
+│   │   ├── path.rs       # Path ignore checking
+│   │   ├── size.rs       # File size checking (50MB limit)
+│   │   └── binary.rs     # Binary file detection (extension + content)
+│   ├── content_filters/  # Type 2: Pattern-level filtering (post-content)
+│   │   ├── mod.rs        # Content filter chain orchestration
+│   │   ├── prefilter.rs  # Aho-Corasick keyword filtering
+│   │   ├── ignore.rs     # Inline 'guardy:allow' comment filtering
+│   │   └── entropy.rs    # Entropy analysis filtering (exact copy from legacy)
+│   └── processing/       # Core processing (non-filtering)
+│       ├── mod.rs        # Processing orchestration
+│       ├── content.rs    # File content loading
+│       └── matching.rs   # Regex pattern matching engine
+└── [all existing modules] # Keep all existing: config/, git/, hooks/, parallel/, etc.
 ```
 
 ### CLI Integration Strategy
@@ -148,84 +169,86 @@ src/
 
 ## 📊 Technical Implementation Plan
 
-### Phase 1: Foundation & Data Structure Migration (Day 1)
+### Phase 1: End-to-End Minimal Scanner (Day 1)
 
-#### Task 1.1: Data Structure Migration
-- **File**: `src/scan/types.rs`
+**Goal**: Get a working scan2 command that follows the diagram flow exactly, then optimize iteratively.
+
+**Naming Strategy**:
+- **Development**: Use "scan2" internally for testing and validation
+- **Final Product**: Completely replace existing scanner - users just use `guardy scan`
+- **No Marketing Terms**: Avoid "optimized" or other hype words in user-facing parts
+
+#### Task 1.1: Foundation with Type Compatibility ✅ COMPLETED
+- **File**: `src/scan/types.rs`, `src/scan/mod.rs`
+- **Status**: ✅ **COMPLETED** - Foundation created with exact type compatibility
 - **Purpose**: Exact copy of existing type system to ensure compatibility
-- **Source**: Migrate from `src/scanner/types.rs` preserving all fields
-- **Critical Types**:
+
+#### Task 1.2A: Core Implementation with Complete Flow
+- **File**: `src/scan/core.rs`
+- **Purpose**: Complete scanner implementation with mermaid diagram flow (no separate pipeline module)
+- **Implementation**:
   ```rust
-  // SecretMatch stores metadata about found secrets in files
-  // All fields needed for precise location tracking and reporting
-  pub struct SecretMatch {
-      pub file_path: PathBuf,        // File containing the secret
-      pub line_number: usize,        // Line number in file (1-based)
-      pub line_content: String,      // Full line content for context
-      pub matched_text: String,      // Exact text that matched pattern
-      pub start_position: usize,     // Character position within line
-      pub end_position: usize,       // End character position within line
-      pub secret_type: String,       // Type of secret (API key, token, etc.)
-      pub pattern_description: String, // Human-readable pattern description
+  pub struct Scanner {
+      patterns: PatternManager,
+      file_filters: FileFilterChain,
+      content_filters: ContentFilterChain,
+      config: ScannerConfig,
   }
   
-  pub struct ScannerConfig {
-      // ALL 20+ existing configuration fields
-      pub enable_entropy_analysis: bool,
-      pub min_entropy_threshold: f64,
-      pub include_binary: bool,
-      pub max_file_size_mb: usize,        // UPDATED: 50MB default (was 10MB)
-      pub streaming_threshold_mb: usize,   // NEW: 20MB default (was hardcoded 5MB)
-      pub ignore_patterns: Vec<String>,
-      pub ignore_paths: Vec<String>,
-      pub ignore_comments: Vec<String>,
-      // ... preserve ALL existing fields
+  impl Scanner {
+      pub fn new(config: ScannerConfig) -> Result<Self> { /* ... */ }
+      
+      pub fn scan_file(&self, path: &Path) -> Result<Vec<SecretMatch>> {
+          // Direct implementation of mermaid diagram flow:
+          // 1. File-level filtering (path ignore → size check → binary detection)
+          // 2. Content processing (load content → pattern matching) 
+          // 3. Content filtering (guardy:allow → entropy analysis)
+          // 4. Collect final matches
+      }
+      
+      pub fn scan_paths(&self, paths: &[String]) -> Result<Vec<SecretMatch>> { /* ... */ }
   }
   ```
 
-#### Task 1.2: Entropy Analysis Migration
-- **File**: `src/scan/entropy.rs`
-- **Purpose**: Exact migration of proven entropy analysis system
-- **Source**: Direct copy from `src/scanner/entropy.rs`
-- **Key Features**:
-  - **EXACT preservation**: All 3 statistical methods, 488 bigram patterns
-  - **Memoization**: Keep `memoize` performance optimizations
-  - **Probability calculations**: Preserve binomial distribution logic
-  - **🚨 WARNING**: Do NOT modify algorithms - they are production-tested
-
-#### Task 1.3: File Processing  
-- **File**: `src/scan/file_handler.rs`
-- **Purpose**: Whole-file content loading with size limits
-- **Source**: Extract from `src/scanner/core.rs` (size checks, content loading)
-- **Key Features**:
+#### Task 1.2B: CLI Integration (scan2 Development Command)
+- **File**: `src/cli/commands/scan2.rs`  
+- **Purpose**: Add `guardy scan2` subcommand following existing CLI patterns
+- **Integration**: Update `src/cli/commands/mod.rs` to include scan2 subcommand
+- **Implementation**:
   ```rust
-  pub struct FileProcessor {
-      max_file_size_mb: usize,      // Default: 50MB (configurable via CLI --max-file-size-mb)
-  }
-  
-  impl FileProcessor {
-      pub fn load_file_content(&self, path: &Path) -> Result<String>
-      pub fn is_size_allowed(&self, path: &Path) -> bool  // Check against max_file_size_mb
-      pub fn get_file_size(&self, path: &Path) -> Result<u64>
+  #[derive(clap::Args)]
+  pub struct Scan2Args {
+      #[arg(required = true)]
+      pub paths: Vec<String>,
+      
+      #[arg(long, default_value = "50")]
+      pub max_file_size_mb: usize,
+      
+      #[arg(long)]
+      pub no_entropy: bool,
   }
   ```
 
-#### Task 1.4: Binary File Detection
-- **File**: `src/scan/binary.rs`  
-- **Purpose**: Fast and accurate binary file detection
-- **Source**: Extract from `src/scanner/directory.rs` (lines 9-48)
-- **Key Features**:
-  ```rust
-  pub struct BinaryDetector {
-      binary_extensions: HashSet<String>, // 279 extensions
-  }
-  
-  impl BinaryDetector {
-      pub fn is_binary_file(&self, path: &Path) -> bool
-      pub fn is_binary_by_extension(&self, path: &Path) -> bool  
-      pub fn is_binary_by_content(&self, path: &Path) -> bool
-  }
-  ```
+#### Task 1.2C: Supporting Filter Modules
+- **Files**: `src/scan/file_filters/`, `src/scan/content_filters/`, `src/scan/processing/`
+- **Purpose**: Implement modular components used by core scanner
+- **Components**:
+  - **File Filters**: Path ignore, size check, binary detection (called by core.rs)
+  - **Content Filters**: 'guardy:allow' filtering, entropy analysis (called by core.rs)
+  - **Content Processing**: File loading, pattern matching (called by core.rs)
+
+#### Task 1.3: Pattern Loading (Minimal)
+- **File**: `src/scan/patterns/mod.rs`, `src/scan/patterns/loader.rs`
+- **Purpose**: Load existing Guardy patterns without classification/optimization  
+- **Implementation**: Simple pattern loading (~40 Guardy patterns initially)
+- **Future**: Add selected patterns from other sources (~30 additional)
+
+#### Task 1.4: End-to-End Testing
+- **Purpose**: Test complete workflow and validate against existing scanner
+- **Commands**: 
+  - `guardy scan2 src/` (new implementation)
+  - `guardy scan src/` (existing implementation)  
+- **Validation**: Compare results for accuracy and performance
 
 #### Task 1.5: Directory Orchestration with Performance-First Parallel Processing
 - **File**: `src/scan/directory.rs`
@@ -878,14 +901,13 @@ src/
 
 ## 📋 Implementation Checklist
 
-**Phase 1: Foundation (Day 1)**
-- [ ] Create `src/scan/` module structure
-- [ ] Migrate all data structures with exact compatibility
-- [ ] Copy entropy analysis system (preserve algorithms exactly)
-- [ ] Implement whole-file processing (50MB size limit)
-- [ ] Migrate binary file detection system
-- [ ] Implement two-tier ignore system (file/path ignores + inline 'guardy:allow' comments)
-- [ ] Verify core functionality works with new architecture
+**Phase 1: End-to-End Minimal Scanner (Day 1)**
+- [x] Task 1.1: Foundation with type compatibility  
+- [ ] Task 1.2A: Minimal core structure (`src/scan/core.rs`)
+- [ ] Task 1.2B: CLI integration (`src/cli/commands/scan2.rs`)
+- [ ] Task 1.2C: Complete pipeline implementation (modular architecture)
+- [ ] Task 1.3: Pattern loading (minimal - existing Guardy patterns)
+- [ ] Task 1.4: End-to-end testing (`guardy scan2` vs `guardy scan`)
 
 **Phase 2: Pattern System & Optimization (Day 2)**  
 - [ ] Implement Aho-Corasick keyword prefilter
