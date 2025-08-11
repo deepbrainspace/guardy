@@ -33,12 +33,12 @@ graph TD
     K --> L[Final Results]
     
     style A fill:#e1f5fe
-    style M fill:#f3e5f5
-    style N fill:#fff3e0
-    style O fill:#e8f5e8
-    style P fill:#fff3e0
-    style Q fill:#ffebee
-    style T fill:#e8f5e8
+    style D fill:#f3e5f5
+    style G fill:#fff3e0
+    style H fill:#e8f5e8
+    style I fill:#fff3e0
+    style J fill:#ffebee
+    style K fill:#e8f5e8
 ```
 
 ### Module Structure
@@ -84,12 +84,9 @@ src/
 - **🚨 CRITICAL**: Extensively tested with real-world data, must preserve exact logic
 
 #### 1.1. **Enhanced File Size Configuration** (UPDATED)
-- **Default Maximum File Size**: 50MB (increased from 10MB for modern codebases)
-- **Streaming Threshold**: 20MB (increased from 5MB to handle larger legitimate files)
-- **Configurability**: Both limits fully configurable via CLI and config files
+- **Default Maximum File Size**: 50MB
 - **Override Capability**: `--max-file-size-mb` flag allows per-scan customization
 - **Modern Development**: Accommodates larger bundle files, generated code, and data files
-- **🚨 CRITICAL**: Ensure streaming still works efficiently with larger thresholds
 
 #### 2. **Comprehensive Pattern Library** (patterns.rs)
 - **40+ Production-Ready Patterns**: Private keys, cloud credentials, API tokens, AI services
@@ -98,24 +95,17 @@ src/
 - **Custom Pattern Support**: Error handling for user-defined regex patterns from config
 - **🚨 CRITICAL**: Each pattern represents extensive real-world testing
 
-#### 3. **Four-Tier Ignore System** (integrated across modules)
-- **Path-based**: GlobSet patterns for entire files/directories
+#### 3. **Clean Ignore System**
+- **Path-based**: GlobSet patterns for entire files/directories  
 - **Pattern-based**: Line content patterns (DEMO_KEY_, FAKE_, etc.)
-- **Comment-based**: Inline directives (`guardy:ignore-line`, `guardy:ignore-next`)
-- **Test Detection**: Multi-language test block detection (Rust, Python, TS/JS)
-- **🚨 CRITICAL**: Complex ignore logic prevents false positives in production
+- **Inline directives**: Single `guardy:allow` directive like Gitleaks
+- **🚨 CRITICAL**: Simple, efficient ignore system optimized for performance
 
-#### 4. **Binary File Detection** (directory.rs)
+#### 4. **Binary File Detection** (binary.rs)
 - **Dual-mode Detection**: Extension-based (279 extensions!) + content inspection
 - **Content Inspector Integration**: Uses `content_inspector` crate for accuracy
 - **Memory Efficiency**: Avoids loading large binary files unnecessarily
 - **🚨 CRITICAL**: Prevents scanning of images, compiled code, compressed files
-
-#### 5. **Multi-Language Test Detection** (test_detection.rs)
-- **Language Support**: Rust (`#[test]`, `mod tests`), Python (`def test_*`), JS/TS (`it(`, `describe(`)
-- **Block Detection**: Brace counting for C-like languages, indentation for Python
-- **Range Building**: Line number ranges for efficient skipping during scan
-- **🚨 CRITICAL**: Prevents false positives in test code across multiple languages
 
 #### 6. **Configuration System Integration** (core.rs)
 - **SuperConfig Integration**: YAML/TOML/JSON support with complex merging
@@ -147,16 +137,17 @@ src/
 - **Source**: Migrate from `src/scanner/types.rs` preserving all fields
 - **Critical Types**:
   ```rust
-  // Preserve exact structure to avoid breaking changes
+  // SecretMatch stores metadata about found secrets in files
+  // All fields needed for precise location tracking and reporting
   pub struct SecretMatch {
-      pub file_path: PathBuf,
-      pub line_number: usize,
-      pub line_content: String,
-      pub matched_text: String,
-      pub start_position: usize,
-      pub end_position: usize,
-      pub secret_type: String,
-      pub pattern_description: String,
+      pub file_path: PathBuf,        // File containing the secret
+      pub line_number: usize,        // Line number in file (1-based)
+      pub line_content: String,      // Full line content for context
+      pub matched_text: String,      // Exact text that matched pattern
+      pub start_position: usize,     // Character position within line
+      pub end_position: usize,       // End character position within line
+      pub secret_type: String,       // Type of secret (API key, token, etc.)
+      pub pattern_description: String, // Human-readable pattern description
   }
   
   pub struct ScannerConfig {
@@ -183,36 +174,24 @@ src/
   - **Probability calculations**: Preserve binomial distribution logic
   - **🚨 WARNING**: Do NOT modify algorithms - they are production-tested
 
-#### Task 1.3: Test Detection Migration  
-- **File**: `src/scan/test_detection.rs`
-- **Purpose**: Exact migration of multi-language test block detection
-- **Source**: Direct copy from `src/scanner/test_detection.rs`
-- **Features**:
-  - **Multi-language support**: Rust, Python, TypeScript/JavaScript patterns
-  - **Block algorithms**: Brace counting and indentation detection
-  - **Range building**: Efficient line number range creation
-  - **🚨 CRITICAL**: Complex language-specific logic must be preserved exactly
-
-#### Task 1.4: File Processing & Streaming  
+#### Task 1.3: File Processing  
 - **File**: `src/scan/file_handler.rs`
-- **Purpose**: File content processing and streaming for large files
-- **Source**: Extract from `src/scanner/core.rs` (streaming, size checks, content loading)
+- **Purpose**: Whole-file content loading with size limits
+- **Source**: Extract from `src/scanner/core.rs` (size checks, content loading)
 - **Key Features**:
   ```rust
   pub struct FileProcessor {
-      max_file_size_mb: usize,      // UPDATED: 50MB default (configurable via CLI --max-file-size-mb)
-      streaming_threshold_mb: usize, // UPDATED: 20MB default (configurable via config)
+      max_file_size_mb: usize,      // Default: 50MB (configurable via CLI --max-file-size-mb)
   }
   
   impl FileProcessor {
-      pub fn process_file_content(&self, path: &Path) -> Result<String>
-      pub fn process_file_streaming(&self, path: &Path) -> Result<impl Iterator<Item = String>>
-      pub fn should_use_streaming(&self, path: &Path) -> bool
-      pub fn is_size_allowed(&self, path: &Path) -> bool  // NEW: check against max_file_size_mb
+      pub fn load_file_content(&self, path: &Path) -> Result<String>
+      pub fn is_size_allowed(&self, path: &Path) -> bool  // Check against max_file_size_mb
+      pub fn get_file_size(&self, path: &Path) -> Result<u64>
   }
   ```
 
-#### Task 1.5: Binary File Detection
+#### Task 1.4: Binary File Detection
 - **File**: `src/scan/binary.rs`  
 - **Purpose**: Fast and accurate binary file detection
 - **Source**: Extract from `src/scanner/directory.rs` (lines 9-48)
@@ -229,7 +208,7 @@ src/
   }
   ```
 
-#### Task 1.6: Directory Orchestration
+#### Task 1.5: Directory Orchestration
 - **File**: `src/scan/directory.rs`
 - **Purpose**: High-level directory walking and scan orchestration  
 - **Source**: Extract from `src/scanner/directory.rs` (DirectoryHandler + orchestration logic)
@@ -248,21 +227,21 @@ src/
   }
   ```
 
-#### Task 1.7: Simplified Ignore System
-- **File**: `src/scan/ignore.rs` (much simpler)
-- **Purpose**: Path and pattern ignores only
-- **Source**: Extract path/pattern ignore logic from existing modules
+#### Task 1.6: Ignore System
+- **File**: `src/scan/ignore.rs`
+- **Purpose**: Two-tier ignore system: file/path ignores and inline comment ignores
+- **Source**: Extract ignore logic from existing modules
 - **Implementation**:
   ```rust
   pub struct IgnoreSystem {
-      path_ignorer: GlobSet,
-      pattern_ignorer: Vec<String>,
+      path_ignorer: GlobSet,           // File/directory path ignores (*.log, tests/**, etc.)
+      pattern_ignorer: Vec<String>,    // Content pattern ignores (DEMO_KEY_, FAKE_, etc.)
   }
   
   impl IgnoreSystem {
-      pub fn should_ignore_path(&self, path: &Path) -> bool
-      pub fn should_ignore_by_pattern(&self, content: &str) -> bool
-      // Note: Inline ignores handled in post-processing step
+      pub fn should_ignore_path(&self, path: &Path) -> bool    // File-level ignores
+      pub fn should_ignore_by_pattern(&self, content: &str) -> bool  // Pattern-level ignores
+      // Note: Inline `guardy:allow` comments handled in post-processing step during pattern matching
   }
   ```
 
@@ -679,7 +658,7 @@ src/
   - Small files (< 1MB): Majority of source code
   - Medium files (1-10MB): Package locks, configs
   - Large files (10-50MB): Generated code, large configs
-  - **No streaming tests**: Files >50MB are skipped entirely
+  - **Files >50MB**: Skipped entirely (no streaming complexity)
 
 ## 🧪 Testing Strategy
 
@@ -745,7 +724,14 @@ src/
 ### Dependencies
 - `aho-corasick`: For keyword prefiltering (already in Cargo.toml)
 - `regex`: For pattern matching (already in Cargo.toml)
-- No new external dependencies required
+- No new external dependencies required for MVP
+
+### Future Performance Optimization
+- **Vectorscan Integration**: Optional high-performance backend for scan3
+  - **10-50x performance gains** on complex patterns vs current regex
+  - **Full ARM/Mac support** (unlike Intel Hyperscan)
+  - **Open source BSD license** (vs proprietary Intel versions)
+  - **Implementation**: Phase after scan2 MVP if performance gains justify complexity
 
 ### Design Considerations
 - Clean, modern architecture without legacy constraints
@@ -812,8 +798,9 @@ src/
 - [ ] Create `src/scan/` module structure
 - [ ] Migrate all data structures with exact compatibility
 - [ ] Copy entropy analysis system (preserve algorithms exactly)
-- [ ] Migrate file processing and binary detection
-- [ ] Implement simplified ignore system (inline-only)
+- [ ] Implement whole-file processing (50MB size limit, no streaming)
+- [ ] Migrate binary file detection system
+- [ ] Implement two-tier ignore system (file/path ignores + inline 'guardy:allow' comments)
 - [ ] Verify core functionality works with new architecture
 
 **Phase 2: Pattern System & Optimization (Week 1-2)**  
@@ -821,7 +808,7 @@ src/
 - [ ] Create pattern classification system
 - [ ] Migrate all Guardy patterns to new system
 - [ ] Import Gitleaks patterns to reach 150+ total coverage
-- [ ] Implement single-pass scanning with multi-line support
+- [ ] Implement single-pass whole-file scanning (no streaming, like Gitleaks)
 - [ ] Create pattern matching engine with inline ignore filtering
 
 **Phase 3: Integration (Week 2)**
