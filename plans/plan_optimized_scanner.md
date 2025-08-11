@@ -325,35 +325,7 @@ Overall:
 
 #### **Integration with New Scanner**:
 
-```rust
-// In src/scan/core.rs
-impl Scanner {
-    pub fn scan_with_progress(&self, paths: &[String], verbose_level: u8, quiet: bool) -> Result<ScanResult> {
-        // Step 1: Setup progress reporting based on strategy and quiet mode
-        let progress = if quiet {
-            None
-        } else {
-            match execution_strategy {
-                ExecutionStrategy::Sequential => Some(factories::enhanced_sequential_reporter(file_count)),
-                ExecutionStrategy::Parallel { workers } => Some(factories::enhanced_parallel_reporter(file_count, workers)),
-            }
-        };
-
-        // Step 2: Execute with progress integration
-        // Step 3: Handle verbose-level outputs
-        if verbose_level > 0 {
-            // Show pattern information, file details, etc.
-        }
-    }
-}
-```
-
-**🔴 CRITICAL: Entropy Analysis Integration**
-- **Step J**: After pattern matching, apply entropy analysis to validate randomness
-- **Multi-metric validation**: Distinct values, character distribution, bigram frequency  
-- **Configurable thresholds**: Default 1.0/1e5, with 10x requirement for non-numeric strings
-- **Performance**: Memoized calculations, precompiled regex patterns
-- **Preserved exactly**: All 488 bigram patterns, probability calculations unchanged
+The new scanner integrates with existing progress reporting infrastructure using our clean OOP design. Progress reporting, entropy analysis, and all core functionality are implemented as documented in the current implementation status below.
 
 ### Module Structure
 ```
@@ -494,26 +466,16 @@ src/
 
 ## 🚀 Migration & Rollout Strategy
 
-### Phase 1: Experimental Release (Day 5)
-- **New Command**: `guardy scan2` subcommand available
+### Implementation Phase: Development & Testing
+- **New Command**: `guardy scan2` subcommand available for testing
 - **Coexistence**: Legacy `guardy scan` remains unchanged and default
-- **Testing**: Validate on real codebases
+- **Testing**: Validate on real codebases and benchmark performance
 - **Monitoring**: Performance benchmarking and accuracy validation
 
-### Phase 2: Validation & Refinement (Day 6-7)  
-- **Issue Resolution**: Address any bugs or performance issues found
-- **Feature Parity**: Ensure 100% compatibility with existing functionality
-- **Benchmarking**: Quantify actual performance improvements on diverse codebases
-
-### Phase 3: Promotion to Default (Day 8)
-- **CLI Update**: Make new `scan/` module the default for `guardy scan` command
+### Future: Production Rollout  
+- **CLI Update**: Eventually make new `scan/` module the default for `guardy scan` command
 - **Legacy Preservation**: Keep `guardy scan --legacy` flag for backwards compatibility
 - **Migration Notice**: Notify users of the engine change in release notes
-
-### Phase 4: Legacy Deprecation (Future Version)
-- **Deprecation Warning**: Add deprecation notices for legacy scanner
-- **Community Notice**: Announce timeline for legacy scanner removal
-- **Final Migration**: Remove legacy `scanner/` module in future major version
 
 ## 🔧 Implementation Notes
 
@@ -523,11 +485,7 @@ src/
 - No new external dependencies required for MVP
 
 ### Future Performance Optimization
-- **Vectorscan Integration**: Optional high-performance backend for scan3
-  - **10-50x performance gains** on complex patterns vs current regex
-  - **Full ARM/Mac support** (unlike Intel Hyperscan)
-  - **Open source BSD license** (vs proprietary Intel versions)
-  - **Implementation**: Phase after scan2 MVP if performance gains justify complexity
+- **Optional optimizations**: Consider Vectorscan or similar libraries for even higher performance if needed after scan2 is proven
 
 ### Design Considerations
 - Clean, modern architecture without legacy constraints
@@ -552,21 +510,9 @@ src/
 - Performance optimization recommendations  
 - Advanced configuration options
 
-## ✅ Approval Required
+## 📋 Current Implementation Status
 
-**User Review Points:**
-1. **Architecture**: Approve the module structure and design approach
-2. **Pattern Strategy**: Confirm Gitleaks pattern integration approach  
-3. **Performance Targets**: Validate 5x improvement goal is realistic
-4. **Timeline**: Confirm 3-4 day implementation timeline
-5. **Testing Strategy**: Approve the validation and benchmarking plan
-
-**Next Steps After Approval:**
-1. Begin Phase 1 implementation starting with data structure migration
-2. Set up automated benchmarking infrastructure  
-3. Create initial `src/scan/` module structure
-4. Start with exact legacy functionality preservation
-5. Implement Aho-Corasick prefilter as first optimization
+**Implementation is currently in progress** following the architecture and approach documented above. See the "Implementation Status & Updated Checklist" section below for detailed progress tracking.
 
 ## 🎯 Key Success Criteria
 
