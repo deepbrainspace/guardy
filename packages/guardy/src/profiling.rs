@@ -277,9 +277,8 @@ mod tests {
         // The exact number depends on system CPU cores, so test that it's limited appropriately
         if let ExecutionStrategy::Parallel { workers } = strategy {
             assert!(
-                workers >= 2 && workers <= 6,
-                "Expected 2-6 workers, got {}",
-                workers
+                (2..=6).contains(&workers),
+                "Expected 2-6 workers, got {workers}"
             );
         } else {
             panic!("Expected Parallel strategy for 200 items");
