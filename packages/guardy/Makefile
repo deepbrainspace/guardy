@@ -3,7 +3,7 @@
 # Install all required benchmarking tools
 bench-prepare:
 	@echo "📦 Installing benchmarking dependencies..."
-	
+
 	# Install gitleaks for comparison
 	@if ! command -v gitleaks &> /dev/null; then \
 		echo "🔧 Installing gitleaks..."; \
@@ -19,7 +19,7 @@ bench-prepare:
 	else \
 		echo "✅ gitleaks already installed"; \
 	fi
-	
+
 	# Install gnuplot for better criterion plots
 	@if ! command -v gnuplot &> /dev/null; then \
 		echo "🔧 Installing gnuplot..."; \
@@ -31,7 +31,7 @@ bench-prepare:
 	else \
 		echo "✅ gnuplot already installed"; \
 	fi
-	
+
 	@echo "✅ Benchmark preparation complete!"
 
 # Setup test data for benchmarks

@@ -17,7 +17,7 @@ hooks:
       - command: "date"
         description: "Show current date"
         fail_on_error: false
-  
+
   # Pre-commit hook with custom command
   pre-commit:
     enabled: true
@@ -26,7 +26,7 @@ hooks:
         description: "Pre-commit header"
         fail_on_error: false
     builtin: ["scan_secrets"]  # Enable secret scanning
-    
+
   # Commit-msg hook - testing conventional commits
   commit-msg:
     enabled: true
@@ -41,6 +41,6 @@ hooks:
 #   enabled: true
 #   mode: auto
 
-# Sync configuration (commented out for now)  
+# Sync configuration (commented out for now)
 # sync:
 #   repos: []
