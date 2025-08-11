@@ -18,6 +18,6 @@ pub async fn execute(args: RunArgs, verbosity_level: u8) -> Result<()> {
     let config = GuardyConfig::load(None, None::<&()>, verbosity_level)?;
 
     // Create hook executor and run the hook
-    let executor = HookExecutor::new(config)?;
-    executor.execute(&args.hook, args.args).await
+    let executor = HookExecutor::new(config);
+    executor.execute(&args.hook, &args.args).await
 }

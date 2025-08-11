@@ -23,3 +23,5 @@ fake_test_values.yml
 # Generated reports
 guardy-report-*.html
 guardy-report-*.json
+
+test-data
