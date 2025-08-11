@@ -1,4 +1,4 @@
-# Guardy 
+# Guardy
 
 [![Crates.io](https://img.shields.io/crates/v/guardy.svg)](https://crates.io/crates/guardy)
 [![Documentation](https://docs.rs/guardy/badge.svg)](https://docs.rs/guardy)
@@ -60,7 +60,7 @@ hooks:
         description: "Check formatting"
         fail_on_error: true
         glob: ["*.rs"]  # Only run on Rust files (optional)
-        
+
       - command: "eslint {files} --fix"
         description: "Fix ESLint issues"
         all_files: true  # Run on all files matching glob, not just staged
@@ -107,7 +107,7 @@ sync:
 scanner:
   file_extensions:
     - "*.rs"
-    - "*.js" 
+    - "*.js"
     - "*.py"
   ignore_patterns:
     - "target/"
@@ -175,7 +175,7 @@ scanner:
     - "*.log"
   max_file_size: 1048576  # 1MB
   entropy_threshold: 3.5
-  
+
 # Git hooks configuration
 hooks:
   pre-commit:
@@ -219,7 +219,7 @@ let results = scanner_config.scan_path("src/")?;
 // Process findings
 for finding in results.findings {
     println!(
-        "Secret found in {}: {} (confidence: {:.2})", 
+        "Secret found in {}: {} (confidence: {:.2})",
         finding.file_path,
         finding.secret_type,
         finding.confidence
@@ -251,7 +251,7 @@ hooks:
 
 Guardy automatically profiles your system and workload to determine optimal parallelism:
 - **Small workloads** (≤3 commands): Sequential execution
-- **Medium workloads** (4-5 commands): Conservative parallelism  
+- **Medium workloads** (4-5 commands): Conservative parallelism
 - **Large workloads** (6+ commands): Full parallelism (capped at 8 concurrent commands)
 - **System-aware**: Respects available CPU cores and limits concurrency appropriately
 
@@ -317,7 +317,7 @@ Keep configuration files synchronized across multiple repositories:
 guardy sync status          # Show sync configuration
 
 guardy sync diff            # Preview changes without applying
-guardy sync                 # Interactive update with diffs  
+guardy sync                 # Interactive update with diffs
 guardy sync --force         # Apply all changes automatically
 
 # Bootstrap from a repository
@@ -366,7 +366,7 @@ Features:
 # Scan only Rust files
 guardy scan --include="*.rs" src/
 
-# Scan excluding test files  
+# Scan excluding test files
 guardy scan --exclude="*test*" .
 
 # Output as JSON
@@ -396,7 +396,7 @@ hooks:
 sync:
   repos:
     - name: "eslint-config"
-      repo: "https://github.com/company/eslint-configs"  
+      repo: "https://github.com/company/eslint-configs"
       version: "v2.1.0"
       source_path: "configs"
       dest_path: "."
@@ -432,8 +432,8 @@ Guardy efficiently utilizes OS-level filesystem caching for exceptional performa
 $ guardy scan ~/code/large-project --stats
 ⚡ Scan completed in 91.19s (172,832 files scanned)
 
-# Second run (warm cache) 
-$ guardy scan ~/code/large-project --stats  
+# Second run (warm cache)
+$ guardy scan ~/code/large-project --stats
 ⚡ Scan completed in 33.37s (172,832 files scanned)
 # 🚀 63% faster!
 ```

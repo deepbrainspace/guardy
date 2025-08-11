@@ -20,7 +20,7 @@ hooks:
     #   - command: "cargo clippy -- -D warnings"
     #     description: "Run clippy linter"
     #     fail_on_error: true
-  
+
   commit-msg:
     enabled: false  # Set to true when you add custom commands
     builtin: []
@@ -30,7 +30,7 @@ hooks:
     #   - command: "grep -qE '^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+' $1"
     #     description: "Validate commit message format"
     #     fail_on_error: true
-  
+
   post-checkout:
     enabled: false
     builtin: []
@@ -40,7 +40,7 @@ hooks:
     #   - command: "pnpm install"
     #     description: "Install dependencies"
     #     fail_on_error: false
-  
+
   pre-push:
     enabled: false
     builtin: []
@@ -131,17 +131,17 @@ scanner:
     - ".git/index"
     - "**/.git/objects/**"
     - "**/.git_disabled/**"
-  
+
   ignore_patterns:
     - "# TEST_SECRET:"
     - "DEMO_KEY_"
     - "FAKE_"
-  
+
   ignore_comments:
     - "guardy:ignore"
     - "guardy:ignore-line"
     - "guardy:ignore-next"
-  
+
   # Intelligent test code detection
   ignore_test_code: true
   test_attributes:
@@ -157,7 +157,7 @@ scanner:
     - "it(*"
     - "test(*"
     - "describe(*"
-  
+
   test_modules:
     # Rust
     - "mod tests {"

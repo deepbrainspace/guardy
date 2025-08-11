@@ -7,7 +7,7 @@ Comprehensive performance benchmarks comparing guardy against lefthook and other
 This benchmark suite measures:
 
 1. **Hook Execution Performance** - Comparing guardy vs lefthook for git hooks
-2. **Secret Scanning Performance** - Guardy's core strength vs other tools  
+2. **Secret Scanning Performance** - Guardy's core strength vs other tools
 3. **Parallel Execution Efficiency** - Worker scaling and resource utilization
 4. **Memory Usage** - Resource consumption patterns
 5. **Cold vs Warm Cache** - OS filesystem caching benefits
@@ -16,7 +16,7 @@ This benchmark suite measures:
 
 ### 1. Hook Execution Benchmarks (`hooks/`)
 - **Small projects** (10-100 files): Startup overhead comparison
-- **Medium projects** (1k-10k files): Balanced workload performance  
+- **Medium projects** (1k-10k files): Balanced workload performance
 - **Large projects** (10k+ files): Scalability and parallelism benefits
 - **Custom commands**: Shell command execution overhead
 - **Built-in actions**: Secret scanning, commit validation
@@ -90,7 +90,7 @@ Based on architecture and real-world testing:
 
 **Guardy Advantages:**
 - **OS Cache Optimization**: 2.7x performance improvement (1,900 → 5,200 files/sec)
-- **Parallel execution**: Better CPU utilization on multi-core systems  
+- **Parallel execution**: Better CPU utilization on multi-core systems
 - **Memory efficiency**: <200MB for 100k+ file repositories
 - **Rust performance**: Native speed vs interpreted/VM languages
 

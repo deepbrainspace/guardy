@@ -19,7 +19,7 @@ pub enum ConfigCommand {
     },
     /// Set configuration value
     Set { key: String, value: String },
-    /// Get configuration value  
+    /// Get configuration value
     Get { key: String },
     /// Validate configuration file
     Validate,

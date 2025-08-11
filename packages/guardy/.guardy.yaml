@@ -2,7 +2,7 @@ hooks:
   pre-commit:
     - name: "lint-check"
       command: "echo 'Running lints...' && sleep 0.1"
-    - name: "type-check"  
+    - name: "type-check"
       command: "echo 'Running type check...' && sleep 0.05"
     - name: "test-quick"
       command: "echo 'Running quick tests...' && sleep 0.2"
@@ -18,7 +18,7 @@ hooks:
 scanning:
   enabled: true
   paths: [".", "!node_modules", "!.git"]
-  
+
 parallelism:
   enabled: true
   max_workers: 8

@@ -3,7 +3,7 @@
 //! Guardy is a high-performance git hooks framework written in Rust that provides:
 //!
 //! - **Fast Security Scanning**: Multi-threaded secret detection with entropy analysis
-//! - **Protected File Synchronization**: Keep configuration files in sync across repositories  
+//! - **Protected File Synchronization**: Keep configuration files in sync across repositories
 //! - **Comprehensive Git Hook Support**: Pre-commit, pre-push, and other git hooks
 //! - **Flexible Configuration**: YAML, TOML, and JSON configuration support
 //!
@@ -53,7 +53,7 @@
 //!       - command: "cargo fmt --check"
 //!         description: "Check code formatting"
 //!         fail_on_error: true
-//!   
+//!
 //!   pre-push:
 //!     enabled: true
 //!     custom:
@@ -150,7 +150,7 @@
 //!
 //! - **Multi-threaded scanning** with configurable parallelism
 //! - **Entropy-based secret detection** for high accuracy
-//! - **Git integration** with hooks and remote operations  
+//! - **Git integration** with hooks and remote operations
 //! - **File synchronization** with diff visualization
 //! - **Multiple output formats** (JSON, HTML, plain text)
 //! - **Comprehensive configuration** via YAML/TOML/JSON

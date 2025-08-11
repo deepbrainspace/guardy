@@ -75,7 +75,7 @@
 //! ```rust
 //! use guardy::parallel::ExecutionStrategy;
 //!
-//! // Auto strategy selects parallel vs sequential based on workload  
+//! // Auto strategy selects parallel vs sequential based on workload
 //! let strategy = ExecutionStrategy::auto(100, 50, 8);
 //!
 //! // Or explicitly choose parallel with specific worker count

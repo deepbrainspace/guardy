@@ -42,7 +42,7 @@ supercli = { path = "../supercli", features = ["clap"] }
 which = "8.0.0"
 uuid = { version = "1.17.0", features = ["v4"] }
 
-# Serialization  
+# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
@@ -60,7 +60,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 # Scanner dependencies (ripgrep ecosystem)
 grep = "0.3.2"            # Meta-crate providing unified interface
-grep-searcher = "0.1.14"  # Fast line-oriented searching with mmap support  
+grep-searcher = "0.1.14"  # Fast line-oriented searching with mmap support
 grep-regex = "0.1.13"     # Optimized regex matching for patterns
 ignore = "0.4.23"         # Gitignore support and file walking
 content_inspector = "0.2.4"  # Fast binary file detection

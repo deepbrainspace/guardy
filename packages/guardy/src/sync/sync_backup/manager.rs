@@ -65,7 +65,7 @@ impl SyncManager {
         // For now, just return InSync - we'll implement the actual checking later
         // TODO: Implement actual file comparison logic
         tracing::info!("Checking sync status for {} repositories", self.config.repos.len());
-        
+
         Ok(SyncStatus::InSync)
     }
 
@@ -78,7 +78,7 @@ impl SyncManager {
 
         // For now, just log what we would do
         for repo in &self.config.repos {
-            tracing::info!("Would sync repo '{}' from '{}' version '{}'", 
+            tracing::info!("Would sync repo '{}' from '{}' version '{}'",
                          repo.name, repo.repo, repo.version);
         }
 
@@ -88,12 +88,12 @@ impl SyncManager {
 
     pub fn show_status(&self) -> Result<String> {
         let mut output = String::new();
-        
+
         output.push_str(&format!("Sync Configuration:\n"));
         output.push_str(&format!("  Repositories: {}\n", self.config.repos.len()));
         output.push_str(&format!("  Cache Directory: {}\n", self.cache_dir.display()));
         output.push_str(&format!("  Auto Protect: {}\n", self.config.protection.auto_protect_synced));
-        
+
         if self.config.repos.is_empty() {
             output.push_str("\n❌ No repositories configured\n");
             output.push_str("Run 'guardy sync update --repo=<url> --version=<version>' to bootstrap\n");

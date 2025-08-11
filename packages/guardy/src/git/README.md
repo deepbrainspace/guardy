@@ -16,7 +16,7 @@ This module handles all git repository operations and file discovery. It provide
 
 ### GitRepo (mod.rs)
 - `discover()` - Find git repo from current directory
-- `open(path)` - Open git repo at specific path  
+- `open(path)` - Open git repo at specific path
 - `current_branch()` - Get current branch name
 - `workdir()` - Get working directory path
 

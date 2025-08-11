@@ -8,7 +8,7 @@ The configuration system for Guardy using Figment for flexible, multi-source con
 src/config/
 ├── mod.rs          # Module routing and re-exports only
 ├── core.rs         # GuardyConfig struct and core loading logic
-├── formats.rs      # ConfigFormat enum and export functionality  
+├── formats.rs      # ConfigFormat enum and export functionality
 ├── languages.rs    # Language detection for project types
 └── README.md       # This documentation
 ```
@@ -20,7 +20,7 @@ src/config/
 - **Contains**: `GuardyConfig` struct, loading methods, getter methods
 - **Tests**: Configuration loading, environment variables, default values
 
-### `formats.rs` 
+### `formats.rs`
 - **Purpose**: Configuration export and formatting
 - **Contains**: `ConfigFormat` enum, export methods, syntax highlighting
 - **Tests**: Export functionality, format conversion, syntax highlighting
@@ -56,7 +56,7 @@ Guardy uses custom Figment providers from the `guardy-figment-providers` package
 - **No file extensions required** - `guardy` automatically detects format
 - **Content-based detection** - examines file structure, not just filename
 
-### SkipEmpty Provider  
+### SkipEmpty Provider
 - **Filters empty CLI values** to prevent overriding config files
 - **Prevents accidental config masking** from empty arrays/strings
 - **Smart value filtering** - preserves intentional falsy values (false, 0)
@@ -72,7 +72,7 @@ Guardy uses custom Figment providers from the `guardy-figment-providers` package
 2. **Environment Variables** - `GUARDY_*` with nested mapping via NestedEnv
 3. **Custom Config** - Auto-detected format via Universal provider
 4. **Repository Config** - `guardy.{toml,json,yaml,yml}` with auto-detection
-5. **User Config** - `~/.config/guardy/config.{toml,json,yaml,yml}` with auto-detection  
+5. **User Config** - `~/.config/guardy/config.{toml,json,yaml,yml}` with auto-detection
 6. **Default Config** (lowest) - Embedded `default-config.toml`
 
 ## Usage Examples

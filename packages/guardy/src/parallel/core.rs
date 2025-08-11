@@ -233,7 +233,7 @@ impl ExecutionStrategy {
     ///
     /// **Client Responsibilities:**
     /// - Calculate system resource limits
-    /// - Apply domain-specific worker adaptation  
+    /// - Apply domain-specific worker adaptation
     /// - Provide final optimal worker count
     ///
     /// **This Method's Responsibility:**
