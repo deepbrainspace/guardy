@@ -129,7 +129,7 @@ src/
 
 ## 📊 Technical Implementation Plan
 
-### Phase 1: Foundation & Data Structure Migration (Week 1)
+### Phase 1: Foundation & Data Structure Migration (Day 1)
 
 #### Task 1.1: Data Structure Migration
 - **File**: `src/scan/types.rs`
@@ -245,7 +245,7 @@ src/
   }
   ```
 
-### Phase 2: Core Pattern System (Week 1-2)
+### Phase 2: Core Pattern System (Day 2)
 
 #### Task 2.1: Aho-Corasick Keyword Prefilter
 - **File**: `src/scan/prefilter.rs`
@@ -357,20 +357,11 @@ src/
   }
   ```
 
-#### Task 2.4: Single-Pass Pattern Engine
-- **File**: `src/scan/engine.rs` (integrated approach)
-- **Purpose**: Handle both single-line and multi-line patterns in single pass
-- **Strategy**: 
-  - Apply all patterns (single & multi-line) to entire file content at once
-  - No separate multiline processing - unified approach
-  - Natural multi-line regex matching on whole content
-- **Benefit**: Simpler architecture, no pattern coordination complexity
+### Phase 3: Core Scanner Architecture (Day 3)
 
-### Phase 3: Core Scanner Architecture (Week 2)
-
-#### Task 3.1: Pattern Matching Engine
+#### Task 3.1: Single-Pass Pattern Matching Engine
 - **File**: `src/scan/engine.rs`
-- **Purpose**: Execute pattern matching on prefiltered content
+- **Purpose**: Execute pattern matching on prefiltered content with unified single/multi-line approach
 - **Strategy**: Smart execution based on pattern classification
 - **Implementation**:
   ```rust
@@ -541,7 +532,7 @@ src/
   }
   ```
 
-### Phase 4: CLI Integration & Testing (Week 2)
+### Phase 4: CLI Integration & Testing (Day 4)
 
 #### Task 4.1: Clean CLI Implementation  
 - **File**: `src/cli/commands/scan2.rs`
@@ -694,30 +685,26 @@ src/
 
 ## 🚀 Migration & Rollout Strategy
 
-### Phase 1: Experimental Release (Week 3)
+### Phase 1: Experimental Release (Day 5)
 - **New Command**: `guardy scan2` subcommand available
 - **Coexistence**: Legacy `guardy scan` remains unchanged and default
-- **Testing**: Extensive validation on real codebases
+- **Testing**: Validate on real codebases
 - **Monitoring**: Performance benchmarking and accuracy validation
-- **Feedback**: Gather user feedback on new features and performance
 
-### Phase 2: Validation & Refinement (Week 4)  
+### Phase 2: Validation & Refinement (Day 6-7)  
 - **Issue Resolution**: Address any bugs or performance issues found
 - **Feature Parity**: Ensure 100% compatibility with existing functionality
-- **Documentation**: Complete user guides and migration documentation
 - **Benchmarking**: Quantify actual performance improvements on diverse codebases
 
-### Phase 3: Promotion to Default (Week 5)
+### Phase 3: Promotion to Default (Day 8)
 - **CLI Update**: Make new `scan/` module the default for `guardy scan` command
 - **Legacy Preservation**: Keep `guardy scan --legacy` flag for backwards compatibility
 - **Migration Notice**: Notify users of the engine change in release notes
-- **Monitoring**: Watch for any regressions or user issues
 
 ### Phase 4: Legacy Deprecation (Future Version)
 - **Deprecation Warning**: Add deprecation notices for legacy scanner
 - **Community Notice**: Announce timeline for legacy scanner removal
 - **Final Migration**: Remove legacy `scanner/` module in future major version
-- **Cleanup**: Remove unused dependencies and code paths
 
 ## 🔧 Implementation Notes
 
@@ -762,7 +749,7 @@ src/
 1. **Architecture**: Approve the module structure and design approach
 2. **Pattern Strategy**: Confirm Gitleaks pattern integration approach  
 3. **Performance Targets**: Validate 5x improvement goal is realistic
-4. **Timeline**: Confirm 2-3 week implementation timeline
+4. **Timeline**: Confirm 3-4 day implementation timeline
 5. **Testing Strategy**: Approve the validation and benchmarking plan
 
 **Next Steps After Approval:**
@@ -794,24 +781,24 @@ src/
 
 ## 📋 Implementation Checklist
 
-**Phase 1: Foundation (Week 1)**
+**Phase 1: Foundation (Day 1)**
 - [ ] Create `src/scan/` module structure
 - [ ] Migrate all data structures with exact compatibility
 - [ ] Copy entropy analysis system (preserve algorithms exactly)
-- [ ] Implement whole-file processing (50MB size limit, no streaming)
+- [ ] Implement whole-file processing (50MB size limit)
 - [ ] Migrate binary file detection system
 - [ ] Implement two-tier ignore system (file/path ignores + inline 'guardy:allow' comments)
 - [ ] Verify core functionality works with new architecture
 
-**Phase 2: Pattern System & Optimization (Week 1-2)**  
+**Phase 2: Pattern System & Optimization (Day 2)**  
 - [ ] Implement Aho-Corasick keyword prefilter
 - [ ] Create pattern classification system
 - [ ] Migrate all Guardy patterns to new system
-- [ ] Import Gitleaks patterns to reach 150+ total coverage
-- [ ] Implement single-pass whole-file scanning (no streaming, like Gitleaks)
-- [ ] Create pattern matching engine with inline ignore filtering
+- [ ] Import select Gitleaks patterns for enhanced coverage
+- [ ] Implement single-pass whole-file scanning engine
+- [ ] Create pattern matching with inline ignore filtering
 
-**Phase 3: Integration (Week 2)**
+**Phase 3: Integration (Day 3)**
 - [ ] Implement main scanner orchestrator
 - [ ] Create configuration integration layer
 - [ ] Add CLI subcommand `guardy scan2`
@@ -819,10 +806,10 @@ src/
 - [ ] Implement comprehensive test coverage
 - [ ] Performance validation on real codebases
 
-**Phase 4: Rollout (Week 3+)**
+**Phase 4: Rollout (Days 4-8)**
 - [ ] Release experimental `scan2` subcommand
-- [ ] Gather community feedback and fix issues
-- [ ] Complete performance optimization based on benchmarks
+- [ ] Validate performance and accuracy improvements
+- [ ] Address any issues found during testing
 - [ ] Promote to default scanner engine
 - [ ] Plan legacy scanner deprecation timeline
 
@@ -830,6 +817,6 @@ src/
 
 **Created**: 2025-08-11  
 **Status**: Awaiting User Approval  
-**Estimated Timeline**: 2-3 weeks implementation + 1 week rollout  
+**Estimated Timeline**: 3-4 days implementation + 4-5 days rollout  
 **Risk Level**: Low-Medium (simplified architecture, proven Gitleaks approach)  
 **Dependencies**: User approval, comprehensive legacy functionality analysis complete
