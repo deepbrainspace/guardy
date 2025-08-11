@@ -67,7 +67,7 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// ```text
 /// File Count Ranges → Worker Adaptation
 /// ≤10 files    → Use min(2, max_workers)        # Minimal parallelism
-/// ≤50 files    → Use 50% of max_workers        # Conservative  
+/// ≤50 files    → Use 50% of max_workers        # Conservative
 /// ≤100 files   → Use 75% of max_workers        # Moderate
 /// >100 files   → Use 100% of max_workers       # Aggressive
 /// ```
@@ -94,7 +94,7 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// 4. Strategy Decision                          ← ← ← ← ← ← ← ← ← ← ← ← ← ←
 ///    ┌─────────────────────────────────────────┐
 ///    │ auto(file_count=36, threshold=50, workers=6) │
-///    │ → 36 < 50 → ExecutionStrategy::Sequential    │  
+///    │ → 36 < 50 → ExecutionStrategy::Sequential    │
 ///    └─────────────────────────────────────────────┘
 /// ```
 ///
@@ -114,7 +114,7 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// - Single-threaded execution
 /// - No resource overhead
 ///
-/// ## Parallel Mode  
+/// ## Parallel Mode
 /// ```rust,no_run
 /// use guardy::scanner::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
@@ -148,7 +148,7 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// let strategy = match mode {
 ///     ScanMode::Auto => {
 ///         let max_workers = ExecutionStrategy::calculate_optimal_workers(config.max_threads, config.thread_percentage);     // Resource-based
-///         let optimal_workers = DirectoryHandler::adapt_workers_for_file_count(files, max_workers); // Domain-adaptive  
+///         let optimal_workers = DirectoryHandler::adapt_workers_for_file_count(files, max_workers); // Domain-adaptive
 ///         ExecutionStrategy::auto(files, threshold, optimal_workers)  // Threshold decision
 ///     },
 ///     _ => unreachable!(),
@@ -269,7 +269,7 @@ impl DirectoryHandler {
     /// ```text
     /// ≤10 files    → min(2, max_workers)         # Minimal overhead
     /// ≤50 files    → min(max_workers/2, max_workers)   # Conservative scaling
-    /// ≤100 files   → min(max_workers*3/4, max_workers) # Moderate scaling  
+    /// ≤100 files   → min(max_workers*3/4, max_workers) # Moderate scaling
     /// >100 files   → max_workers                 # Full utilization
     /// ```
     ///

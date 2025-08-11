@@ -156,13 +156,13 @@ impl ReportGenerator {
                 btn.textContent = '▲';
             }}
         }}
-        
+
         function filterTable(inputId, tableId) {{
             const input = document.getElementById(inputId);
             const table = document.getElementById(tableId);
             const filter = input.value.toLowerCase();
             const rows = table.getElementsByTagName('tr');
-            
+
             for (let i = 1; i < rows.length; i++) {{
                 const row = rows[i];
                 const text = row.textContent.toLowerCase();
@@ -177,7 +177,7 @@ impl ReportGenerator {
             <h1>🛡️ Guardy Security Scan Report</h1>
             <p>Generated on {}</p>
         </div>
-        
+
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-number">{}</div>
@@ -200,9 +200,9 @@ impl ReportGenerator {
                 <div>Scan Time</div>
             </div>
         </div>
-        
+
         {}
-        
+
         {}
     </div>
 </body>
@@ -273,7 +273,7 @@ impl ReportGenerator {
                 <button class="toggle-btn">▼</button>
             </div>
             <div id="{}" class="section-content collapsible">
-                <input type="text" class="search-box" placeholder="Filter {} results..." 
+                <input type="text" class="search-box" placeholder="Filter {} results..."
                        onkeyup="filterTable('search-{}', 'table-{}')" id="search-{}">
                 <table id="table-{}">
                     <thead>
@@ -352,7 +352,7 @@ impl ReportGenerator {
                 <button class="toggle-btn">▼</button>
             </div>
             <div id="{}" class="section-content collapsible">
-                <input type="text" class="search-box" placeholder="Filter {} warnings..." 
+                <input type="text" class="search-box" placeholder="Filter {} warnings..."
                        onkeyup="filterTable('search-{}', 'table-{}')" id="search-{}">
                 <table id="table-{}">
                     <thead>

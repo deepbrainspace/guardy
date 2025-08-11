@@ -123,7 +123,7 @@ let strategy = ExecutionStrategy::Parallel { workers: 4 };
 // 1. Calculate system resources (in parallel module)
 let max_workers = ExecutionStrategy::calculate_optimal_workers(config.max_threads, config.thread_percentage);
 
-// 2. Apply domain adaptation (in client module)  
+// 2. Apply domain adaptation (in client module)
 let optimal_workers = MyModule::adapt_workers_for_domain(workload_size, max_workers);
 
 // 3. Strategy selection (in parallel module)

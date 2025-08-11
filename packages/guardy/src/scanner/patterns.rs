@@ -267,41 +267,35 @@ impl SecretPatterns {
                 regex: Regex::new(r"AGE-SECRET-KEY-1[\dA-Z]{58}")?,
                 description: "Age encryption secret keys".to_string(),
             },
-            // Private key patterns - exclude documentation contexts
+            // Comprehensive private key detection - matches full key content
             SecretPattern {
-                name: "DSA Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN DSA PRIVATE KEY-{5}$")?,
-                description: "DSA private key headers (full line match)".to_string(),
+                name: "Private Key (Comprehensive)".to_string(),
+                regex: Regex::new(r"(?s)-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\s\S]{64,}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----")?,
+                description: "Comprehensive private key detection including RSA, DSA, EC, OpenSSH, PGP with full content".to_string(),
             },
+            // SSL/TLS Certificates
             SecretPattern {
-                name: "EC Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN EC PRIVATE KEY-{5}$")?,
-                description: "Elliptic Curve private key headers (full line match)".to_string(),
+                name: "SSL/TLS Certificate".to_string(),
+                regex: Regex::new(r"(?s)-----BEGIN[ A-Z0-9_-]{0,100}CERTIFICATE[ A-Z0-9_-]{0,100}-----[\s\S]{64,}?-----END[ A-Z0-9_-]{0,100}CERTIFICATE[ A-Z0-9_-]{0,100}-----")?,
+                description: "SSL/TLS certificates and certificate signing requests with full content".to_string(),
             },
+            // SSH public key content (for authorized_keys format)
             SecretPattern {
-                name: "OpenSSH Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN OPENSSH PRIVATE KEY-{5}$")?,
-                description: "OpenSSH private key headers (full line match)".to_string(),
+                name: "SSH Public Key Content".to_string(),
+                regex: Regex::new(r"ssh-(?:rsa|dss|ed25519|ecdsa-sha2-nistp(?:256|384|521))\s+[A-Za-z0-9+/]{100,}={0,2}")?,
+                description: "SSH public key content in authorized_keys format".to_string(),
             },
+            // Certificate Signing Request (CSR)
             SecretPattern {
-                name: "PGP Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN PGP PRIVATE KEY BLOCK-{5}$")?,
-                description: "PGP private key headers (full line match)".to_string(),
+                name: "Certificate Signing Request".to_string(),
+                regex: Regex::new(r"(?s)-----BEGIN[ A-Z0-9_-]{0,100}CERTIFICATE REQUEST[ A-Z0-9_-]{0,100}-----[\s\S]{64,}?-----END[ A-Z0-9_-]{0,100}CERTIFICATE REQUEST[ A-Z0-9_-]{0,100}-----")?,
+                description: "Certificate Signing Requests (CSR) with full content".to_string(),
             },
+            // Legacy pattern support - header-only detection for compatibility
             SecretPattern {
-                name: "PKCS Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN PRIVATE KEY-{5}$")?,
-                description: "PKCS#8 private key headers (full line match)".to_string(),
-            },
-            SecretPattern {
-                name: "RSA Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN RSA PRIVATE KEY-{5}$")?,
-                description: "RSA private key headers (full line match)".to_string(),
-            },
-            SecretPattern {
-                name: "SSH2 Encrypted Private Key".to_string(),
-                regex: Regex::new(r"^-{5}BEGIN SSH2 ENCRYPTED PRIVATE KEY-{5}$")?,
-                description: "SSH2 encrypted private key headers (full line match)".to_string(),
+                name: "Private Key Header".to_string(),
+                regex: Regex::new(r"-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----")?,
+                description: "Private key headers (for backward compatibility)".to_string(),
             },
             // Modern AI API Keys (2024-2025)
             SecretPattern {

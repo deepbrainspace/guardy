@@ -206,7 +206,7 @@ pub mod factories {
         StatisticsProgressReporter::sequential(total_files)
     }
 
-    /// Create an enhanced statistics progress reporter for parallel scanning  
+    /// Create an enhanced statistics progress reporter for parallel scanning
     pub fn enhanced_parallel_reporter(
         total_files: usize,
         worker_count: usize,

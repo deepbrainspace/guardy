@@ -7,6 +7,7 @@ mod external;
 mod git;
 mod hooks;
 mod parallel;
+mod profiling;
 mod reports;
 mod scanner;
 mod shared;

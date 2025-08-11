@@ -18,7 +18,7 @@ pub struct SyncRepo {
     pub version: String,
     #[serde(default = "default_source_path")]
     pub source_path: String,
-    #[serde(default = "default_dest_path")]  
+    #[serde(default = "default_dest_path")]
     pub dest_path: String,
     #[serde(default)]
     pub include: Vec<String>,

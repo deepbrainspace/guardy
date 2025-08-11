@@ -20,6 +20,10 @@ manual_is_multiple_of = "allow"
 name = "guardy"
 path = "src/main.rs"
 
+[[bench]]
+name = "realistic_benchmarks"
+harness = false
+
 [dependencies]
 # Configuration
 superconfig = "0.1.0"
@@ -38,12 +42,16 @@ supercli = { path = "../supercli", features = ["clap"] }
 which = "8.0.0"
 uuid = { version = "1.17.0", features = ["v4"] }
 
-# Serialization  
+# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 serde_yml = { workspace = true }
 anyhow = { workspace = true }
+
+# Git and validation
+git-conventional = "0.12.8"
+walkdir = "2.5.0"
 
 # Async and logging
 tokio = { version = "1.46.1", features = ["full"] }
@@ -52,7 +60,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 # Scanner dependencies (ripgrep ecosystem)
 grep = "0.3.2"            # Meta-crate providing unified interface
-grep-searcher = "0.1.14"  # Fast line-oriented searching with mmap support  
+grep-searcher = "0.1.14"  # Fast line-oriented searching with mmap support
 grep-regex = "0.1.13"     # Optimized regex matching for patterns
 ignore = "0.4.23"         # Gitignore support and file walking
 content_inspector = "0.2.4"  # Fast binary file detection
@@ -73,3 +81,5 @@ indicatif = "0.18"
 tempfile = "3.20.0"
 assert_cmd = "2.0.17"
 predicates = "3.1.3"
+criterion = { version = "0.7", features = ["html_reports"] }
+sysinfo = "0.36"

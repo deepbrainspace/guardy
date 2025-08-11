@@ -287,12 +287,12 @@ fn get_another_key() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // This entire module should be ignored - uses github token
     fn get_test_secret() -> String {
         FAKE_VALUES.github_tokens[0].clone()
     }
-    
+
     #[test]
     fn another_test() {
         // Uses JWT token
@@ -364,12 +364,12 @@ const apiKey = "***REMOVED***";
 describe("My test suite", () => {
     // This entire block should be ignored
     const testSecret = "***REMOVED***";
-    
+
     it("should do something", () => {
         const anotherSecret = "***REMOVED***";
         expect(true).toBe(true);
     });
-    
+
     test("another test", () => {
         const testKey = "***REMOVED***";
     });
@@ -436,7 +436,7 @@ class TestClass:
     # This entire class should be ignored
     def setUp(self):
         self.secret = "***REMOVED***"
-    
+
     def test_method(self):
         key = "***REMOVED***"
 
