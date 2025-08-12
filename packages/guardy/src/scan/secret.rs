@@ -48,21 +48,21 @@ impl Secret {
     ) -> Result<SecretMatch> {
         // Convert file path to string
         let file_path_str = file_path.to_string_lossy().to_string();
-        
+
         // Extract the line content containing this match
         let line_content = Self::extract_line_content(file_content, regex_match.line_number)
             .with_context(|| format!(
                 "Failed to extract line content for match at line {} in {}",
                 regex_match.line_number, file_path_str
             ))?;
-        
+
         // Validate the match data
         Self::validate_match_data(regex_match, &line_content)
             .with_context(|| format!(
                 "Invalid match data for pattern '{}' in {}",
                 pattern.name, file_path_str
             ))?;
-        
+
         // Create the SecretMatch object
         Ok(SecretMatch {
             file_path: file_path_str,
@@ -96,21 +96,21 @@ impl Secret {
         if line_number == 0 {
             return Err(anyhow::anyhow!("Line number must be >= 1, got {}", line_number));
         }
-        
+
         let lines: Vec<&str> = file_content.lines().collect();
-        
+
         if line_number > lines.len() {
             return Err(anyhow::anyhow!(
                 "Line number {} exceeds file line count {}",
                 line_number, lines.len()
             ));
         }
-        
+
         // Convert to 0-based index and extract line
         let line_index = line_number - 1;
         let line_content = lines.get(line_index)
             .ok_or_else(|| anyhow::anyhow!("Failed to get line {} from content", line_number))?;
-        
+
         Ok(line_content.to_string())
     }
 
@@ -138,18 +138,18 @@ impl Secret {
         if regex_match.value.is_empty() {
             return Err(anyhow::anyhow!("Match text cannot be empty"));
         }
-        
+
         if regex_match.start >= regex_match.end {
             return Err(anyhow::anyhow!(
                 "Invalid match positions: start {} >= end {}",
                 regex_match.start, regex_match.end
             ));
         }
-        
+
         if regex_match.line_number == 0 {
             return Err(anyhow::anyhow!("Line number must be >= 1"));
         }
-        
+
         // Check column positions are within line bounds
         if regex_match.column_start > line_content.len() {
             return Err(anyhow::anyhow!(
@@ -157,14 +157,14 @@ impl Secret {
                 regex_match.column_start, line_content.len()
             ));
         }
-        
+
         if regex_match.column_end > line_content.len() {
             return Err(anyhow::anyhow!(
                 "Column end {} exceeds line length {}",
                 regex_match.column_end, line_content.len()
             ));
         }
-        
+
         // Verify the match text appears in the line content
         // Note: This is a sanity check - the exact position might differ due to line endings
         if !line_content.contains(&regex_match.value) {
@@ -174,7 +174,7 @@ impl Secret {
             );
             // Don't fail here as this can happen with different line endings
         }
-        
+
         Ok(())
     }
 
@@ -185,7 +185,7 @@ impl Secret {
     ///
     /// # Parameters
     /// - `file_path`: Path to the file where matches were found
-    /// - `pattern`: The pattern that generated these matches  
+    /// - `pattern`: The pattern that generated these matches
     /// - `regex_matches`: List of regex matches to process
     /// - `file_content`: Full file content for context extraction
     ///
@@ -203,7 +203,7 @@ impl Secret {
     ) -> Vec<SecretMatch> {
         let mut secret_matches = Vec::new();
         let file_path_str = file_path.to_string_lossy();
-        
+
         for (i, regex_match) in regex_matches.iter().enumerate() {
             match Self::create_match(file_path, pattern, regex_match, file_content) {
                 Ok(secret_match) => {
@@ -218,12 +218,12 @@ impl Secret {
                 }
             }
         }
-        
+
         tracing::debug!(
             "Created {} secret matches from {} regex matches for pattern '{}' in {}",
             secret_matches.len(), regex_matches.len(), pattern.name, file_path_str
         );
-        
+
         secret_matches
     }
 
@@ -249,26 +249,26 @@ impl Secret {
         context_lines: usize,
     ) -> Result<MatchContext> {
         let lines: Vec<&str> = file_content.lines().collect();
-        
+
         if line_number == 0 || line_number > lines.len() {
             return Err(anyhow::anyhow!(
                 "Line number {} out of bounds (1-{})",
                 line_number, lines.len()
             ));
         }
-        
+
         let line_index = line_number - 1; // Convert to 0-based
-        
+
         // Calculate context range
         let start_line = line_index.saturating_sub(context_lines);
         let end_line = std::cmp::min(line_index + context_lines + 1, lines.len());
-        
+
         // Extract context lines
         let context_lines_vec: Vec<String> = lines[start_line..end_line]
             .iter()
             .map(|s| s.to_string())
             .collect();
-        
+
         Ok(MatchContext {
             target_line: line_number,
             context_start_line: start_line + 1, // Convert back to 1-based

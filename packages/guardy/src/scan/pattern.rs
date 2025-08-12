@@ -74,7 +74,7 @@ struct PatternsConfig {
 }
 
 /// Global shared pattern cache - compiled once, shared across all threads
-/// 
+///
 /// This provides significant performance benefits:
 /// - Regex compilation happens only once per program execution
 /// - All threads share the same compiled patterns via Arc (zero-copy sharing)
@@ -84,7 +84,7 @@ struct PatternsConfig {
 static STATIC_PATTERNS: LazyLock<Arc<Vec<Pattern>>> = LazyLock::new(|| {
     tracing::debug!("Initializing shared pattern cache - loading base and custom patterns");
     let start_time = std::time::Instant::now();
-    
+
     // Step 1: Load base patterns (embedded, always available)
     let mut all_patterns = match Pattern::load_embedded_patterns_internal() {
         Ok(base_patterns) => {
@@ -97,7 +97,7 @@ static STATIC_PATTERNS: LazyLock<Arc<Vec<Pattern>>> = LazyLock::new(|| {
             Vec::new()
         }
     };
-    
+
     // Step 2: Try to load custom patterns (optional, may fail)
     match Pattern::load_custom_patterns_runtime() {
         Ok(custom_patterns) => {
@@ -111,11 +111,11 @@ static STATIC_PATTERNS: LazyLock<Arc<Vec<Pattern>>> = LazyLock::new(|| {
             // Continue with base patterns only - don't fail the entire initialization
         }
     }
-    
+
     let duration = start_time.elapsed();
-    tracing::info!("Compiled {} total patterns in {:?} - now cached for all threads", 
+    tracing::info!("Compiled {} total patterns in {:?} - now cached for all threads",
                   all_patterns.len(), duration);
-    
+
     Arc::new(all_patterns)
 });
 
@@ -157,17 +157,17 @@ impl Pattern {
     fn load_embedded_patterns_internal() -> Result<Vec<Pattern>> {
         // Load embedded YAML at compile time
         const EMBEDDED_PATTERNS: &str = include_str!("../../assets/patterns.yaml");
-        
+
         let patterns_config: PatternsConfig = serde_yml::from_str(EMBEDDED_PATTERNS)
             .with_context(|| "Failed to parse embedded patterns YAML")?;
-        
+
         let mut patterns = Vec::new();
         for yaml_pattern in patterns_config.patterns {
             let pattern = Self::from_yaml_pattern(yaml_pattern.clone())
                 .with_context(|| format!("Failed to compile pattern: {}", yaml_pattern.name))?;
             patterns.push(pattern);
         }
-        
+
         tracing::debug!("Loaded {} embedded patterns", patterns.len());
         Ok(patterns)
     }
@@ -176,7 +176,7 @@ impl Pattern {
     fn from_yaml_pattern(yaml_pattern: YamlPattern) -> Result<Pattern> {
         let regex = Regex::new(&yaml_pattern.regex)
             .with_context(|| format!("Invalid regex pattern: {}", yaml_pattern.regex))?;
-        
+
         let class = match yaml_pattern.classification.as_str() {
             "specific" => PatternClass::Specific,
             "contextual" => PatternClass::Contextual,
@@ -201,7 +201,7 @@ impl Pattern {
         // - ~/.config/guardy/patterns.yaml
         // - --patterns-file CLI argument (if available in global config)
         // - Environment variables for custom pattern paths
-        
+
         let patterns = Vec::new();
         tracing::debug!("Custom patterns not yet implemented");
         Ok(patterns)
@@ -210,7 +210,7 @@ impl Pattern {
     /// Filter patterns by keywords found in content (for Aho-Corasick optimization)
     pub fn filter_by_keywords(patterns: &[Pattern], found_keywords: &[String]) -> Vec<&Pattern> {
         let found_set: std::collections::HashSet<_> = found_keywords.iter().collect();
-        
+
         patterns
             .iter()
             .filter(|pattern| {
@@ -231,7 +231,7 @@ impl Pattern {
         let mut matches = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
         let mut line_start_positions = vec![0];
-        
+
         // Build line position index for accurate line/column reporting
         let mut pos = 0;
         for line in &lines {
@@ -251,7 +251,7 @@ impl Pattern {
                 .position(|&pos| pos > start)
                 .unwrap_or(lines.len())
                 .saturating_sub(1);
-            
+
             let line_start = line_start_positions[line_number];
             let column_start = start - line_start;
             let column_end = end - line_start;
@@ -273,7 +273,7 @@ impl Pattern {
     pub fn classification_str(&self) -> &str {
         match self.class {
             PatternClass::Specific => "specific",
-            PatternClass::Contextual => "contextual", 
+            PatternClass::Contextual => "contextual",
             PatternClass::AlwaysRun => "always_run",
         }
     }

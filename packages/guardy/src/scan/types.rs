@@ -73,7 +73,7 @@ pub struct ScannerConfig {
     pub max_file_size_mb: usize,        // Updated: 50MB default (was 10MB)
     pub streaming_threshold_mb: usize,  // New: 20MB default (was hardcoded 5MB)
     pub include_binary: bool,
-    
+
     // Ignore system configuration
     pub ignore_paths: Vec<String>,
     pub ignore_patterns: Vec<String>,
@@ -82,16 +82,16 @@ pub struct ScannerConfig {
     pub ignore_test_code: bool,
     pub test_attributes: Vec<String>,
     pub test_modules: Vec<String>,
-    
+
     // Parallel processing configuration
     pub mode: ScanMode,
-    pub max_threads: usize,             // 0 = no hard limit, use percentage calculation  
+    pub max_threads: usize,             // 0 = no hard limit, use percentage calculation
     pub thread_percentage: u8,          // Default: 75% of available CPU cores
     pub min_files_for_parallel: usize,  // Default: 5 files (lower threshold for I/O-bound scanning)
-    
+
     // New optimization options for scan2
     pub enable_keyword_prefilter: bool,    // Default: true
-    pub pattern_classification: bool,      // Default: true  
+    pub pattern_classification: bool,      // Default: true
     pub prefilter_threshold: f32,          // Default: 0.1
     pub max_multiline_size: usize,         // Default: 1MB
 }
@@ -104,9 +104,9 @@ impl Default for ScannerConfig {
             min_entropy_threshold: 1.0 / 1e5,
             follow_symlinks: false,
             max_file_size_mb: 50,           // Modern default (was 10MB)
-            streaming_threshold_mb: 20,     // Modern default (was hardcoded 5MB)  
+            streaming_threshold_mb: 20,     // Modern default (was hardcoded 5MB)
             include_binary: false,
-            
+
             // Ignore system configuration
             ignore_paths: vec![
                 "tests/*".to_string(),
@@ -196,13 +196,13 @@ impl Default for ScannerConfig {
             ignore_test_code: true,
             test_attributes: vec![],
             test_modules: vec![],
-            
+
             // Parallel processing defaults (performance-first approach)
             mode: ScanMode::Auto,
             max_threads: 0,                 // No hard limit - use percentage calculation
-            thread_percentage: 75,          // Use 75% of available CPU cores  
+            thread_percentage: 75,          // Use 75% of available CPU cores
             min_files_for_parallel: 5,      // Lower threshold for I/O-bound scanning (was 50)
-            
+
             // New optimization defaults for scan2
             enable_keyword_prefilter: true,
             pattern_classification: true,

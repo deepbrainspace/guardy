@@ -23,10 +23,10 @@ impl File {
     }
 
     /// Process a single file and return all secret matches found
-    /// 
+    ///
     /// This is the main entry point for file processing that orchestrates:
     /// 1. File content loading with size limits
-    /// 2. Binary file detection and handling  
+    /// 2. Binary file detection and handling
     /// 3. Pattern matching pipeline execution
     /// 4. Secret match creation and validation
     ///
@@ -85,7 +85,7 @@ impl File {
             .with_context(|| format!("Failed to read metadata for {}", file_path.display()))?;
 
         let file_size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
-        
+
         // Check against maximum file size limit
         if file_size_mb > config.max_file_size_mb {
             return Err(anyhow::anyhow!(
@@ -126,7 +126,7 @@ impl File {
         // Step 1: Aho-Corasick prefiltering (context filter)
         // This eliminates ~85% of patterns before expensive regex execution
         let potential_keywords = crate::scan::filters::content::context::ContextFilter::prefilter_content(content, config)?;
-        
+
         if potential_keywords.is_empty() {
             // No keywords found, skip expensive regex processing
             return Ok(matches);
@@ -139,10 +139,10 @@ impl File {
         for pattern in relevant_patterns {
             // Step 3: Match Loop - find all regex matches for this pattern
             let regex_matches = pattern.find_all_matches(content)?;
-            
+
             for regex_match in regex_matches {
                 // Step 4: Content Filters - validate each match
-                
+
                 // 4a. Comment filter - skip matches in guardy:allow comments
                 if crate::scan::filters::content::comment::CommentFilter::is_in_allowed_comment(content, regex_match.start())? {
                     continue;
@@ -216,9 +216,9 @@ impl File {
 
         let file_size_bytes = metadata.len();
         let file_size_mb = file_size_bytes as f64 / (1024.0 * 1024.0);
-        
+
         let is_binary = crate::scan::filters::directory::binary::is_binary_file_by_extension(
-            file_path, 
+            file_path,
             &[] // Use empty extensions list for quick check
         );
 

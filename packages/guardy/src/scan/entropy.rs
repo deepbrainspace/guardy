@@ -18,7 +18,7 @@ use std::sync::{Arc, LazyLock};
 /// 4. Use statistical heuristics to distinguish random from non-random text
 
 /// Pre-compiled regex patterns for entropy analysis (zero-copy shared across threads)
-/// 
+///
 /// These regexes are expensive to compile and immutable, so we compile them once
 /// and share across all entropy analysis calls via Arc for zero-copy access.
 static STATIC_HEX_REGEX: LazyLock<Arc<Regex>> = LazyLock::new(|| {
@@ -30,7 +30,7 @@ static STATIC_CAP_AND_NUMBERS_REGEX: LazyLock<Arc<Regex>> = LazyLock::new(|| {
 });
 
 /// Pre-computed bigram set for fast lookup (zero-copy shared across threads)
-/// 
+///
 /// This contains 488 common bigrams found in source code. Computing this set
 /// on every entropy call is wasteful - better to compute once and share via Arc.
 static STATIC_BIGRAMS: LazyLock<Arc<HashSet<&'static [u8]>>> = LazyLock::new(|| {
@@ -41,7 +41,7 @@ static STATIC_BIGRAMS: LazyLock<Arc<HashSet<&'static [u8]>>> = LazyLock::new(|| 
 });
 
 /// Character class definitions for entropy analysis (zero-copy shared constants)
-/// 
+///
 /// These define the character ranges used for different base encodings
 /// and are used frequently in entropy calculations. Wrapped in Arc for zero-copy sharing.
 static STATIC_HEX_CHARS: LazyLock<Arc<(u8, u8, f64)>> = LazyLock::new(|| Arc::new((b'0', b'9', 16.0)));
@@ -128,7 +128,7 @@ impl Entropy {
             64.0
         };
 
-        let mut probability = Self::probability_random_distinct_values(s, base) 
+        let mut probability = Self::probability_random_distinct_values(s, base)
                             * Self::probability_random_char_class(s, base);
 
         if base == 64.0 {
@@ -255,7 +255,7 @@ impl Entropy {
     }
 
     /// Recursive helper for distinct configurations calculation
-    /// 
+    ///
     /// Note: This could be optimized with memoization if performance becomes critical,
     /// but for typical secret detection workloads the current implementation is sufficient.
     fn num_distinct_configurations_aux(

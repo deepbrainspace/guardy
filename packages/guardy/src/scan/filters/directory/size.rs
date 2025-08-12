@@ -52,20 +52,20 @@ pub struct SizeFilter {
 
 impl SizeFilter {
     /// Create a new size filter with configuration
-    /// 
+    ///
     /// # Arguments
     /// * `config` - Scanner configuration with size limits in MB
-    /// 
+    ///
     /// # Returns
     /// A configured size filter ready for use
     pub fn new(config: &ScannerConfig) -> Result<Self> {
         let max_file_size_bytes = (config.max_file_size_mb as u64) * 1024 * 1024;
         let streaming_threshold_bytes = (config.streaming_threshold_mb as u64) * 1024 * 1024;
-        
+
         let mut stats = SizeFilterStats::default();
         stats.max_file_size_bytes = max_file_size_bytes;
         stats.streaming_threshold_bytes = streaming_threshold_bytes;
-        
+
         tracing::debug!(
             "Size filter initialized: max_file_size={}MB ({}bytes), streaming_threshold={}MB ({}bytes)",
             config.max_file_size_mb,
@@ -73,33 +73,33 @@ impl SizeFilter {
             config.streaming_threshold_mb,
             streaming_threshold_bytes
         );
-        
+
         Ok(Self {
             max_file_size_bytes,
             streaming_threshold_bytes,
             stats: std::sync::Mutex::new(stats),
         })
     }
-    
+
     /// Check if a file should be filtered out due to size limits
-    /// 
+    ///
     /// # Arguments
     /// * `path` - Path to the file to check
-    /// 
+    ///
     /// # Returns
     /// * `Ok(true)` - File should be filtered out (too large)
     /// * `Ok(false)` - File passes size check
     /// * `Err(_)` - Error accessing file metadata
-    /// 
+    ///
     /// # Performance
     /// Uses filesystem metadata only - no file I/O required
     pub fn should_filter(&self, path: &Path) -> Result<bool> {
         let metadata = std::fs::metadata(path)
             .with_context(|| format!("Failed to get metadata for file: {}", path.display()))?;
-        
+
         let file_size = metadata.len();
         let should_filter = file_size > self.max_file_size_bytes;
-        
+
         // Update statistics
         if let Ok(mut stats) = self.stats.lock() {
             stats.files_checked += 1;
@@ -108,7 +108,7 @@ impl SizeFilter {
                 stats.total_bytes_saved += file_size;
             }
         }
-        
+
         if should_filter {
             tracing::debug!(
                 "File filtered due to size: {} ({} bytes > {} bytes limit)",
@@ -117,18 +117,18 @@ impl SizeFilter {
                 self.max_file_size_bytes
             );
         }
-        
+
         Ok(should_filter)
     }
-    
+
     /// Check if a file should use streaming processing
-    /// 
+    ///
     /// Files larger than the streaming threshold should be processed using
     /// streaming to avoid loading the entire file into memory at once.
-    /// 
-    /// # Arguments  
+    ///
+    /// # Arguments
     /// * `path` - Path to the file to check
-    /// 
+    ///
     /// # Returns
     /// * `Ok(true)` - File should use streaming processing
     /// * `Ok(false)` - File can be loaded fully into memory
@@ -136,10 +136,10 @@ impl SizeFilter {
     pub fn should_use_streaming(&self, path: &Path) -> Result<bool> {
         let metadata = std::fs::metadata(path)
             .with_context(|| format!("Failed to get metadata for file: {}", path.display()))?;
-        
+
         let file_size = metadata.len();
         let use_streaming = file_size > self.streaming_threshold_bytes;
-        
+
         if use_streaming {
             tracing::trace!(
                 "File will use streaming: {} ({} bytes > {} bytes threshold)",
@@ -148,41 +148,41 @@ impl SizeFilter {
                 self.streaming_threshold_bytes
             );
         }
-        
+
         Ok(use_streaming)
     }
-    
+
     /// Get file size in bytes for a given path
-    /// 
+    ///
     /// # Arguments
     /// * `path` - Path to the file
-    /// 
+    ///
     /// # Returns
     /// File size in bytes, or error if file cannot be accessed
     pub fn get_file_size(&self, path: &Path) -> Result<u64> {
         let metadata = std::fs::metadata(path)
             .with_context(|| format!("Failed to get metadata for file: {}", path.display()))?;
-        
+
         Ok(metadata.len())
     }
-    
+
     /// Get file size in MB for human-readable display
-    /// 
+    ///
     /// # Arguments
     /// * `path` - Path to the file
-    /// 
+    ///
     /// # Returns
     /// File size in megabytes (MB), rounded to 2 decimal places
     pub fn get_file_size_mb(&self, path: &Path) -> Result<f64> {
         let size_bytes = self.get_file_size(path)?;
         Ok(size_bytes as f64 / (1024.0 * 1024.0))
     }
-    
+
     /// Filter a list of paths, removing those that exceed size limits
-    /// 
+    ///
     /// # Arguments
     /// * `paths` - List of paths to filter
-    /// 
+    ///
     /// # Returns
     /// Vector of paths that pass size validation
     pub fn filter_paths<P: AsRef<Path>>(&self, paths: &[P]) -> Vec<&P> {
@@ -192,7 +192,7 @@ impl SizeFilter {
                 match self.should_filter(path.as_ref()) {
                     Ok(should_filter) => !should_filter,
                     Err(e) => {
-                        tracing::warn!("Error checking file size for {}: {}", 
+                        tracing::warn!("Error checking file size for {}: {}",
                                      path.as_ref().display(), e);
                         false // Filter out files we can't check
                     }
@@ -200,9 +200,9 @@ impl SizeFilter {
             })
             .collect()
     }
-    
+
     /// Get current filter statistics
-    /// 
+    ///
     /// # Returns
     /// Statistics about files processed by this filter
     pub fn get_stats(&self) -> SizeFilterStats {
@@ -210,7 +210,7 @@ impl SizeFilter {
             .map(|stats| stats.clone())
             .unwrap_or_default()
     }
-    
+
     /// Reset statistics counters
     pub fn reset_stats(&self) {
         if let Ok(mut stats) = self.stats.lock() {
@@ -220,9 +220,9 @@ impl SizeFilter {
             // Keep configuration values (max_file_size_bytes, streaming_threshold_bytes)
         }
     }
-    
+
     /// Get human-readable size limit information
-    /// 
+    ///
     /// # Returns
     /// Tuple of (max_size_mb, streaming_threshold_mb) for display purposes
     pub fn get_limits_mb(&self) -> (f64, f64) {

@@ -18,7 +18,7 @@ fn test_secret_match_creation() {
         author: Some("test@example.com".to_string()),
         timestamp: Some("2023-01-01T12:00:00Z".to_string()),
     };
-    
+
     assert_eq!(secret_match.rule_id, "test_rule");
     assert_eq!(secret_match.description, "Test Secret");
     assert_eq!(secret_match.match_text, "secret123");
@@ -30,18 +30,18 @@ fn test_secret_match_creation() {
 fn test_secret_match_validation() -> Result<()> {
     let config = ScannerConfig::default();
     let patterns = Pattern::load_patterns(&config)?;
-    
+
     // Find a pattern to test with
     let pattern = patterns.iter().find(|p| !p.keywords.is_empty())
         .expect("Should have at least one pattern with keywords");
-    
+
     // Test content that should match
     let test_content = "const api_key = 'abcd1234567890abcd1234567890abcd';";
-    
+
     if pattern.regex.is_match(test_content) {
         let captures = pattern.regex.captures(test_content).unwrap();
         let secret = captures.get(pattern.secret_group).unwrap();
-        
+
         let secret_match = SecretMatch {
             rule_id: pattern.id.clone(),
             description: pattern.description.clone(),
@@ -55,13 +55,13 @@ fn test_secret_match_validation() -> Result<()> {
             author: None,
             timestamp: None,
         };
-        
+
         assert_eq!(secret_match.rule_id, pattern.id);
         assert_eq!(secret_match.description, pattern.description);
         assert!(!secret_match.match_text.is_empty());
         assert_eq!(secret_match.entropy, pattern.entropy);
     }
-    
+
     Ok(())
 }
 
@@ -80,7 +80,7 @@ fn test_secret_match_with_git_info() {
         author: Some("developer@company.com".to_string()),
         timestamp: Some("2023-12-01T14:30:00Z".to_string()),
     };
-    
+
     // Validate git information is preserved
     assert_eq!(secret_match.commit_hash, Some("abc123def456".to_string()));
     assert_eq!(secret_match.author, Some("developer@company.com".to_string()));
@@ -102,7 +102,7 @@ fn test_secret_match_without_git_info() {
         author: None,
         timestamp: None,
     };
-    
+
     // Should handle None values gracefully
     assert!(secret_match.commit_hash.is_none());
     assert!(secret_match.author.is_none());
@@ -124,7 +124,7 @@ fn test_secret_match_display() {
         author: Some("dev@example.com".to_string()),
         timestamp: Some("2023-11-15T09:30:00Z".to_string()),
     };
-    
+
     // Test that all fields are accessible
     assert_eq!(secret_match.rule_id, "aws_access_key");
     assert_eq!(secret_match.description, "AWS Access Key ID");
@@ -139,7 +139,7 @@ fn test_secret_match_display() {
 #[test]
 fn test_secret_match_collections() {
     let mut secrets = Vec::new();
-    
+
     // Add multiple secrets
     secrets.push(SecretMatch {
         rule_id: "rule1".to_string(),
@@ -154,7 +154,7 @@ fn test_secret_match_collections() {
         author: None,
         timestamp: None,
     });
-    
+
     secrets.push(SecretMatch {
         rule_id: "rule2".to_string(),
         description: "Second Secret".to_string(),
@@ -168,16 +168,16 @@ fn test_secret_match_collections() {
         author: None,
         timestamp: None,
     });
-    
+
     assert_eq!(secrets.len(), 2);
-    
+
     // Test filtering by entropy
     let high_entropy: Vec<_> = secrets.iter()
         .filter(|s| s.entropy > 3.2)
         .collect();
     assert_eq!(high_entropy.len(), 1);
     assert_eq!(high_entropy[0].rule_id, "rule2");
-    
+
     // Test grouping by file
     let mut by_file = std::collections::HashMap::new();
     for secret in &secrets {
@@ -202,7 +202,7 @@ fn test_secret_match_edge_cases() {
         author: Some("".to_string()),      // Empty author
         timestamp: Some("".to_string()),   // Empty timestamp
     };
-    
+
     // Should handle edge cases gracefully
     assert_eq!(secret_match.description, "");
     assert_eq!(secret_match.match_text, "");
@@ -210,7 +210,7 @@ fn test_secret_match_edge_cases() {
     assert_eq!(secret_match.entropy, 0.0);
 }
 
-#[test] 
+#[test]
 fn test_secret_match_sorting() {
     let mut secrets = vec![
         SecretMatch {
@@ -240,12 +240,12 @@ fn test_secret_match_sorting() {
             timestamp: None,
         },
     ];
-    
+
     // Sort by line number
     secrets.sort_by(|a, b| a.line_number.cmp(&b.line_number));
     assert_eq!(secrets[0].line_number, 5);
     assert_eq!(secrets[1].line_number, 10);
-    
+
     // Sort by entropy (descending)
     secrets.sort_by(|a, b| b.entropy.partial_cmp(&a.entropy).unwrap());
     assert_eq!(secrets[0].entropy, 5.0);

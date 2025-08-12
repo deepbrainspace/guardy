@@ -48,19 +48,19 @@ impl Strategy {
     fn calculate_worker_count(config: &ScannerConfig, file_count: usize) -> usize {
         // Get system profile (cached - computed once per program run)
         let profile = system_profile::SystemProfile::get();
-        
+
         // Calculate max workers based on config
         let max_workers = profile.calculate_workers_with_limit(
             config.thread_percentage,
             config.max_threads
         );
-        
+
         // Apply domain-specific adaptation based on file count
         profile.adapt_workers_for_workload(file_count, max_workers)
     }
 
     /// Execute scanning with the chosen strategy
-    /// 
+    ///
     /// This delegates to the existing parallel module's ExecutionStrategy implementation,
     /// similar to how the existing scanner does it in directory.rs:465-537
     pub fn execute(
@@ -72,7 +72,7 @@ impl Strategy {
     ) -> Result<Vec<SecretMatch>> {
         // Get statistics reference for tracking
         let stats = progress_reporter.as_ref().map(|p| p.stats());
-        
+
         // Structure to hold results from file scanning
         #[derive(Debug)]
         struct ScanFileResult {
@@ -81,7 +81,7 @@ impl Strategy {
             success: bool,
             error: Option<String>,
         }
-        
+
         // Execute file scanning using the generic parallel framework
         // This is the same pattern as directory.rs:466-537
         let scan_results = strategy.execute(
@@ -90,7 +90,7 @@ impl Strategy {
                 let scanner = scanner.clone();
                 let stats = stats.clone();
                 let progress_for_worker = progress_reporter.clone();
-                
+
                 move |file_path: &PathBuf, worker_id: usize| -> ScanFileResult {
                     // Update worker bar with current file (if parallel)
                     if let Some(ref progress) = progress_for_worker {
@@ -98,9 +98,9 @@ impl Strategy {
                             progress.update_worker_file(worker_id, &file_path.to_string_lossy());
                         }
                     }
-                    
+
                     // Check if this is a binary file first
-                    if !scanner.config.include_binary && 
+                    if !scanner.config.include_binary &&
                        crate::scan::filters::directory::binary::is_binary_file(file_path, &scanner.config.binary_extensions) {
                         // Update statistics for binary files
                         if let Some(ref stats) = stats {
@@ -113,7 +113,7 @@ impl Strategy {
                             error: None,
                         };
                     }
-                    
+
                     // Process the file
                     match crate::scan::file::File::process_single_file(file_path, &scanner.config) {
                         Ok(matches) => {
@@ -159,7 +159,7 @@ impl Strategy {
                 }
             }),
         )?;
-        
+
         // Collect all matches from results
         let mut all_matches = Vec::new();
         for result in scan_results {
@@ -167,12 +167,12 @@ impl Strategy {
                 all_matches.extend(result.matches);
             }
         }
-        
+
         // Finish progress reporting
         if let Some(ref progress) = progress_reporter {
             progress.finish();
         }
-        
+
         Ok(all_matches)
     }
 }

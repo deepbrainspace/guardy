@@ -12,7 +12,7 @@
 //! - **Size filtering**: File size limits and validation
 //! - **Binary detection**: Extension-based + content inspection fallback
 //!
-//! ### Content-Level Filters (Post-Processing) 
+//! ### Content-Level Filters (Post-Processing)
 //! Applied after regex pattern matching to refine results:
 //! - **Context prefiltering**: Aho-Corasick keyword matching (KEY OPTIMIZATION)
 //! - **Comment filtering**: Inline ignore directives (guardy:allow)

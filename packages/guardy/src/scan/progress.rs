@@ -77,7 +77,7 @@ impl Progress {
     /// Create a new sequential progress reporter
     pub fn new_sequential(total_files: usize) -> Result<Self> {
         let multi_progress = Arc::new(MultiProgress::new());
-        
+
         // Create overall progress bar for sequential mode
         let overall_bar = ProgressBar::new(total_files as u64);
         overall_bar.set_style(
@@ -86,7 +86,7 @@ impl Progress {
                 .unwrap()
                 .progress_chars("█▉▊▋▌▍▎▏  "),
         );
-        
+
         let overall_bar = multi_progress.add(overall_bar);
 
         Ok(Self {
@@ -102,7 +102,7 @@ impl Progress {
     /// Create a new parallel progress reporter with worker bars
     pub fn new_parallel(total_files: usize, worker_count: usize) -> Result<Self> {
         let multi_progress = Arc::new(MultiProgress::new());
-        
+
         // Create overall progress bar
         let overall_bar = ProgressBar::new(total_files as u64);
         overall_bar.set_style(
@@ -125,7 +125,7 @@ impl Progress {
                     .tick_strings(&["▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"]),
             );
             worker_bar.set_message("Waiting for files...");
-            
+
             let worker_bar = multi_progress.add(worker_bar);
             worker_bars.push(worker_bar);
         }
@@ -144,16 +144,16 @@ impl Progress {
     pub fn update_overall(&self, current: usize, total: usize) {
         self.overall_bar.set_position(current as u64);
         self.overall_bar.set_length(total as u64);
-        
+
         // Update statistics display every 100 files or at completion
         if current % 100 == 0 || current == total {
             let snapshot = self.stats.get_snapshot();
             let elapsed = self.start_time.elapsed();
             let rate = current as f64 / elapsed.as_secs_f64();
-            
+
             if self.is_parallel {
                 self.overall_bar.set_message(format!(
-                    "{} workers | {:.1} files/s | {} scanned, {} with secrets", 
+                    "{} workers | {:.1} files/s | {} scanned, {} with secrets",
                     self.worker_bars.len(),
                     rate,
                     snapshot.files_scanned,
@@ -161,7 +161,7 @@ impl Progress {
                 ));
             } else {
                 self.overall_bar.set_message(format!(
-                    "{:.1} files/s | {} scanned, {} with secrets", 
+                    "{:.1} files/s | {} scanned, {} with secrets",
                     rate,
                     snapshot.files_scanned,
                     snapshot.files_with_secrets
@@ -178,7 +178,7 @@ impl Progress {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(file_path);
-            
+
             worker_bar.set_message(format!("Scanning {}", filename));
             worker_bar.tick();
         }
@@ -193,7 +193,7 @@ impl Progress {
     pub fn finish(&self) {
         let snapshot = self.stats.get_snapshot();
         let elapsed = self.start_time.elapsed();
-        
+
         // Finish overall bar with final message
         let final_message = format!(
             "Completed in {:.2}s | {} scanned, {} with secrets",
@@ -201,14 +201,14 @@ impl Progress {
             snapshot.files_scanned,
             snapshot.files_with_secrets
         );
-        
+
         self.overall_bar.finish_with_message(final_message);
-        
+
         // Finish worker bars
         for (i, worker_bar) in self.worker_bars.iter().enumerate() {
             worker_bar.finish_with_message(format!("Worker {} completed", i + 1));
         }
-        
+
         // Give UI time to update
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -218,7 +218,7 @@ impl Progress {
 /// (Maintains compatibility with existing codebase structure)
 pub mod factories {
     use super::*;
-    
+
     /// Create enhanced sequential progress reporter
     pub fn enhanced_sequential_reporter(total_files: usize) -> Arc<Progress> {
         Arc::new(
@@ -226,8 +226,8 @@ pub mod factories {
                 .expect("Failed to create sequential progress reporter")
         )
     }
-    
-    /// Create enhanced parallel progress reporter  
+
+    /// Create enhanced parallel progress reporter
     pub fn enhanced_parallel_reporter(total_files: usize, worker_count: usize) -> Arc<Progress> {
         Arc::new(
             Progress::new_parallel(total_files, worker_count)

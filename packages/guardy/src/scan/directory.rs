@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 ///
 /// Responsibilities:
 /// - Directory traversal and walking
-/// - File path collection  
+/// - File path collection
 /// - Directory analysis and warnings
 /// - Fast file counting
 /// - Gitignore integration
@@ -43,17 +43,17 @@ impl Directory {
     /// Collect all file paths for scanning
     pub fn collect_file_paths(paths: &[String], config: &ScannerConfig) -> Result<Vec<PathBuf>> {
         let mut all_paths = Vec::new();
-        
+
         for path_str in paths {
             let path = Path::new(path_str);
-            
+
             if path.is_file() {
                 // Single file - add directly
                 all_paths.push(path.to_path_buf());
             } else if path.is_dir() {
                 // Directory - use WalkBuilder for traversal
                 let walker = Self::build_walker(path, config);
-                
+
                 for entry in walker {
                     match entry {
                         Ok(entry) => {
@@ -69,26 +69,26 @@ impl Directory {
                 }
             }
         }
-        
+
         Ok(all_paths)
     }
 
     /// Build a WalkBuilder with proper gitignore and filtering
     fn build_walker(path: &Path, config: &ScannerConfig) -> ignore::Walk {
         let mut builder = WalkBuilder::new(path);
-        
+
         // Respect gitignore files
         builder
             .git_ignore(true)
             .git_global(true)
             .git_exclude(true);
-        
+
         // Follow symlinks if configured
         builder.follow_links(config.follow_symlinks);
-        
+
         // Add standard exclusions (node_modules, target, etc.)
         Self::add_standard_exclusions(&mut builder);
-        
+
         builder.build()
     }
 
@@ -104,7 +104,7 @@ impl Directory {
         let vcs_dirs = [".git", ".svn", ".hg"];
         let ide_dirs = [".vscode", ".idea", ".vs"];
         let coverage_dirs = ["coverage", ".nyc_output"];
-        
+
         // Combine all exclusions
         let mut all_exclusions = Vec::new();
         all_exclusions.extend_from_slice(&rust_dirs);
@@ -116,7 +116,7 @@ impl Directory {
         all_exclusions.extend_from_slice(&vcs_dirs);
         all_exclusions.extend_from_slice(&ide_dirs);
         all_exclusions.extend_from_slice(&coverage_dirs);
-        
+
         // Add each pattern as an ignore rule
         for pattern in all_exclusions {
             builder.add_ignore(format!("**/{}", pattern));
