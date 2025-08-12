@@ -165,7 +165,9 @@ impl Scanner {
         // Calculate proper statistics from progress tracking
         let (files_scanned, files_skipped) = if let Some(progress) = &progress_reporter {
             let stats_snapshot = progress.stats().get_snapshot();
-            (stats_snapshot.files_scanned, stats_snapshot.files_skipped)
+            // Total skipped = error skips + binary file skips
+            let total_skipped = stats_snapshot.files_skipped + stats_snapshot.binary_files;
+            (stats_snapshot.files_scanned, total_skipped)
         } else {
             (filtered_file_paths.len(), 0)
         };
