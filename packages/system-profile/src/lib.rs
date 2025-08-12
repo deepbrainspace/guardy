@@ -63,7 +63,7 @@ impl SystemProfile {
         // Get system information
         let mut sys = System::new_with_specifics(
             sysinfo::RefreshKind::new()
-                .with_memory()
+                .with_memory(sysinfo::MemoryRefreshKind::everything())
         );
         sys.refresh_memory();
         
