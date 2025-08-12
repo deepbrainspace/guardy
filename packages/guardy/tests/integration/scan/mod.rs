@@ -10,7 +10,7 @@ pub mod pattern;
 pub mod secret;
 
 #[cfg(test)]
-pub mod entropy;
+pub mod gitcrypted_entropy;
 
 #[cfg(test)]
-pub mod file;
+pub mod gitcrypted_file;
