@@ -100,18 +100,23 @@ impl Strategy {
                     }
 
                     // Check if this is a binary file first
-                    if !scanner.config.include_binary &&
-                       crate::scan::filters::directory::binary::is_binary_file(file_path, &scanner.config.binary_extensions) {
-                        // Update statistics for binary files
-                        if let Some(ref stats) = stats {
-                            stats.increment_binary();
+                    if !scanner.config.include_binary {
+                        if let Ok(binary_filter) = crate::scan::filters::directory::binary::BinaryFilter::new(&scanner.config) {
+                            if let Ok(should_filter) = binary_filter.should_filter(file_path) {
+                                if should_filter {
+                                    // Update statistics for binary files
+                                    if let Some(ref stats) = stats {
+                                        stats.increment_binary();
+                                    }
+                                    return ScanFileResult {
+                                        matches: Vec::new(),
+                                        file_path: file_path.to_string_lossy().to_string(),
+                                        success: true,
+                                        error: None,
+                                    };
+                                }
+                            }
                         }
-                        return ScanFileResult {
-                            matches: Vec::new(),
-                            file_path: file_path.to_string_lossy().to_string(),
-                            success: true,
-                            error: None,
-                        };
                     }
 
                     // Process the file

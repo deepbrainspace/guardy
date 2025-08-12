@@ -189,7 +189,7 @@ impl PathFilter {
     ///
     /// Efficiently filters a collection of paths, removing those that match
     /// ignore patterns. Returns only the paths that should be processed.
-    pub fn filter_paths<P: AsRef<Path>>(&self, paths: &[P]) -> Vec<&P> {
+    pub fn filter_paths<'a, P: AsRef<Path>>(&self, paths: &'a [P]) -> Vec<&'a P> {
         paths
             .iter()
             .filter(|path| !self.should_ignore(path.as_ref()))

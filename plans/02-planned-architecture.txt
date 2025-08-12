@@ -1,0 +1,196 @@
+Using Existing Directory and File Objects
+
+  1. Directory Object Handles Phase 1
+
+  impl Scanner {
+      pub fn scan(&self, paths: &[String]) -> Result<ScanResult> {
+          let start_time = Instant::now();
+          let mut overall_stats = OverallStats::default();
+
+          // ===== PHASE 1: Use Directory object =====
+          let directory_start = Instant::now();
+
+          // Directory object handles file discovery AND directory-level filtering
+          let filtered_files = self.directory.collect_filtered_files(
+              paths,
+              &self.path_filter,
+              &self.size_filter,
+              &self.binary_filter,
+              &mut overall_stats  // Directory updates statistics as it filters
+          )?;
+
+          overall_stats.directory_traversal_ms = directory_start.elapsed().as_millis() as u64;
+
+          // ===== PHASE 2: Use File object =====
+          let content_start = Instant::now();
+          let mut all_secrets = Vec::new();
+
+          for file_path in filtered_files {
+              // File object handles content processing AND content-level filtering
+              let file_result = self.file_processor.process_file(
+                  &file_path,
+                  &self.context_filter,
+                  &self.comment_filter,
+                  &self.entropy_filter
+              )?;
+
+              // Accumulate content-level statistics from File object
+              overall_stats.files_processed += 1;
+              overall_stats.total_potential_matches += file_result.file_stats.potential_matches;
+              overall_stats.matches_filtered_by_context += file_result.file_stats.matches_filtered_by_context;
+              overall_stats.matches_filtered_by_comment += file_result.file_stats.matches_filtered_by_comment;
+              overall_stats.matches_filtered_by_entropy += file_result.file_stats.matches_filtered_by_entropy;
+              overall_stats.total_secrets_found += file_result.secrets.len();
+
+              if !file_result.success {
+                  overall_stats.files_with_errors += 1;
+              }
+
+              all_secrets.extend(file_result.secrets);
+          }
+
+          overall_stats.content_processing_ms = content_start.elapsed().as_millis() as u64;
+          overall_stats.scan_duration_ms = start_time.elapsed().as_millis() as u64;
+
+          Ok(ScanResult {
+              matches: all_secrets,
+              stats: overall_stats.into(),
+              warnings: vec![],
+          })
+      }
+  }
+
+  2. Directory Object Enhanced
+
+  impl Directory {
+      /// Collect files and apply directory-level filters in one pass
+      pub fn collect_filtered_files(
+          &self,
+          paths: &[String],
+          path_filter: &PathFilter,
+          size_filter: &SizeFilter,
+          binary_filter: &BinaryFilter,
+          stats: &mut OverallStats,
+      ) -> Result<Vec<PathBuf>> {
+          // Step 1: File discovery (existing functionality)
+          let all_files = self.collect_all_files(paths)?;
+          stats.files_discovered = all_files.len();
+
+          // Step 2: Apply directory filters using injected filter objects
+          let mut filtered_files = Vec::new();
+
+          for file_path in all_files {
+              let metadata = std::fs::metadata(&file_path)?;
+              let file_candidate = FileCandidate {
+                  path: &file_path,
+                  metadata: &metadata,
+              };
+
+              // Use injected filter objects
+              if path_filter.should_filter(&file_candidate)?.filtered {
+                  stats.files_filtered_by_path += 1;
+                  continue;
+              }
+
+              if size_filter.should_filter(&file_candidate)?.filtered {
+                  stats.files_filtered_by_size += 1;
+                  continue;
+              }
+
+              if binary_filter.should_filter(&file_candidate)?.filtered {
+                  stats.files_filtered_by_binary += 1;
+                  continue;
+              }
+
+              filtered_files.push(file_path);
+          }
+
+          Ok(filtered_files)
+      }
+  }
+
+  3. File Object Enhanced
+
+  impl File {
+      /// Process a single file with content-level filtering
+      pub fn process_file(
+          &self,
+          file_path: &Path,
+          context_filter: &ContextPrefilter,
+          comment_filter: &CommentFilter,
+          entropy_filter: &EntropyFilter,
+      ) -> Result<FileProcessingResult> {
+          let mut file_stats = FileStats::default();
+
+          // Step 1: Load content (existing functionality)
+          let content = self.load_content(file_path)?;
+
+          // Step 2: Find potential matches (existing pattern matching)
+          let potential_matches = self.find_potential_matches(&content)?;
+          file_stats.potential_matches = potential_matches.len();
+
+          // Step 3: Apply content filters using injected filter objects
+          let mut final_secrets = Vec::new();
+
+          for potential_match in potential_matches {
+              // Use injected filter objects
+              if context_filter.should_filter(&potential_match)?.filtered {
+                  file_stats.matches_filtered_by_context += 1;
+                  continue;
+              }
+
+              if comment_filter.should_filter(&potential_match)?.filtered {
+                  file_stats.matches_filtered_by_comment += 1;
+                  continue;
+              }
+
+              if entropy_filter.should_filter(&potential_match)?.filtered {
+                  file_stats.matches_filtered_by_entropy += 1;
+                  continue;
+              }
+
+              // Match passed all filters
+              final_secrets.push(potential_match.into_secret());
+          }
+
+          file_stats.secrets_found = final_secrets.len();
+
+          Ok(FileProcessingResult {
+              file_path: file_path.to_string(),
+              secrets: final_secrets,
+              file_stats,
+              success: true,
+              error: None,
+          })
+      }
+  }
+
+  4. Clean Object Responsibilities
+
+  /// Core: Orchestration and dependency injection
+  impl Scanner {
+      // Creates filters once, coordinates Directory and File objects
+  }
+
+  /// Directory: File discovery + directory-level filtering  
+  impl Directory {
+      // File traversal, metadata checks, apply directory filters
+  }
+
+  /// File: Content processing + content-level filtering
+  impl File {
+      // Content loading, pattern matching, apply content filters
+  }
+
+  /// Filters: Stateless filtering logic
+  impl Filter<T> for FilterType {
+      // Pure filtering logic, no state management
+  }
+
+  Key Benefits:
+  1. Uses Existing Objects: Directory and File objects do their designed jobs
+  2. Dependency Injection: Filters are created once, injected into Directory/File
+  3. Clear Separation: Each object has its specific responsibility
+  4. Stateless Filters: Filter objects are reused via references
+  5. Statistics Management: Objects update statistics as they work
+

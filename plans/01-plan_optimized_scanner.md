@@ -627,10 +627,162 @@ src/
 - ✅ **Gitleaks Source**: Full fork available at `/home/nsm/code/forks/gitleaks/` for pattern research
 - ✅ **Other Forks**: Additional security tools and libraries available in `/home/nsm/code/forks/`
 
+## 🚨 CRITICAL REFACTORING ISSUE IDENTIFIED
+
+### **Problem: Hybrid Architecture Instead of Clean Rewrite**
+
+During implementation review, a critical issue was discovered: **The modules contain a mix of clean new patterns and legacy outdated approaches**, violating the "clean rewrite" principle.
+
+### **Root Cause Analysis**
+1. Started with clean OOP architecture ✅
+2. Referenced old scanner for "inspiration" ✅  
+3. **MISTAKE**: Copied legacy patterns instead of designing optimal solutions ❌
+4. **RESULT**: Hybrid mess with technical debt from day one ❌
+
+### **Specific Issues Found**
+1. **Inefficient Filter Creation**: Creating new BinaryFilter instances for every file instead of reusing
+2. **Redundant Binary Filtering**: Happening in both directory filters AND strategy execution  
+3. **Broken Static Function Calls**: Calling non-existent functions like `is_binary_file()`, `prefilter_content()`
+4. **Placeholder Functions**: Unimplemented TODOs that break functionality
+5. **Type Mismatches**: Basic compilation errors from inconsistent design
+6. **Architectural Violations**: Module coupling instead of clean dependency injection
+
+### **Decision: Clean Rewrite of Core + APIs Required**
+
+**Analysis**: The current implementation has good **static optimizations** (`Arc<LazyLock>` patterns) but broken **API design** and **instance creation patterns**.
+
+### **Clean Rewrite Strategy**
+
+**Core Principles**:
+1. **Preserve Static Optimizations** - Keep all `Arc<LazyLock>` performance patterns
+2. **Fix API Design** - Replace broken function calls with proper instance methods
+3. **Dependency Injection** - Create filters once, pass references to workers
+4. **Single Responsibility** - Each module has one clear, focused purpose
+5. **Zero Redundancy** - Each operation happens exactly once
+
+### **Files to Update**
+
+#### **Core Orchestration - Complete Rewrite**
+- `src/scan/core.rs` - **COMPLETE REWRITE** with dependency injection
+- `src/scan/strategy.rs` - **COMPLETE REWRITE** with no redundant filtering
+- `src/scan/file.rs` - **COMPLETE REWRITE** with clean processing pipeline
+
+#### **Filter Modules - Fix APIs (Keep Static Optimizations)**
+- `src/scan/filters/directory/binary.rs` - **REWRITE API** (keep `Arc<LazyLock>` logic)
+- `src/scan/filters/directory/path.rs` - **REWRITE API** (keep shared GlobSet)
+- `src/scan/filters/directory/size.rs` - **REWRITE API** 
+- `src/scan/filters/content/context.rs` - **REWRITE API** (keep Aho-Corasick sharing)
+- `src/scan/filters/content/comment.rs` - **REWRITE API**
+- `src/scan/filters/content/entropy.rs` - **REWRITE API** (keep entropy constants)
+
+#### **Missing Module Files**
+- `src/scan/filters/mod.rs` - **CREATE**
+- `src/scan/filters/directory/mod.rs` - **CREATE**  
+- `src/scan/filters/content/mod.rs` - **CREATE**
+
+### **Optimal Design Changes**
+
+#### **Core Architecture (Dependency Injection)**
+```rust
+// NEW: src/scan/core.rs
+pub struct Scanner {
+    config: ScannerConfig,
+    // Filters created ONCE, reused for all files
+    path_filter: PathFilter,
+    size_filter: SizeFilter, 
+    binary_filter: BinaryFilter,
+    context_filter: ContextFilter,
+    comment_filter: CommentFilter,
+    entropy_filter: EntropyFilter,
+}
+
+impl Scanner {
+    pub fn new(config: ScannerConfig) -> Result<Self> {
+        // Create all filters ONCE
+        Ok(Self {
+            config: config.clone(),
+            path_filter: PathFilter::new(&config)?,
+            size_filter: SizeFilter::new(&config)?,
+            binary_filter: BinaryFilter::new(&config)?,
+            context_filter: ContextFilter::new(&config)?,
+            comment_filter: CommentFilter::new(&config)?,
+            entropy_filter: EntropyFilter::new(&config)?,
+        })
+    }
+    
+    pub fn scan(&self, paths: &[String]) -> Result<Vec<SecretMatch>> {
+        // Pass filter REFERENCES to workers - no creation overhead
+    }
+}
+```
+
+#### **Clean Filter APIs (Instance-Based with Static Optimizations)**
+```rust
+// All filters follow this pattern:
+// KEEP: static SHARED_DATA: LazyLock<Arc<DataType>> = ... (for performance)
+// FIX: Instance methods for actual filtering operations
+
+impl BinaryFilter {
+    pub fn new(config: &ScannerConfig) -> Result<Self> { /* create once */ }
+    pub fn should_filter(&self, path: &Path) -> Result<bool> { 
+        // Uses static STATIC_BINARY_EXTENSIONS internally
+    }
+}
+
+// BEFORE (broken): crate::scan::filters::directory::binary::is_binary_file(path, &config.extensions)
+// AFTER (fixed): binary_filter.should_filter(path)
+```
+
+#### **Strategy Pattern (Zero Redundancy)**
+```rust
+// NEW: src/scan/strategy.rs - NO binary filtering here
+pub fn execute_parallel(
+    files: Vec<PathBuf>,
+    scanner: &Scanner, // Receives scanner with pre-created filters
+) -> Result<Vec<SecretMatch>> {
+    // Only file processing - all filtering done by scanner.filters
+    // NO redundant binary checks here
+}
+```
+
+### **What Each Rewrite Accomplishes**
+
+#### **Performance Gains**
+1. **Filter Creation**: From N×filters to 1×filters (massive speedup)
+2. **Static Optimizations**: Keep all `Arc<LazyLock>` patterns for zero-copy sharing
+3. **No Redundancy**: Binary filtering happens exactly once
+4. **Memory Efficiency**: Filters shared across all threads via references
+
+#### **Clean Architecture** 
+1. **Dependency Injection**: Core creates, workers receive filter references
+2. **Single Responsibility**: Each module has one clear purpose  
+3. **Fixed APIs**: Replace broken function calls with working instance methods
+
+#### **Code Quality**
+1. **Preserve Optimizations**: Keep all static performance patterns
+2. **Type Safety**: Consistent types throughout
+3. **Error Handling**: Clean Result<T> everywhere
+4. **Zero Redundancy**: Each operation happens exactly once
+
+### **Implementation Order**
+1. **Filter APIs** - Fix broken function calls, keep static optimizations
+2. **Core** - Implement optimal dependency injection pattern
+3. **Strategy** - Clean parallel execution with no redundancy  
+4. **File** - Simple processing pipeline using injected filters
+5. **Module exports** - Clean public APIs
+
+### **Success Criteria for Clean Rewrite**
+- [ ] **Keep Static Optimizations** - All `Arc<LazyLock>` patterns preserved for performance
+- [ ] **Fix Broken Function Calls** - Replace non-existent static calls with proper instance methods
+- [ ] **Single Filter Creation** - Create filter instances once, reuse via references  
+- [ ] **No Redundancy** - Each operation happens exactly once
+- [ ] **Clean Compilation** - No type mismatches or broken function calls
+- [ ] **5x Performance** - Achieved through optimal patterns (static sharing + dependency injection)
+
 ---
 
-**Updated**: 2025-08-12
-**Status**: Phase 2 Nearly Complete, Filter System Implementation Done
-**Current Progress**: 88% (15/17 modules complete)
-**Next Task**: Filter Module Structure (`src/scan/filters/*/mod.rs`)
-**Test Migration**: Comprehensive test structure created with git-crypt for sensitive test data
+**Updated**: 2025-08-12  
+**Status**: **CLEAN REWRITE REQUIRED** - Hybrid implementation rejected
+**Decision**: Complete rewrite with optimal patterns only
+**Next Step**: Design optimal Core + Filter architecture from scratch
+

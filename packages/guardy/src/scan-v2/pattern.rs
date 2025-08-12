@@ -208,7 +208,7 @@ impl Pattern {
     }
 
     /// Filter patterns by keywords found in content (for Aho-Corasick optimization)
-    pub fn filter_by_keywords(patterns: &[Pattern], found_keywords: &[String]) -> Vec<&Pattern> {
+    pub fn filter_by_keywords<'a>(patterns: &'a [Pattern], found_keywords: &[String]) -> Vec<&'a Pattern> {
         let found_set: std::collections::HashSet<_> = found_keywords.iter().collect();
 
         patterns

@@ -44,8 +44,11 @@ impl File {
     /// - Encoding or processing errors
     pub fn process_single_file(file_path: &Path, config: &ScannerConfig) -> Result<Vec<SecretMatch>> {
         // Check if file is binary first (before loading content)
-        if !config.include_binary && crate::scan::filters::directory::binary::is_binary_file(file_path, &config.binary_extensions) {
-            return Ok(Vec::new()); // Skip binary files silently
+        if !config.include_binary {
+            let binary_filter = crate::scan::filters::directory::binary::BinaryFilter::new(config)?;
+            if binary_filter.should_filter(file_path)? {
+                return Ok(Vec::new()); // Skip binary files silently
+            }
         }
 
         // Load file content with size limits
@@ -87,7 +90,7 @@ impl File {
         let file_size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
 
         // Check against maximum file size limit
-        if file_size_mb > config.max_file_size_mb {
+        if file_size_mb > config.max_file_size_mb as f64 {
             return Err(anyhow::anyhow!(
                 "File {} ({:.1}MB) exceeds maximum size limit of {:.1}MB",
                 file_path.display(),
@@ -125,16 +128,20 @@ impl File {
 
         // Step 1: Aho-Corasick prefiltering (context filter)
         // This eliminates ~85% of patterns before expensive regex execution
-        let potential_keywords = crate::scan::filters::content::context::ContextFilter::prefilter_content(content, config)?;
+        let context_filter = crate::scan::filters::content::context::ContextFilter::new(config)?;
+        let active_pattern_indices = context_filter.filter_active_patterns(content);
 
-        if potential_keywords.is_empty() {
+        if active_pattern_indices.is_empty() {
             // No keywords found, skip expensive regex processing
             return Ok(matches);
         }
 
         // Step 2: Pattern Loop - iterate through relevant patterns only
         let patterns = crate::scan::pattern::Pattern::load_patterns(config)?;
-        let relevant_patterns = crate::scan::pattern::Pattern::filter_by_keywords(&patterns, &potential_keywords);
+        let relevant_patterns: Vec<&crate::scan::pattern::Pattern> = active_pattern_indices
+            .iter()
+            .filter_map(|&index| patterns.get(index))
+            .collect();
 
         for pattern in relevant_patterns {
             // Step 3: Match Loop - find all regex matches for this pattern
@@ -192,53 +199,20 @@ impl File {
 
         // Check binary detection if configured
         if !config.include_binary {
-            if crate::scan::filters::directory::binary::is_binary_file(file_path, &config.binary_extensions) {
-                return false;
+            if let Ok(binary_filter) = crate::scan::filters::directory::binary::BinaryFilter::new(config) {
+                if let Ok(should_filter) = binary_filter.should_filter(file_path) {
+                    if should_filter {
+                        return false;
+                    }
+                }
             }
         }
 
         true
     }
 
-    /// Get file information for progress reporting and statistics
-    ///
-    /// This method provides lightweight file metadata that can be used
-    /// for progress reporting without loading the entire file content.
-    ///
-    /// # Parameters
-    /// - `file_path`: Path to the file
-    ///
-    /// # Returns
-    /// File information struct with size, type, and other metadata
-    pub fn get_file_info(file_path: &Path) -> Result<FileInfo> {
-        let metadata = fs::metadata(file_path)
-            .with_context(|| format!("Failed to read metadata for {}", file_path.display()))?;
-
-        let file_size_bytes = metadata.len();
-        let file_size_mb = file_size_bytes as f64 / (1024.0 * 1024.0);
-
-        let is_binary = crate::scan::filters::directory::binary::is_binary_file_by_extension(
-            file_path,
-            &[] // Use empty extensions list for quick check
-        );
-
-        Ok(FileInfo {
-            path: file_path.to_path_buf(),
-            size_bytes: file_size_bytes,
-            size_mb: file_size_mb,
-            is_likely_binary: is_binary,
-        })
-    }
 }
 
-/// File information structure for metadata and reporting
-#[derive(Debug, Clone)]
-pub struct FileInfo {
-    pub path: std::path::PathBuf,
-    pub size_bytes: u64,
-    pub size_mb: f64,
-    pub is_likely_binary: bool,
-}
 
 /// Regex match information used in pattern matching pipeline
 #[derive(Debug, Clone)]

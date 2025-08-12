@@ -1,0 +1,261 @@
+
+  1. Core Data Structure Design
+
+  /// Hierarchical scan result with memory-efficient ownership
+  pub struct ScanResult {
+      // Owned data - relatively small metadata
+      pub directory_stats: DirectoryStats,
+      pub scan_duration_ms: u64,
+
+      // Vector of file results - this is where memory efficiency matters most
+      pub files_with_matches: Vec<FileMatchResult>,
+
+      // Computed aggregates (lazily calculated or cached)
+      total_secrets: std::sync::OnceLock<usize>,
+  }
+
+  /// Per-file result with optimal memory layout
+  pub struct FileMatchResult {
+      // Small owned data
+      pub file_path: Box<str>,  // More memory-efficient than String for immutable data
+      pub processing_stats: FileStats,
+
+      // Variable-sized data - the main memory consideration
+      pub secret_matches: Vec<SecretMatch>,
+  }
+
+  /// Individual secret match
+  pub struct SecretMatch {
+      // Use Box<str> instead of String for immutable string data
+      pub line_content: Box<str>,
+      pub matched_text: Box<str>,
+      pub pattern_name: Box<str>,
+
+      // Small primitives - cheap to copy
+      pub line_number: u32,      // u32 instead of usize saves memory
+      pub start_pos: u32,
+      pub end_pos: u32,
+  }
+
+  2. When to Use Arc vs Box vs Regular Structs
+
+  Use Box<T> when:
+  - Single ownership of heap-allocated data
+  - Data won't be shared across threads
+  - Want to reduce stack size for large structs
+  pub struct LargeFileResult {
+      pub metadata: Box<FileMetadata>,  // Move large data to heap
+      pub matches: Vec<SecretMatch>,
+  }
+
+  Use Arc<T> when:
+  - Multiple owners need read-only access to the same data
+  - Sharing across threads
+  - Expensive-to-compute data that shouldn't be duplicated
+  pub struct FileProcessor {
+      // Shared pattern library across all processors
+      pattern_library: Arc<PatternLibrary>,
+
+      // Shared configuration
+      config: Arc<ScannerConfig>,
+  }
+
+  Use regular structs when:
+  - Small data that fits on stack
+  - Single ownership with clear lifetimes
+  - Performance-critical hot paths
+  pub struct FileStats {
+      pub potential_matches: u32,
+      pub secrets_found: u32,
+      pub processing_time_ms: u64,
+  }
+
+  3. Memory Layout Optimization Strategies
+
+  Strategy 1: Field Ordering for Optimal Packing
+  #[repr(C)]  // Optional: guarantee field order for predictable layout
+  pub struct OptimizedMatch {
+      // Put larger fields first, smaller fields last
+      pub line_content: Box<str>,      // 16 bytes (fat pointer)
+      pub matched_text: Box<str>,      // 16 bytes
+      pub pattern_name: Box<str>,      // 16 bytes
+
+      // Group small fields together to minimize padding
+      pub line_number: u32,            // 4 bytes
+      pub start_pos: u32,              // 4 bytes  
+      pub end_pos: u32,                // 4 bytes
+      pub confidence_score: u8,        // 1 byte
+      // Compiler adds 3 bytes padding here to align to 8-byte boundary
+  }
+
+  Strategy 2: Use Compact String Types
+  impl SecretMatch {
+      // Convert String to Box<str> for memory efficiency
+      pub fn new(line_content: String, matched_text: String, pattern_name: String) -> Self {
+          Self {
+              line_content: line_content.into_boxed_str(),  // Removes excess capacity
+              matched_text: matched_text.into_boxed_str(),
+              pattern_name: pattern_name.into_boxed_str(),
+              // ... other fields
+          }
+      }
+  }
+
+  4. Collection Strategies for Vec<FileMatchResult>
+
+  Strategy 1: Pre-allocate with Known Capacity
+  impl ScanResult {
+      pub fn with_capacity(estimated_files: usize) -> Self {
+          Self {
+              directory_stats: DirectoryStats::default(),
+              files_with_matches: Vec::with_capacity(estimated_files),
+              scan_duration_ms: 0,
+              total_secrets: std::sync::OnceLock::new(),
+          }
+      }
+  }
+
+  Strategy 2: Use Memory Pools for Hot Paths
+  pub struct SecretMatchPool {
+      pool: Vec<SecretMatch>,
+      next_index: usize,
+  }
+
+  impl SecretMatchPool {
+      pub fn get_match(&mut self) -> &mut SecretMatch {
+          if self.next_index >= self.pool.len() {
+              self.pool.resize_with(self.pool.len() * 2, || SecretMatch::default());
+          }
+          let match_ref = &mut self.pool[self.next_index];
+          self.next_index += 1;
+          match_ref
+      }
+  }
+
+  5. Rust OOP Pattern: struct + impl + associated functions
+
+  /// Data-only struct (like a "class" with fields)
+  pub struct ScanResult {
+      directory_stats: DirectoryStats,
+      files_with_matches: Vec<FileMatchResult>,
+      total_secrets: std::sync::OnceLock<usize>,
+  }
+
+  /// Implementation block (like "methods")
+  impl ScanResult {
+      /// Associated function (like "static method" or constructor)
+      pub fn new(directory_stats: DirectoryStats) -> Self {
+          Self {
+              directory_stats,
+              files_with_matches: Vec::new(),
+              total_secrets: std::sync::OnceLock::new(),
+          }
+      }
+
+      /// Instance method (like "instance method")
+      pub fn add_file_result(&mut self, file_result: FileMatchResult) {
+          self.files_with_matches.push(file_result);
+          // Invalidate cached total
+          self.total_secrets = std::sync::OnceLock::new();
+      }
+
+      /// Getter with lazy computation (cached)
+      pub fn total_secrets(&self) -> usize {
+          *self.total_secrets.get_or_init(|| {
+              self.files_with_matches
+                  .iter()
+                  .map(|f| f.secret_matches.len())
+                  .sum()
+          })
+      }
+
+      /// Reference-returning method (zero-copy access)
+      pub fn files(&self) -> &[FileMatchResult] {
+          &self.files_with_matches
+      }
+
+      /// Consuming method (takes ownership)
+      pub fn into_files(self) -> Vec<FileMatchResult> {
+          self.files_with_matches
+      }
+  }
+
+  6. Advanced Memory Patterns
+
+  Interned Strings for Duplicate Data
+  use std::collections::HashMap;
+
+  pub struct StringInterner {
+      strings: HashMap<String, Arc<str>>,
+  }
+
+  impl StringInterner {
+      pub fn intern(&mut self, s: String) -> Arc<str> {
+          self.strings.entry(s.clone())
+              .or_insert_with(|| s.into())
+              .clone()
+      }
+  }
+
+  // Use interned pattern names since they repeat frequently
+  pub struct SecretMatch {
+      pub line_content: Box<str>,
+      pub matched_text: Box<str>,
+      pub pattern_name: Arc<str>,  // Shared across many matches
+  }
+
+  Copy-on-Write for Optional Optimization
+  use std::borrow::Cow;
+
+  pub struct FileMatchResult {
+      pub file_path: Cow<'static, str>,  // Can be borrowed or owned
+      pub secret_matches: Vec<SecretMatch>,
+  }
+
+  7. Recommended Architecture for Your Use Case
+
+  /// Optimal structure for your hierarchical scan results
+  pub struct ScanResult {
+      // Small metadata - keep on stack
+      pub directory_stats: DirectoryStats,
+      pub scan_duration_ms: u64,
+
+      // Main data - use Vec with pre-allocation
+      pub files_with_matches: Vec<FileMatchResult>,
+
+      // Cached computations - lazy initialization
+      cached_total_secrets: std::sync::OnceLock<usize>,
+      cached_total_files: std::sync::OnceLock<usize>,
+  }
+
+  pub struct FileMatchResult {
+      // Use Box<str> for immutable strings (more efficient than String)
+      pub file_path: Box<str>,
+
+      // Small stats - keep inline
+      pub processing_stats: FileStats,
+
+      // Variable data - the main memory consumer
+      pub secret_matches: Box<[SecretMatch]>,  // Box<[T]> more efficient than Vec<T> when size is fixed
+  }
+
+  pub struct SecretMatch {
+      // Interned strings for pattern names (high duplication)
+      pub pattern_name: Arc<str>,
+
+      // Unique strings per match
+      pub line_content: Box<str>,
+      pub matched_text: Box<str>,
+
+      // Compact integers
+      pub line_number: u32,
+      pub start_pos: u32,
+      pub end_pos: u32,
+  }
+
+  This architecture provides:
+  - Memory efficiency: Box instead of String, u32 instead of usize
+  - Zero-copy sharing: Arc for duplicated data like pattern names
+  - Lazy computation: OnceLock for expensive aggregations
+  - Cache-friendly layout: Related data grouped together
+  - Ownership clarity: Box for single ownership, Arc for shared ownership

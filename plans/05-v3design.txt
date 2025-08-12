@@ -1,0 +1,49 @@
+OOP scan module
+
+classes:
+
+* pipeline
+    * directory_pipeline - directory filtering
+    * file_pipeline - file traverer that assigns one thread for each element of the filelist it goes through, then for each file it would first get a list of patterns then go through each element of the match to run the rest of the content pipeline on.
+
+* strategy: i cant see much use of the v2 strategy class, it seems to do things that our above pipeline classes will do. in particular the directory_pipeline. it will just need to know how many workers to use which is easy to do. from the system-profiler. we can design it so it runs a parallel workflow from the getgo as we can still run a parallel workflow for single worker. that way we eliminate the straetgy, parallel/auto/sequential decision making etc. we just run in parallel by default. we just add an option in the main configuration class that lets you override the maximum %age to use (by default its the default from system-profile which is 80% of available resources)
+
+* filters:
+    * interfaces
+        * filter
+            * directory
+            * content
+    * directory-filters
+        * path
+        * config
+        * size
+        * binary
+    * content-filters
+        * aho-corasick: Y/N just once for each file. simd acceleration built in.
+            input: a file
+            output: returns a coordinates list.
+        * regex
+        * comment
+        * entropy
+
+
+* static classes
+    * patternLibrary: used by aho corasick & regex.
+    * filtered_extensions: list of base filtered extensions + custom user assigned extensions. (in binary.rs in v2)
+    * entropy - contains entropy patterns and helper methods that are used by the entropy filter.
+    * system-profile - imported from the system-profile crate. used by pipeline classes.
+    * configuration: contains the scanconfig passed.
+
+* data classes
+    * scanStats:
+        * time to finish scanning
+        * directoryStats:
+            * fileStats:
+                * secrets
+    * directory
+    * file
+    * secret
+
+* tracker_manager : indicatif backed visual prpgress tracking manager that updates the visuals as and when needed. we have a progress.rs on v2 but it might need revamping and we need to figure out how to display progress tracking in realtime.
+
+

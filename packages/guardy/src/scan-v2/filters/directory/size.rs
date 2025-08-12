@@ -185,7 +185,7 @@ impl SizeFilter {
     ///
     /// # Returns
     /// Vector of paths that pass size validation
-    pub fn filter_paths<P: AsRef<Path>>(&self, paths: &[P]) -> Vec<&P> {
+    pub fn filter_paths<'a, P: AsRef<Path>>(&self, paths: &'a [P]) -> Vec<&'a P> {
         paths
             .iter()
             .filter(|path| {

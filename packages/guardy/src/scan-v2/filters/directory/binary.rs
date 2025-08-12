@@ -316,7 +316,7 @@ impl BinaryFilter {
     ///
     /// # Returns
     /// Vector of paths that should be processed (non-binary or include_binary=true)
-    pub fn filter_paths<P: AsRef<Path>>(&self, paths: &[P]) -> Vec<&P> {
+    pub fn filter_paths<'a, P: AsRef<Path>>(&self, paths: &'a [P]) -> Vec<&'a P> {
         paths
             .iter()
             .filter(|path| {
