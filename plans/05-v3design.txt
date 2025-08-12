@@ -47,3 +47,37 @@ classes:
 * tracker_manager : indicatif backed visual prpgress tracking manager that updates the visuals as and when needed. we have a progress.rs on v2 but it might need revamping and we need to figure out how to display progress tracking in realtime.
 
 
+
+  Where the Parallel Code Lives
+
+  Yes, exactly right - the parallel code goes directly in the pipelines:
+
+  // src/scan/pipeline/directory.rs
+  impl DirectoryPipeline {
+      pub fn scan_files(&self, files: Vec<PathBuf>) -> Vec<FileResult> {
+          use rayon::prelude::*;
+
+          // Direct parallel iteration - no separate module needed
+          files.par_iter()
+              .filter_map(|path| {
+                  match self.file_pipeline.scan_file(path) {
+                      Ok(result) => Some(result),
+                      Err(_) => None, // Log error, continue scanning
+                  }
+              })
+              .collect()
+      }
+  }
+
+  Architecture Benefits:
+  - No separate parallel module to maintain
+  - Code lives where it's used (better locality)
+  - Simpler to understand and debug
+  - Can easily switch between iter() and par_iter() for testing
+
+  The only thing we might want from system-profile is:
+  // Optional: Set rayon thread pool size based on system
+  rayon::ThreadPoolBuilder::new()
+      .num_threads(system_profile::optimal_threads())
+      .build_global()
+      .unwrap();
