@@ -65,7 +65,7 @@ Guardy includes comprehensive secret detection with 40+ built-in patterns:
 
 ### Database Credentials
 - MongoDB connection strings
-- PostgreSQL connection strings  
+- PostgreSQL connection strings
 - MySQL connection strings
 - Redis connection URLs
 
@@ -118,7 +118,7 @@ sync:
       dest_path: "."
       include: ["*.yml", "*.json", ".editorconfig"]
       exclude: [".git", "node_modules"]
-    
+
     - name: "ci-workflows"
       repo: "https://github.com/yourorg/ci-templates"
       version: "v2.0.1"
@@ -157,7 +157,7 @@ Guardy features an advanced configuration system with **smart format detection**
 
 ### Enhanced Configuration Features
 - 🎯 **Smart Format Detection** - No file extensions needed, auto-detects JSON/YAML/TOML from content
-- 🚫 **Empty Value Filtering** - CLI empty values don't override config files  
+- 🚫 **Empty Value Filtering** - CLI empty values don't override config files
 - 🌳 **Nested Environment Variables** - `GUARDY_SCANNER_MODE` → `scanner.mode`
 - 🔄 **Intelligent Merging** - Advanced priority system with proper value preservation
 
@@ -166,7 +166,7 @@ Guardy features an advanced configuration system with **smart format detection**
 2. **Environment Variables** - `GUARDY_*` prefixed with automatic nesting
 3. **Custom Config** - Via `--config` flag (format auto-detected)
 4. **Repository Config** - Project-specific settings (format auto-detected)
-5. **User Config** - `~/.config/guardy/config.*` (format auto-detected)  
+5. **User Config** - `~/.config/guardy/config.*` (format auto-detected)
 6. **Built-in Defaults** - Embedded fallback values
 
 ### Supported Configuration Formats
@@ -179,7 +179,7 @@ All formats are **automatically detected** - no file extensions required:
 - `guardy.yaml` or `guardy.yml`
 
 #### User Level (personal defaults)
-- `~/.config/guardy/config.toml` ⭐ **Recommended**  
+- `~/.config/guardy/config.toml` ⭐ **Recommended**
 - `~/.config/guardy/config.json`
 - `~/.config/guardy/config.yaml` or `~/.config/guardy/config.yml`
 
@@ -258,7 +258,7 @@ general:
 security:
   patterns:
     - "sk-[a-zA-Z0-9]{48}"           # OpenAI API keys
-    - "ghp_[a-zA-Z0-9]{36}"          # GitHub tokens  
+    - "ghp_[a-zA-Z0-9]{36}"          # GitHub tokens
     - "custom-[a-zA-Z0-9]{20,}"      # Your custom pattern
 
 hooks:
@@ -445,7 +445,7 @@ cargo build -p supercli --release
 # Test entire workspace
 cargo test
 
-# Test specific package  
+# Test specific package
 cargo test -p guardy
 cargo test -p supercli
 
@@ -454,7 +454,7 @@ cargo test -- --nocapture
 
 # Test specific modules
 cargo test --lib scanner     # Test only scanner module
-cargo test --lib sync        # Test only sync module  
+cargo test --lib sync        # Test only sync module
 cargo test --lib hooks       # Test only hooks module
 ```
 

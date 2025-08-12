@@ -129,7 +129,7 @@ pub fn apply_style<T: AsRef<str>>(text: T, style: &str) -> String {
 /// // Simple symbol messages
 /// styled!("<info> No files were updated");
 /// styled!("<success> Operation completed successfully");
-/// styled!("<warning> This action cannot be undone");  
+/// styled!("<warning> This action cannot be undone");
 /// styled!("<error> Configuration file not found");
 ///
 /// // Multiple symbols in one message

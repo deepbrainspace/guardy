@@ -92,7 +92,7 @@ pub fn create_help_styles_with_prefix(app_prefix: &str) -> Styles {
     }
 }
 
-/// Create help styles using default "GUARDY" prefix  
+/// Create help styles using default "GUARDY" prefix
 #[cfg(feature = "clap")]
 pub fn create_help_styles() -> Styles {
     create_help_styles_with_prefix("GUARDY")
@@ -114,7 +114,7 @@ pub fn create_minimal_help_styles() -> Styles {
 ///
 /// Supports APP_OUTPUT_STYLE with values:
 /// - color: Full colored output (default)
-/// - monochrome: Bold/styling but no colors  
+/// - monochrome: Bold/styling but no colors
 /// - none: Completely plain text
 ///
 /// Also respects standard NO_COLOR and FORCE_COLOR variables.
@@ -157,7 +157,7 @@ pub fn get_output_style() -> &'static str {
 ///
 /// Supports APP_OUTPUT_THEME with values:
 /// - light: Force light theme
-/// - dark: Force dark theme  
+/// - dark: Force dark theme
 /// - auto: Use starbase default detection (default)
 #[cfg(feature = "clap")]
 pub fn set_theme_from_env_with_prefix(app_prefix: &str) {

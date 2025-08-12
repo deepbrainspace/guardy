@@ -9,15 +9,15 @@ fn main() {
         ("hello_world_test", "Simple words"),
         ("123456789", "Simple numbers"),
     ];
-    
+
     let threshold = 1.0 / 1e5;
-    
+
     for (test_str, desc) in test_cases {
         let bytes = test_str.as_bytes();
         let prob = calculate_randomness_probability(bytes);
         let is_secret = is_likely_secret(bytes, threshold);
-        
-        println\!("{}: {} (prob: {:.2e}, threshold: {:.2e}, is_secret: {})", 
+
+        println\!("{}: {} (prob: {:.2e}, threshold: {:.2e}, is_secret: {})",
                  desc, test_str, prob, threshold, is_secret);
     }
 }

@@ -22,7 +22,7 @@
 //!
 //! ### 🎨 Semantic CLI Output Macros
 //! - `success!()` - Success messages with checkmarks
-//! - `warning!()` - Warning messages with caution symbols  
+//! - `warning!()` - Warning messages with caution symbols
 //! - `info!()` - Informational messages with info symbols
 //! - `error!()` - Error messages with error symbols
 //!

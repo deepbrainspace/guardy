@@ -4,7 +4,7 @@
 
 **Critical Implementation Protocol:**
 1. **Explain First**: Always explain exactly what will be implemented before starting any work
-2. **Get Approval**: Wait for user approval before proceeding with implementation  
+2. **Get Approval**: Wait for user approval before proceeding with implementation
 3. **Test Yourself**: After implementing, test the functionality yourself thoroughly
 4. **User Testing Instructions**: Provide clear instructions for user to test the implementation
 5. **Continue After Approval**: Only move to the next step after receiving user approval
@@ -19,7 +19,7 @@ This plan outlines the implementation of a next-generation scanner (`scan2`) bas
 ## 🎯 Goals
 
 1. **Performance**: ~5x faster than current scanner through Aho-Corasick prefiltering
-2. **Coverage**: Match or exceed current pattern detection capabilities  
+2. **Coverage**: Match or exceed current pattern detection capabilities
 3. **Modularity**: Clean, well-structured, maintainable codebase
 4. **Compatibility**: Seamless integration with existing config and CLI
 5. **Validation**: Comprehensive testing and benchmarking vs current implementation
@@ -123,9 +123,9 @@ graph TD
     C --> D[Directory Analysis & Warnings]
     D --> E[Collect File Paths via WalkBuilder]
     E --> F[Execute Strategy: Sequential or Parallel]
-    
+
     F --> G[For Each File: Worker Process]
-    
+
     G --> H1{Path Ignore Check}
     H1 -->|Ignored| Z[Skip File]
     H1 -->|Not Ignored| H2{File Size Check}
@@ -133,9 +133,9 @@ graph TD
     H2 -->|"≤ 50MB"| H3{Binary Detection}
     H3 -->|"Binary (Extension + Content)"| Z1[Skip or Include based on config]
     H3 -->|"Text"| H4[Load File Content]
-    
+
     H4 --> PM[PATTERN MATCHING PIPELINE]
-    
+
     subgraph PM[" "]
         PM1[Aho-Corasick Prefilter on Content]
         PM2[Get Active Patterns with Keywords Found]
@@ -145,7 +145,7 @@ graph TD
         PM6{Line contains 'guardy:allow'?}
         PM7{Pass Entropy Analysis?}
         PM8[Add to Final Matches]
-        
+
         PM1 --> PM2
         PM2 --> PM3
         PM3 --> PM4
@@ -160,10 +160,10 @@ graph TD
         PM8 --> PM11[Next Pattern]
         PM11 --> PM3
     end
-    
+
     PM8 --> I[Aggregate Results from All Workers]
     I --> J[Generate Statistics & Final Report]
-    
+
     style A fill:#e1f5fe
     style C fill:#fff3e0
     style E fill:#e8f5e8
@@ -184,13 +184,13 @@ graph TD
 #### **Phase 1: Setup & Strategy Determination**
 1. **Input Processing**: Parse input paths (files/directories)
 2. **Fast File Count**: Lightweight directory traversal to count files
-3. **Strategy Calculation**: 
+3. **Strategy Calculation**:
    - Calculate max workers based on CPU cores & thread percentage
    - Apply domain-specific adaptation based on file count
    - Choose Sequential/Parallel based on mode & file count threshold
 4. **Directory Analysis**: Analyze directory structure, suggest .gitignore improvements
 
-#### **Phase 2: File Collection**  
+#### **Phase 2: File Collection**
 5. **WalkBuilder Setup**: Configure ignore::WalkBuilder with:
    - `.gitignore` respect (git_ignore, git_global, git_exclude)
    - Symlink following based on config
@@ -217,10 +217,10 @@ For each file (executed by worker):
        - Run keyword automaton against entire file content
        - Get list of patterns whose keywords are present
        - Skip ~85% of patterns that have no matching keywords
-    
+
     b) FOR EACH active pattern (with keywords found):
        - Run regex pattern.find_iter() on full content
-       
+
        c) FOR EACH regex match found:
           - Get line containing match
           - Check if line contains 'guardy:allow' → Skip if yes
@@ -248,7 +248,7 @@ For each file (executed by worker):
 **Parallel Mode** (⚡):
 ```
 [Worker 01] ████████████████████████░░░░   312/400 📄 ...src/main.rs
-[Worker 02] ███████████████████████████░   375/400 📄 ...lib/config.rs  
+[Worker 02] ███████████████████████████░   375/400 📄 ...lib/config.rs
 [Worker 03] ████████████████████████████   400/400 📄 ...tests/unit.rs
 [Worker 04] ████████████████████████░░░░   298/400 📄 ...docs/api.md
 
@@ -271,7 +271,7 @@ Overall:
    ```rust
    // In worker closure
    progress.update_worker_file(worker_id, &file_path.to_string_lossy());
-   
+
    // Statistics updates
    stats.increment_scanned(); // After successful scan
    stats.increment_with_secrets(); // If matches found
@@ -285,12 +285,12 @@ Overall:
    if current % 5 == 0 || current == total {
        progress.update_overall(current, total);
    }
-   
+
    // Statistics message: Every 100 files (reduce visual spam)
    if completed % 100 == 0 || completed == total {
        // Update "📊 Scanned: X | With Secrets: Y | Skipped: Z | Binary: W"
    }
-   
+
    // Current file display: Every file (real-time feedback)
    progress.update_worker_file(worker_id, &file_path);
    ```
@@ -314,7 +314,7 @@ Overall:
 - Show per-pattern statistics
 
 **Level 3+ (`-vvv`)**:
-- Trace-level logging 
+- Trace-level logging
 - Show all internal operations
 - Show globset/ignore operations
 
@@ -335,7 +335,7 @@ src/
 │   ├── scan2.rs           # NEW - Development scan2 command
 │   └── ...                # Other existing commands
 ├── scanner/               # Legacy scanner (preserve until migration complete)
-│   ├── mod.rs            # Existing scanner interface  
+│   ├── mod.rs            # Existing scanner interface
 │   ├── core.rs           # Current scanner implementation
 │   └── ...               # All existing scanner modules
 ├── scan/                 # New scanner architecture (clean, OOP design)
@@ -393,7 +393,7 @@ src/
 - **🚨 CRITICAL**: Each pattern represents extensive real-world testing
 
 #### 3. **Clean Ignore System**
-- **Path-based**: GlobSet patterns for entire files/directories  
+- **Path-based**: GlobSet patterns for entire files/directories
 - **Pattern-based**: Line content patterns (DEMO_KEY_, FAKE_, etc.)
 - **Inline directives**: Single `guardy:allow` directive like Gitleaks
 - **🚨 CRITICAL**: Simple, efficient ignore system optimized for performance
@@ -423,7 +423,7 @@ src/
 - **🚨 CRITICAL**: Production-tested with 100k+ file repositories
 
 #### 8. **Parallel Integration** (directory.rs)
-- **Resource Calculation**: CPU core detection, thread percentage application  
+- **Resource Calculation**: CPU core detection, thread percentage application
 - **Performance-First Approach**: Maximum worker utilization regardless of file count
 - **Progress Reporting**: Worker-specific progress with strategy icons (⏳ sequential, ⚡ parallel)
 - **🚨 CRITICAL**: Tight integration with existing parallel execution framework
@@ -454,7 +454,7 @@ src/
 ## 📈 Success Metrics
 
 ### Performance Targets
-- **Speed**: 5x faster on typical codebases  
+- **Speed**: 5x faster on typical codebases
 - **Memory**: ≤2x memory usage increase
 - **Accuracy**: ≥99% pattern detection retention
 
@@ -472,7 +472,7 @@ src/
 - **Testing**: Validate on real codebases and benchmark performance
 - **Monitoring**: Performance benchmarking and accuracy validation
 
-### Future: Production Rollout  
+### Future: Production Rollout
 - **CLI Update**: Eventually make new `scan/` module the default for `guardy scan` command
 - **Legacy Preservation**: Keep `guardy scan --legacy` flag for backwards compatibility
 - **Migration Notice**: Notify users of the engine change in release notes
@@ -505,9 +505,9 @@ src/
 - Architecture decision records
 - Performance characteristics documentation
 
-### User Documentation  
+### User Documentation
 - Clean installation and usage guide
-- Performance optimization recommendations  
+- Performance optimization recommendations
 - Advanced configuration options
 
 ## 📋 Current Implementation Status
@@ -522,7 +522,7 @@ src/
 - ✅ **Memory Efficiency**: Keep memory usage within 2x of current scanner
 - ✅ **API Compatibility**: All existing CLI flags and config options work identically
 
-### Quality Gates  
+### Quality Gates
 - ✅ **Test Coverage**: Comprehensive test suite covering all migrated functionality
 - ✅ **Code Quality**: Pass all clippy lints and formatting checks
 - ✅ **Documentation**: Complete rustdoc and user documentation
@@ -542,7 +542,7 @@ src/
 - `mod.rs` - Clean exports & documentation
 - `types.rs` - Complete data structures & modern configuration (50MB limits)
 - `progress.rs` - Excellent OOP implementation with indicatif integration
-- `directory.rs` - Full file traversal & WalkBuilder integration  
+- `directory.rs` - Full file traversal & WalkBuilder integration
 - `file.rs` - Comprehensive file processing pipeline
 - `strategy.rs` - Complete execution strategy coordination with parallel module
 - `pattern.rs` - YAML-based pattern loading with Arc<LazyLock> sharing ✅ **COMPLETED**
@@ -579,7 +579,7 @@ src/
 
 **Phase 1: Complete Top-Level Objects with Shared Data Optimizations (Priority 1)**
 - [x] Task 1.1: Foundation with type compatibility ✅ COMPLETED
-- [x] Task 1.2: Core module structure ✅ COMPLETED  
+- [x] Task 1.2: Core module structure ✅ COMPLETED
 - [x] Task 1.3: Directory, File, Strategy, Progress modules ✅ COMPLETED
 - [x] Task 1.4: **Pattern System** (`src/scan/pattern.rs`) - YAML-based with `Arc<LazyLock>` sharing ✅ COMPLETED
 - [x] Task 1.5: **Secret Management** (`src/scan/secret.rs`) - SecretMatch creation & validation ✅ COMPLETED
@@ -629,8 +629,8 @@ src/
 
 ---
 
-**Updated**: 2025-08-12  
-**Status**: Phase 2 Nearly Complete, Filter System Implementation Done  
-**Current Progress**: 88% (15/17 modules complete)  
-**Next Task**: Filter Module Structure (`src/scan/filters/*/mod.rs`)  
+**Updated**: 2025-08-12
+**Status**: Phase 2 Nearly Complete, Filter System Implementation Done
+**Current Progress**: 88% (15/17 modules complete)
+**Next Task**: Filter Module Structure (`src/scan/filters/*/mod.rs`)
 **Test Migration**: Comprehensive test structure created with git-crypt for sensitive test data

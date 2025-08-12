@@ -13,7 +13,7 @@ SuperCLI wraps [starbase-styles](https://github.com/moonrepo/starbase) to provid
 ## Features
 
 - 🎨 **Semantic CLI Output Macros** - success!, warning!, info!, error!
-- 🎯 **Fine-Grained Styling Control** - styled! macro for mixing styles  
+- 🎯 **Fine-Grained Styling Control** - styled! macro for mixing styles
 - 🎛️ **Output Mode Management** - color/monochrome/none with environment variables
 - 🌈 **Theme-Aware Output** - automatically adapts to light/dark terminals
 - ✅ **100% starbase-styles compatibility** - enhanced convenience methods
@@ -46,7 +46,7 @@ info!("Processing files...");
 error!("Configuration file not found");
 
 // Fine-grained styling control
-styled!("Processing {} files in {}", 
+styled!("Processing {} files in {}",
     ("150", "number"),
     ("/home/user", "file_path")
 );
@@ -61,15 +61,15 @@ println!("Found {}", file("config.toml"));
 use supercli::prelude::*;
 
 // Mix multiple styled components in one line
-styled!("{} Found {} secrets in {} files ({})", 
+styled!("{} Found {} secrets in {} files ({})",
     ("🔍", "info_symbol"),
-    ("5", "error_count"), 
+    ("5", "error_count"),
     ("127", "file_count"),
     ("2.3s", "duration")
 );
 
 // Chain different style types
-styled!("Status: {} | Progress: {} | ETA: {}", 
+styled!("Status: {} | Progress: {} | ETA: {}",
     ("✅ Complete", "success"),
     ("87%", "progress"),
     ("1m 23s", "muted")
@@ -112,7 +112,7 @@ struct Cli {
     /// Enable verbose output
     #[arg(short, long)]
     verbose: bool,
-    
+
     /// Configuration file path
     #[arg(short, long, default_value = "config.yaml")]
     config: String,
@@ -120,11 +120,11 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    
+
     if cli.verbose {
         info!("Verbose mode enabled");
     }
-    
+
     styled!("Using config file: {}", (cli.config, "file_path"));
 }
 ```
@@ -135,7 +135,7 @@ SuperCLI supports all starbase-styles semantic types:
 
 ### Status Styles
 - `success` - Success messages (green)
-- `warning` - Warning messages (yellow) 
+- `warning` - Warning messages (yellow)
 - `error` - Error messages (red)
 - `info` - Informational messages (blue)
 
@@ -160,7 +160,7 @@ SuperCLI supports all starbase-styles semantic types:
 SuperCLI automatically detects the best output mode:
 
 1. **Color Mode**: Full color output when terminal supports it
-2. **Monochrome Mode**: Black and white styling for limited terminals  
+2. **Monochrome Mode**: Black and white styling for limited terminals
 3. **None Mode**: Plain text with no styling
 
 Detection considers:
@@ -183,7 +183,7 @@ success!("Processed {} files", 42);
 #### `warning!(message, ...)`
 Display warning message with warning symbol.
 
-```rust  
+```rust
 warning!("This action cannot be undone");
 warning!("Found {} deprecated functions", count);
 ```
@@ -208,7 +208,7 @@ error!("Failed to connect to {}", server);
 Fine-grained styling control with multiple style parameters.
 
 ```rust
-styled!("Found {} issues in {} files", 
+styled!("Found {} issues in {} files",
     ("3", "error_count"),
     ("src/main.rs", "file_path")
 );
@@ -223,12 +223,12 @@ use supercli::prelude::*;
 
 info!("Starting file scan...");
 
-styled!("📁 Scanning {} ({} files)", 
+styled!("📁 Scanning {} ({} files)",
     ("src/", "file_path"),
     ("1,247", "number")
 );
 
-styled!("🔍 Found {} secrets in {} files", 
+styled!("🔍 Found {} secrets in {} files",
     ("5", "error_count"),
     ("3", "file_count")
 );
@@ -278,7 +278,7 @@ SuperCLI works well with popular CLI libraries:
 SuperCLI is designed for minimal overhead:
 
 - Zero-cost abstractions where possible
-- Lazy evaluation of styling 
+- Lazy evaluation of styling
 - Minimal allocations
 - Fast terminal capability detection
 

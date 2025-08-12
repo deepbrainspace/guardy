@@ -1,9 +1,9 @@
 # Guardy Secret Detection Patterns
 # This file contains all patterns for detecting secrets, API keys, and sensitive data
-# 
+#
 # Pattern Classification:
 # - specific: High-confidence patterns with reliable keywords (e.g., "sk_live_")
-# - contextual: Patterns needing context analysis (e.g., generic API keys)  
+# - contextual: Patterns needing context analysis (e.g., generic API keys)
 # - always_run: Patterns without reliable keywords (e.g., entropy-only)
 #
 # Priority: 1-10 (higher = run first, 9-10 for critical modern services)

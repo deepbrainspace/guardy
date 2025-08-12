@@ -25,7 +25,7 @@ ATLASSIAN_CLOUD_ID=cloud-id
 - **Main development project for iDance**
 - **Issue Types Available**:
   - Task (ID: 10001)
-  - Bug (ID: 10002) 
+  - Bug (ID: 10002)
   - Story (ID: 10003)
   - Epic (ID: 10004)
   - Subtask (ID: 10005)
@@ -43,7 +43,7 @@ ATLASSIAN_CLOUD_ID=cloud-id
 ### Main Epics in SCRUM Project:
 1. **SCRUM-1**: iDance Platform Development - Q1 2025 Roadmap (Main Epic)
 2. **SCRUM-2**: Frontend Development - User Sites & Backoffice
-3. **SCRUM-3**: Mobile App Development - iOS & Android  
+3. **SCRUM-3**: Mobile App Development - iOS & Android
 4. **SCRUM-4**: Backend Services - CloudFlare Workers
 5. **SCRUM-5**: Database & Infrastructure
 6. **SCRUM-6**: Shared Packages & Libraries
@@ -150,7 +150,7 @@ getVisibleJiraProjects("7361b855-be4d-4989-82f7-2d7df5400662")
 // Test issue creation
 createJiraIssue(
   "7361b855-be4d-4989-82f7-2d7df5400662",
-  "SCRUM", 
+  "SCRUM",
   "Task",
   "Test Issue",
   "Testing Atlassian integration"
