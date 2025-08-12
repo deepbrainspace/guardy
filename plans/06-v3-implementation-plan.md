@@ -209,50 +209,92 @@ files.par_iter()
 - [x] Arc for zero-copy sharing across threads
 - [x] HashSet for O(1) binary extension lookups
 
-### Phase 3: Directory Pipeline (2-3 hours)
+### Phase 3: Directory Pipeline (2-3 hours) ✅ COMPLETED
 **Goal:** Implement directory traversal and filtering
 
 1. **Directory filters**
-   - [ ] Implement PathFilter (gitignore + custom patterns)
-   - [ ] Implement SizeFilter (configurable max size)
-   - [ ] Implement BinaryFilter (extension-based)
+   - [x] Implement PathFilter (gitignore + custom patterns)
+   - [x] Implement SizeFilter (configurable max size)
+   - [x] Implement BinaryFilter (extension-based)
 
 2. **Directory pipeline**
-   - [ ] Create DirectoryPipeline orchestrator
-   - [ ] Integrate with ignore crate for gitignore
-   - [ ] Add parallel file discovery using rayon
+   - [x] Create DirectoryPipeline orchestrator
+   - [x] Integrate with ignore crate for gitignore
+   - [x] Add parallel file discovery using optimized threads
 
-**Validation:** Integration test scanning test directory structure
+**Validation:** Integration test scanning test directory structure ✅
 
-### Phase 4: Content Pipeline - Core (3-4 hours)
+**Optimizations Applied:**
+- [x] PathFilter uses globset for O(n) pattern matching (n = patterns)
+- [x] SizeFilter with early metadata checks to skip large files
+- [x] BinaryFilter uses Arc<HashSet> for O(1) extension lookups
+- [x] System-profile integration for optimal thread calculation
+- [x] Clone traits for efficient filter sharing across threads
+- [x] Single thread pool configuration in static_data::init_config
+
+### Phase 4: Content Pipeline - Core (3-4 hours) ✅ COMPLETED
 **Goal:** Implement core content analysis
 
 1. **Aho-Corasick prefilter**
-   - [ ] Build Aho-Corasick automaton from patterns
-   - [ ] Return pattern indices for active patterns
-   - [ ] Optimize for ~85% pattern elimination
+   - [x] Build Aho-Corasick automaton from patterns
+   - [x] Return pattern indices for active patterns
+   - [x] Optimize for ~85% pattern elimination
 
 2. **Regex executor**
-   - [ ] Sequential pattern matching on active patterns
-   - [ ] Capture group extraction
-   - [ ] Line number and position tracking
+   - [x] Sequential pattern matching on active patterns
+   - [x] Capture group extraction
+   - [x] Line number and position tracking
 
-**Validation:** Unit tests with known secrets
+3. **FilePipeline integration**
+   - [x] Two-stage content processing: prefilter → regex execution
+   - [x] UTF-8 validation with graceful binary file error handling
+   - [x] Performance tracking with timing and statistics
+   - [x] Proper error handling for I/O issues
 
-### Phase 5: Content Pipeline - Filters (2 hours)
+4. **Binary filter enhancements**
+   - [x] Size threshold optimization (4KB universal threshold)
+   - [x] Enhanced content_inspector API integration
+   - [x] Comprehensive statistics tracking
+
+**Validation:** Unit tests with known secrets ✅
+
+**Optimizations Applied:**
+- [x] LazyLock for one-time Aho-Corasick automaton initialization
+- [x] SmallVec for stack-allocated pattern indices (most files match 0-4 patterns)
+- [x] Zero-copy string sharing with Arc for thread safety
+- [x] Size threshold prevents unnecessary content inspection on small files
+- [x] UTF-8 coordinate calculation for precise match positioning
+
+### Phase 5: Content Pipeline - Filters (2 hours) ✅ COMPLETED
 **Goal:** Implement validation filters
 
 1. **Comment filter**
-   - [ ] Parse guardy:ignore directives
-   - [ ] Handle ignore-next and ignore-line
-   - [ ] Track ignore ranges
+   - [x] Parse guardy:ignore directives
+   - [x] Handle ignore-next and ignore-line
+   - [x] Track ignore ranges
+   - [x] Support multiple comment formats (//, #, <!-- -->, /*)
+   - [x] Case-insensitive directive parsing
 
 2. **Entropy filter**
-   - [ ] Port Shannon entropy calculation from v1
-   - [ ] Configurable thresholds per pattern type
-   - [ ] Base64/hex detection optimization
+   - [x] Port advanced Shannon entropy calculation from scan-v2
+   - [x] Statistical analysis with multiple metrics (distinct values, char classes, bigrams)
+   - [x] Configurable thresholds per pattern type
+   - [x] Base64/hex detection optimization with pre-compiled regexes
+   - [x] Pre-computed bigram sets for optimal performance
 
-**Validation:** Test with false positive cases
+3. **Filter architecture**
+   - [x] Clean input/output types with proper SecretMatch handling
+   - [x] CommentFilterInput structure for content access
+   - [x] Comprehensive logging and statistics
+
+**Validation:** Test with false positive cases ✅
+
+**Optimizations Applied:**
+- [x] LazyLock for one-time regex compilation and bigram set initialization
+- [x] Arc sharing for zero-copy access to statistical constants
+- [x] Efficient u32 line number handling matching Coordinate system
+- [x] 488 pre-computed bigrams from ripsecrets research for source code analysis
+- [x] Multiple character class analysis (hex, base36, base64) for entropy calculation
 
 ### Phase 6: Scanner Integration (2-3 hours)
 **Goal:** Wire everything together
