@@ -25,6 +25,13 @@ files.par_iter().map(|file| {
 ```
 **Rationale:** v1 proved pattern-level parallelism is 10x slower (line 554 scanner/core.rs)
 
+**Resource Management:**
+- Use `system-profile` crate for CPU detection
+- Default to 80% of available CPUs (configurable via `max_cpu_percentage`)
+- Calculate threads as: `(SYSTEM.cpu_count * max_cpu_percentage / 100).max(1)`
+- Apply same percentage to both directory walking and file scanning
+- I/O operations (walking) use same thread pool as CPU operations (scanning)
+
 ### 3. Test Detection - EXCLUDED ✅
 **Rationale:** Per user requirement - clients need to know about secrets in tests
 - Users can override with `guardy:ignore` comments if needed

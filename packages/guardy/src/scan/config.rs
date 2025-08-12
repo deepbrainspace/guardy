@@ -25,7 +25,8 @@ pub struct ScannerConfig {
     pub respect_ignore_comments: bool,
     
     // Parallel processing (rayon)
-    pub max_threads: Option<usize>, // None = use rayon defaults
+    pub max_cpu_percentage: u8,      // Percentage of CPUs to use (1-100)
+    pub max_threads: Option<usize>,  // Override computed threads if set
 }
 
 impl Default for ScannerConfig {
@@ -59,6 +60,7 @@ impl Default for ScannerConfig {
             ],
             skip_binary_files: true,
             respect_ignore_comments: true,
+            max_cpu_percentage: 80,  // Use 80% of CPUs by default
             max_threads: None,
         }
     }
