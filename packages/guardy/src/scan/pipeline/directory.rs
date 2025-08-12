@@ -27,6 +27,8 @@ impl DirectoryPipeline {
     }
     
     /// Process files in parallel using rayon
+    /// Rayon automatically handles work distribution - setting RAYON_NUM_THREADS=1 
+    /// or configuring max_threads=1 will effectively make this sequential
     pub fn process_files(
         &self,
         files: Vec<PathBuf>,
@@ -35,53 +37,35 @@ impl DirectoryPipeline {
     ) -> Result<Vec<FileResult>> {
         use rayon::prelude::*;
         
-        // Decide whether to use parallel processing
-        let use_parallel = files.len() >= self.config.min_files_for_parallel;
-        
-        if use_parallel {
-            // Set rayon thread pool if configured
-            if let Some(max_threads) = self.config.max_threads {
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(max_threads)
-                    .build_global()
-                    .ok(); // Ignore if already set
-            }
-            
-            // Process files in parallel
-            Ok(files
-                .par_iter()
-                .map(|file_path| {
-                    let file_path_str = Arc::from(file_path.to_string_lossy().as_ref());
-                    
-                    // Update progress if available
-                    if let Some(p) = progress {
-                        p.increment_files_processed();
-                    }
-                    
-                    // Process the file
-                    match file_pipeline.process_file(file_path) {
-                        Ok(result) => result,
-                        Err(e) => FileResult::failure(file_path_str, e.to_string()),
-                    }
-                })
-                .collect())
-        } else {
-            // Process sequentially for small file counts
-            files
-                .iter()
-                .map(|file_path| {
-                    let file_path_str = Arc::from(file_path.to_string_lossy().as_ref());
-                    
-                    if let Some(p) = progress {
-                        p.increment_files_processed();
-                    }
-                    
-                    match file_pipeline.process_file(file_path) {
-                        Ok(result) => Ok(result),
-                        Err(e) => Ok(FileResult::failure(file_path_str, e.to_string())),
-                    }
-                })
-                .collect()
+        // Configure rayon thread pool if specified
+        // This is a one-time setup that affects the global thread pool
+        if let Some(max_threads) = self.config.max_threads {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(max_threads)
+                .build_global()
+                .ok(); // Ignore if already set
         }
+        
+        // Always use par_iter - rayon handles optimization
+        // With 1 thread, this effectively becomes sequential
+        // With multiple threads, rayon's work-stealing provides optimal distribution
+        Ok(files
+            .par_iter()
+            .map(|file_path| {
+                // Use Arc::from for zero-copy string sharing across threads
+                let file_path_str = Arc::from(file_path.to_string_lossy().as_ref());
+                
+                // Update progress atomically if available
+                if let Some(p) = progress {
+                    p.increment_files_processed();
+                }
+                
+                // Process the file and handle errors gracefully
+                match file_pipeline.process_file(file_path) {
+                    Ok(result) => result,
+                    Err(e) => FileResult::failure(file_path_str, e.to_string()),
+                }
+            })
+            .collect())
     }
 }

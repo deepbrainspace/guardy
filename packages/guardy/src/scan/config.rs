@@ -26,7 +26,6 @@ pub struct ScannerConfig {
     
     // Parallel processing (rayon)
     pub max_threads: Option<usize>, // None = use rayon defaults
-    pub min_files_for_parallel: usize,
 }
 
 impl Default for ScannerConfig {
@@ -61,7 +60,6 @@ impl Default for ScannerConfig {
             skip_binary_files: true,
             respect_ignore_comments: true,
             max_threads: None,
-            min_files_for_parallel: 5,
         }
     }
 }
