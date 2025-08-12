@@ -1,5 +1,6 @@
 //! Secret match data structure with memory optimization
 
+use super::Coordinate;
 use std::sync::Arc;
 
 /// Severity level for a detected secret
@@ -14,33 +15,23 @@ pub enum MatchSeverity {
 /// Represents a detected secret match in a file
 /// 
 /// Memory optimizations:
-/// - Use Arc<str> for strings that might be shared across matches
-/// - Store only essential data
-/// - Lazy computation of display strings
+/// - Use Coordinate struct (16 bytes) instead of storing content
+/// - Use Arc<str> for strings shared across matches
+/// - Store only the matched value, not the entire line
 #[derive(Debug, Clone)]
 pub struct SecretMatch {
-    /// File path (shared across all matches in same file)
-    pub file_path: Arc<str>,
+    /// Position in the file (16 bytes, includes file path via Arc)
+    pub location: super::FileSpan,
     
-    /// Line number (1-indexed)
-    pub line_number: usize,
-    
-    /// The actual line content (might be truncated for very long lines)
-    pub line_content: String,
-    
-    /// The matched secret text
+    /// The matched secret text (just the secret, not the whole line)
     pub matched_text: String,
     
-    /// Start position in the line (0-indexed)
-    pub start_pos: usize,
-    
-    /// End position in the line (0-indexed)
-    pub end_pos: usize,
-    
     /// Type of secret (e.g., "AWS Access Key", "GitHub Token")
+    /// Shared from PatternLibrary via Arc
     pub secret_type: Arc<str>,
     
     /// Pattern description for user display
+    /// Shared from PatternLibrary via Arc
     pub pattern_description: Arc<str>,
     
     /// Severity of the match
@@ -51,27 +42,19 @@ pub struct SecretMatch {
 }
 
 impl SecretMatch {
-    /// Create a new SecretMatch with all required fields
-    #[allow(clippy::too_many_arguments)]
+    /// Create a new SecretMatch
     pub fn new(
         file_path: Arc<str>,
-        line_number: usize,
-        line_content: String,
+        coordinate: Coordinate,
         matched_text: String,
-        start_pos: usize,
-        end_pos: usize,
         secret_type: Arc<str>,
         pattern_description: Arc<str>,
         severity: MatchSeverity,
         confidence: f32,
     ) -> Self {
         Self {
-            file_path,
-            line_number,
-            line_content,
+            location: super::FileSpan::new(file_path, coordinate),
             matched_text,
-            start_pos,
-            end_pos,
             secret_type,
             pattern_description,
             severity,
@@ -79,13 +62,19 @@ impl SecretMatch {
         }
     }
     
-    /// Get a truncated version of the line for display (max 200 chars)
-    pub fn display_line(&self) -> &str {
-        if self.line_content.len() > 200 {
-            &self.line_content[..200]
-        } else {
-            &self.line_content
-        }
+    /// Get the file path
+    pub fn file_path(&self) -> &str {
+        &self.location.file_path
+    }
+    
+    /// Get the line number
+    pub fn line_number(&self) -> u32 {
+        self.location.coordinate.line
+    }
+    
+    /// Get the coordinate
+    pub fn coordinate(&self) -> &Coordinate {
+        &self.location.coordinate
     }
     
     /// Get a redacted version of the matched text for safe display

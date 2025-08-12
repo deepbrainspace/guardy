@@ -4,6 +4,7 @@ use crate::scan::{
     config::ScannerConfig,
     data::{ScanResult, ScanStats},
     pipeline::{DirectoryPipeline, FilePipeline},
+    static_data,
     tracking::ProgressTracker,
 };
 use anyhow::Result;
@@ -21,6 +22,11 @@ pub struct Scanner {
 impl Scanner {
     /// Create a new scanner with the given configuration
     pub fn new(config: ScannerConfig) -> Result<Self> {
+        // Initialize global configuration if not already done
+        if !static_data::is_initialized() {
+            static_data::init_config(config.clone());
+        }
+        
         let config = Arc::new(config);
         
         // Initialize pipelines
@@ -32,6 +38,13 @@ impl Scanner {
             directory_pipeline,
             file_pipeline,
         })
+    }
+    
+    /// Create a scanner using the global configuration
+    pub fn from_global_config() -> Result<Self> {
+        let config = static_data::get_config();
+        let config_owned = (*config).clone();
+        Self::new(config_owned)
     }
     
     /// Scan a path (file or directory) for secrets

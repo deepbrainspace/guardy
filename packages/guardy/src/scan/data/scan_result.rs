@@ -60,7 +60,7 @@ impl ScanResult {
         use std::collections::HashSet;
         let mut files = HashSet::new();
         for match_ in &self.matches {
-            files.insert(match_.file_path.as_ref());
+            files.insert(match_.file_path());
         }
         let mut result: Vec<&str> = files.into_iter().collect();
         result.sort();

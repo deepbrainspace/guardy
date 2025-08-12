@@ -5,17 +5,17 @@
 
 // Sub-modules
 mod config;
+mod core;
 mod data;
 mod filters;
 mod pipeline;
-mod scanner;
 mod static_data;
 mod tracking;
 
 // Public API exports
 pub use config::ScannerConfig;
+pub use core::Scanner;
 pub use data::{FileResult, ScanResult, ScanStats, SecretMatch};
-pub use scanner::Scanner;
 
 // Re-export commonly used types for convenience
 pub use data::MatchSeverity;
