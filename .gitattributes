@@ -9,6 +9,7 @@
 .env.staging filter=git-crypt diff=git-crypt
 .claude.json filter=git-crypt diff=git-crypt
 secrets/** filter=git-crypt diff=git-crypt
+gitcrypted_*.rs filter=git-crypt diff=git-crypt
 
 # Line endings
 * text=auto
