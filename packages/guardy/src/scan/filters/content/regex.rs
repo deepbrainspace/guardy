@@ -10,7 +10,7 @@ use crate::scan::{
 };
 use anyhow::{Context, Result};
 use smallvec::SmallVec;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 /// Input for regex execution containing filtered pattern indices and file context
 pub struct RegexInput {
@@ -157,30 +157,30 @@ impl RegexExecutor {
         use crate::scan::static_data::pattern_library::PatternClass;
         
         let base_confidence = match pattern_class {
-            PatternClass::Specific => 0.9,     // High confidence for specific patterns
-            PatternClass::Contextual => 0.7,   // Medium confidence, needs context
-            PatternClass::AlwaysRun => 0.5,    // Lower confidence, entropy-based
+            PatternClass::Specific => 0.9_f32,     // High confidence for specific patterns
+            PatternClass::Contextual => 0.7_f32,   // Medium confidence, needs context
+            PatternClass::AlwaysRun => 0.5_f32,    // Lower confidence, entropy-based
         };
         
         // Adjust based on match characteristics
         let length_factor = if matched_text.len() >= 20 {
-            1.1 // Longer matches tend to be more reliable
+            1.1_f32 // Longer matches tend to be more reliable
         } else if matched_text.len() < 8 {
-            0.8 // Very short matches might be false positives
+            0.8_f32 // Very short matches might be false positives
         } else {
-            1.0
+            1.0_f32
         };
         
         // Check for obvious test/dummy values
         let test_penalty = if matched_text.to_lowercase().contains("test")
             || matched_text.to_lowercase().contains("dummy")
             || matched_text.to_lowercase().contains("example") {
-            0.5
+            0.5_f32
         } else {
-            1.0
+            1.0_f32
         };
         
-        (base_confidence * length_factor * test_penalty).min(1.0)
+        (base_confidence * length_factor * test_penalty).min(1.0_f32)
     }
 }
 
@@ -198,8 +198,8 @@ impl Filter for RegexExecutor {
     /// 
     /// Takes RegexInput containing content, file path, and active pattern indices.
     /// Returns SecretMatch objects with precise coordinates.
-    fn filter(&self, input: Self::Input) -> Result<Vec<SecretMatch>> {
-        self.execute_patterns(&input.content, input.file_path, input.active_patterns)
+    fn filter(&self, input: &Self::Input) -> Result<Vec<SecretMatch>> {
+        self.execute_patterns(&input.content, input.file_path.clone(), input.active_patterns.clone())
             .context("Failed to execute regex patterns")
     }
     
