@@ -123,12 +123,9 @@ impl RegexExecutor {
     
     /// Convert byte offset to character offset (handles UTF-8)
     fn byte_to_char_offset(text: &str, byte_offset: usize) -> usize {
-        text.chars()
-            .take_while(|_| {
-                // This is an approximation for performance
-                // For exact UTF-8 handling, we'd use char_indices()
-                byte_offset > 0
-            })
+        // Count the number of characters up to the byte offset
+        text[..byte_offset.min(text.len())]
+            .chars()
             .count()
     }
     
@@ -172,7 +169,8 @@ mod tests {
         let coord = RegexExecutor::calculate_coordinate(content, start, end);
         
         assert_eq!(coord.line, 2);
-        assert_eq!(coord.column_start, 11); // 0-indexed
+        assert_eq!(coord.column_start, 12); // "line 2 with " is 12 characters
+        assert_eq!(coord.column_end(), 18);  // 12 + "secret".len() = 18
         assert_eq!(coord.byte_start as usize, start);
         assert_eq!(coord.byte_end as usize, end);
     }

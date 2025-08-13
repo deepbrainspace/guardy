@@ -26,36 +26,32 @@ fn main() -> Result<()> {
     let result = scanner.scan(Path::new("."))?;
     println!("  {}", result.summary());
     
-    // Test 2: Scan specific file if it exists
-    let test_file = Path::new("src/main.rs");
-    if test_file.exists() {
-        println!("\nTest 2: Scanning single file...");
-        let file_result = scanner.scan_file(test_file)?;
-        println!("  File: {}", file_result.file_path);
-        println!("  Success: {}", file_result.success);
-        println!("  Matches: {}", file_result.matches.len());
+    // Test 2: Scan src directory if it exists
+    let src_dir = Path::new("src");
+    if src_dir.exists() {
+        println!("\nTest 2: Scanning src directory...");
+        let src_result = scanner.scan(src_dir)?;
+        println!("  {}", src_result.summary());
+        println!("  Files scanned: {}", src_result.stats.files_scanned);
+        println!("  Matches found: {}", src_result.matches.len());
     }
     
-    // Test 3: Scan multiple paths
-    println!("\nTest 3: Scanning multiple paths in parallel...");
-    let paths = vec![
-        Path::new("src").to_path_buf(),
-        Path::new("tests").to_path_buf(),
-    ];
-    
-    let multi_results = scanner.scan_multiple(&paths)?;
-    for (i, result) in multi_results.iter().enumerate() {
-        println!("  Path {}: {}", i + 1, result.summary());
+    // Test 3: Scan tests directory if it exists
+    let tests_dir = Path::new("tests");
+    if tests_dir.exists() {
+        println!("\nTest 3: Scanning tests directory...");
+        let tests_result = scanner.scan(tests_dir)?;
+        println!("  {}", tests_result.summary());
+        println!("  Files scanned: {}", tests_result.stats.files_scanned);
+        println!("  Matches found: {}", tests_result.matches.len());
     }
     
-    // Test 4: Check performance metrics
-    println!("\nPerformance Summary:");
-    if let Some(result) = multi_results.first() {
-        println!("  Throughput: {:.2} MB/s", result.stats.throughput_mb_per_sec());
-        println!("  Files per second: {:.0}", 
-            result.stats.files_scanned as f64 / (result.stats.scan_duration_ms as f64 / 1000.0)
-        );
-    }
+    // Test 4: Check performance metrics from the initial scan
+    println!("\nPerformance Summary (from initial scan):");
+    println!("  Throughput: {:.2} MB/s", result.stats.throughput_mb_per_sec());
+    println!("  Files per second: {:.0}", 
+        result.stats.files_scanned as f64 / (result.stats.scan_duration_ms as f64 / 1000.0)
+    );
     
     Ok(())
 }

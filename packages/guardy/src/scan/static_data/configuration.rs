@@ -110,10 +110,3 @@ pub fn is_initialized() -> bool {
     }
 }
 
-/// Reset configuration (mainly for testing)
-#[cfg(test)]
-pub fn reset_config() {
-    if let Ok(mut guard) = SCANNER_CONFIG.write() {
-        guard.config = None;
-    }
-}

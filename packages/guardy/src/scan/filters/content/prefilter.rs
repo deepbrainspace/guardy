@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn test_no_matches() {
         let prefilter = ContextPrefilter::new();
-        let result = prefilter.filter("This is just normal text with no secrets").unwrap();
+        let result = prefilter.filter("The quick brown fox jumps over the lazy dog").unwrap();
         // Should return empty since no keywords match
         assert!(result.is_empty());
     }

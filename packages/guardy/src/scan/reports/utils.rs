@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(redact_secret_with_style("short", RedactionStyle::Length), "*****");
         
         assert_eq!(redact_secret_with_style("sk-1234567890abcdef", RedactionStyle::Partial), "sk-...def");
-        assert_eq!(redact_secret_with_style("sk-1234567890abcdef", RedactionStyle::Length), "******************");
+        assert_eq!(redact_secret_with_style("sk-1234567890abcdef", RedactionStyle::Length), "*******************");
     }
 
     #[test]
