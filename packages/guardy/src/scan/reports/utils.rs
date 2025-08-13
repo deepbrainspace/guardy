@@ -66,13 +66,13 @@ pub fn format_file_size(bytes: u64) -> String {
 /// Format duration in human-readable format
 pub fn format_duration_ms(ms: u64) -> String {
     if ms < 1000 {
-        format!("{}ms", ms)
+        format!("{ms}ms")
     } else if ms < 60_000 {
         format!("{:.1}s", ms as f64 / 1000.0)
     } else {
         let minutes = ms / 60_000;
         let seconds = (ms % 60_000) as f64 / 1000.0;
-        format!("{}m {:.1}s", minutes, seconds)
+        format!("{minutes}m {seconds:.1}s")
     }
 }
 
@@ -82,12 +82,12 @@ mod tests {
 
     #[test]
     fn test_redact_secret() {
-        assert_eq!(redact_secret("short", RedactionStyle::Full), "**REDACTED**");
-        assert_eq!(redact_secret("short", RedactionStyle::Partial), "*****");
-        assert_eq!(redact_secret("short", RedactionStyle::Length), "*****");
+        assert_eq!(redact_secret_with_style("short", RedactionStyle::Full), "**REDACTED**");
+        assert_eq!(redact_secret_with_style("short", RedactionStyle::Partial), "*****");
+        assert_eq!(redact_secret_with_style("short", RedactionStyle::Length), "*****");
         
-        assert_eq!(redact_secret("sk-1234567890abcdef", RedactionStyle::Partial), "sk-...def");
-        assert_eq!(redact_secret("sk-1234567890abcdef", RedactionStyle::Length), "******************");
+        assert_eq!(redact_secret_with_style("sk-1234567890abcdef", RedactionStyle::Partial), "sk-...def");
+        assert_eq!(redact_secret_with_style("sk-1234567890abcdef", RedactionStyle::Length), "******************");
     }
 
     #[test]

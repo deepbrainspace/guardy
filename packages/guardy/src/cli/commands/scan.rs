@@ -150,7 +150,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         let total_matches: usize = all_results.iter()
             .map(|r| r.matches.len())
             .sum();
-        println!("{}", total_matches);
+        println!("{total_matches}");
         if total_matches > 0 {
             std::process::exit(1);
         }
@@ -338,7 +338,7 @@ fn print_summary_results(
         );
         
         // Add filter performance stats
-        if let Some(ref scanner) = scanner_ref {
+        if let Some(scanner) = scanner_ref {
             let filter_stats = scanner.get_filter_stats();
             print_filter_performance_stats(&filter_stats);
         }
@@ -417,7 +417,7 @@ fn print_detailed_results(
                         output::styled!(
                             "  Line {}: [{}]",
                             (secret_match.line_number().to_string(), "number"),
-                            (secret_match.secret_type.to_string(), "id_value")
+                            (&secret_match.secret_type, "id_value")
                         );
                         if args.show_content {
                             output::styled!(
@@ -490,7 +490,7 @@ fn print_json_results(
 fn print_files_only(results: &[crate::scan::ScanResult]) {
     let unique_files = unique_files_with_secrets(results);
     for file in unique_files {
-        println!("{}", file);
+        println!("{file}");
     }
 }
 

@@ -155,18 +155,16 @@ impl ProgressTracker {
     pub fn finish_discovery(&self, total_files: usize) {
         self.files_discovered.store(total_files, Ordering::Relaxed);
         
-        if let Ok(start) = self.start_time.read() {
-            if let Some(start_instant) = *start {
-                if let Ok(mut duration) = self.discovery_duration.write() {
-                    *duration = Some(start_instant.elapsed());
-                }
-            }
+        if let Ok(start) = self.start_time.read()
+            && let Some(start_instant) = *start
+            && let Ok(mut duration) = self.discovery_duration.write() {
+            *duration = Some(start_instant.elapsed());
         }
         
         if let Some(ref bar) = self.discovery_bar {
             bar.set_length(total_files as u64);
             bar.set_position(total_files as u64);
-            bar.finish_with_message(format!("Discovered {} files", total_files));
+            bar.finish_with_message(format!("Discovered {total_files} files"));
         }
     }
     
@@ -176,7 +174,7 @@ impl ProgressTracker {
             bar.reset();
             bar.set_length(total_files as u64);
             bar.set_message("Scanning files");
-            bar.set_prefix(format!("0 matches"));
+            bar.set_prefix("0 matches".to_string());
             bar.enable_steady_tick(Duration::from_millis(100));
         }
     }
@@ -193,7 +191,7 @@ impl ProgressTracker {
     /// Update discovery progress with current counts
     pub fn update_discovery_progress(&self, files_found: usize, dirs_found: usize) {
         if let Some(ref bar) = self.discovery_bar {
-            bar.set_message(format!("{} files, {} dirs found", files_found, dirs_found));
+            bar.set_message(format!("{files_found} files, {dirs_found} dirs found"));
         }
     }
     

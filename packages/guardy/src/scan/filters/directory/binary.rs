@@ -67,20 +67,19 @@ impl BinaryFilter {
         }
         
         // Stage 1: Fast extension check (O(1) lookup, no I/O)
-        if let Some(extension) = path.extension() {
-            if let Some(ext_str) = extension.to_str() {
-                let ext_lower = ext_str.to_lowercase();
-                
-                if is_binary_extension(&ext_lower) {
-                    // Update statistics
-                    if let Ok(mut stats) = self.stats.lock() {
-                        stats.extension_cache_hits += 1;
-                        stats.files_binary_by_extension += 1;
-                    }
-                    
-                    tracing::trace!("File detected as binary by extension '{}': {}", ext_lower, path.display());
-                    return Ok(true);
+        if let Some(extension) = path.extension() 
+            && let Some(ext_str) = extension.to_str() {
+            let ext_lower = ext_str.to_lowercase();
+            
+            if is_binary_extension(&ext_lower) {
+                // Update statistics
+                if let Ok(mut stats) = self.stats.lock() {
+                    stats.extension_cache_hits += 1;
+                    stats.files_binary_by_extension += 1;
                 }
+                
+                tracing::trace!("File detected as binary by extension '{}': {}", ext_lower, path.display());
+                return Ok(true);
             }
         }
         

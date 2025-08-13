@@ -84,10 +84,9 @@ pub fn get_config() -> Arc<ScannerConfig> {
     let container = &SCANNER_CONFIG;
     
     // Try to read existing config
-    if let Ok(guard) = container.read() {
-        if let Some(ref config) = guard.config {
-            return config.clone();
-        }
+    if let Ok(guard) = container.read()
+        && let Some(ref config) = guard.config {
+        return config.clone();
     }
     
     // If not initialized or lock failed, initialize with default

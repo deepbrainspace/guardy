@@ -59,7 +59,7 @@ impl FilePipeline {
                 stats.increment_files_failed();
                 return Ok(FileResult::failure(
                     file_path,
-                    format!("{}: {}", error_msg, e)
+                    format!("{error_msg}: {e}")
                 ));
             }
         };

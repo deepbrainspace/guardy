@@ -103,10 +103,10 @@ impl DirectoryPipeline {
         // Clone filters and stats once to move into the closure (cheap - just Arc ref count)
         // Each filter uses Arc internally, so cloning is just incrementing ref count
         let path_filter = self.path_filter.clone();
-        let size_filter = self.size_filter.clone();
+        let size_filter = self.size_filter;
         let binary_filter = self.binary_filter.clone();
         let stats_collector = stats.clone();
-        let progress_clone = progress.map(|p| p.clone());
+        let progress_clone = progress.cloned();
         let follow_symlinks = self.config.follow_symlinks;
         
         // Walk the directory tree in parallel
@@ -115,7 +115,7 @@ impl DirectoryPipeline {
             // Clone again for each thread's visitor (still cheap - Arc increment)
             let files = files_clone.clone();
             let path_filter = path_filter.clone();
-            let size_filter = size_filter.clone();
+            let size_filter = size_filter;
             let binary_filter = binary_filter.clone();
             let stats = stats_collector.clone();
             let progress = progress_clone.clone();
@@ -127,7 +127,7 @@ impl DirectoryPipeline {
                         let path = entry.path();
                         
                         // Skip directories, but count them
-                        if entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                        if entry.file_type().is_some_and(|ft| ft.is_dir()) {
                             stats.increment_directories_traversed();
                             return WalkState::Continue;
                         }
@@ -137,17 +137,16 @@ impl DirectoryPipeline {
                         
                         // Update discovery progress every 100 files (performance optimization)
                         let files_discovered = stats.to_scan_stats(0).total_files_discovered;
-                        if files_discovered % 100 == 0 {
-                            if let Some(ref p) = progress {
-                                p.update_discovery_progress(
-                                    files_discovered,
-                                    stats.to_scan_stats(0).directories_traversed
-                                );
-                            }
+                        if files_discovered % 100 == 0
+                            && let Some(ref p) = progress {
+                            p.update_discovery_progress(
+                                files_discovered,
+                                stats.to_scan_stats(0).directories_traversed
+                            );
                         }
                         
                         // Skip symlinks if not following them
-                        if entry.file_type().map_or(false, |ft| ft.is_symlink()) 
+                        if entry.file_type().is_some_and(|ft| ft.is_symlink()) 
                             && !follow_symlinks {
                             return WalkState::Continue;
                         }

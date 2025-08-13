@@ -52,7 +52,7 @@ fn build_keyword_mapping() -> Result<HashMap<usize, SmallVec<[usize; 2]>>> {
             // Find the keyword index in the global keywords list
             if let Some(keyword_idx) = keywords.iter().position(|k| k == pattern_keyword) {
                 mapping.entry(keyword_idx)
-                    .or_insert_with(SmallVec::new)
+                    .or_default()
                     .push(pattern.index);
             }
         }
@@ -167,7 +167,7 @@ mod tests {
     
     #[test]
     fn test_prefilter_initialization() {
-        let prefilter = ContextPrefilter::new();
+        // Just verify that stats are available and valid
         let stats = ContextPrefilter::stats();
         
         assert!(stats.total_patterns > 0);

@@ -79,17 +79,11 @@ impl Filter for PathFilter {
         
         // Also check individual path components for common patterns
         for component in path.components() {
-            if let Some(name) = component.as_os_str().to_str() {
-                // Skip common build/dependency directories
-                match name {
-                    "node_modules" | ".git" | "target" | "dist" | "build" | 
-                    ".next" | "out" | "coverage" | ".nyc_output" | 
-                    ".pytest_cache" | "__pycache__" | ".tox" |
-                    "vendor" | "deps" | ".bundle" => {
-                        return Ok(FilterDecision::Skip("common ignore directory"));
-                    }
-                    _ => {}
-                }
+            if let Some("node_modules" | ".git" | "target" | "dist" | "build" | 
+                        ".next" | "out" | "coverage" | ".nyc_output" | 
+                        ".pytest_cache" | "__pycache__" | ".tox" |
+                        "vendor" | "deps" | ".bundle") = component.as_os_str().to_str() {
+                return Ok(FilterDecision::Skip("common ignore directory"));
             }
         }
         
@@ -110,7 +104,7 @@ impl Filter for PathFilter {
         for (pattern, counter) in self.patterns.iter().zip(self.pattern_usage.iter()) {
             let count = counter.load(Ordering::Relaxed);
             if count > 0 {
-                pattern_stats.push((format!("Pattern: {}", pattern), count.to_string()));
+                pattern_stats.push((format!("Pattern: {pattern}"), count.to_string()));
                 active_patterns += 1;
             }
         }

@@ -81,14 +81,14 @@ impl ReportOrchestrator {
         let safety_suffix = if display_secrets { "sensitive" } else { "redacted" };
         let extension = format.extension();
         
-        format!("guardy-report-{}.{}.{}", timestamp, safety_suffix, extension)
+        format!("guardy-report-{timestamp}.{safety_suffix}.{extension}")
     }
     
     /// Get default report directory with fallback options
     fn get_default_report_dir() -> Result<PathBuf> {
         // Try .guardy/reports/ first
         let guardy_dir = PathBuf::from(".guardy").join("reports");
-        if guardy_dir.parent().map_or(true, |p| p.exists() || fs::create_dir_all(p).is_ok()) {
+        if guardy_dir.parent().is_none() || guardy_dir.parent().is_some_and(|p| p.exists() || fs::create_dir_all(p).is_ok()) {
             return Ok(guardy_dir);
         }
         

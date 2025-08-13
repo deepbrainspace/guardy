@@ -162,7 +162,6 @@ impl Filter for RegexExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::smallvec;
     
     #[test]
     fn test_coordinate_calculation() {
