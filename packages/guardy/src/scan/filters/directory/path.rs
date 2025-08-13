@@ -1,8 +1,9 @@
 //! Path-based filtering using globset for efficient pattern matching
 
-use crate::scan::filters::{DirectoryFilter, Filter, FilterDecision};
+use crate::scan::filters::{Filter, FilterDecision};
 use anyhow::Result;
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use smallvec::SmallVec;
 use std::path::Path;
 use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 
@@ -98,21 +99,29 @@ impl Filter for PathFilter {
     fn name(&self) -> &'static str {
         "PathFilter"
     }
-}
-
-impl PathFilter {
-    /// Get usage statistics for trace-level debugging
-    /// Only call this with trace-level logging to avoid overhead
-    pub fn get_stats(&self) -> Vec<(String, usize)> {
-        self.patterns
-            .iter()
-            .zip(self.pattern_usage.iter())
-            .map(|(pattern, counter)| {
-                (pattern.clone(), counter.load(Ordering::Relaxed))
-            })
-            .filter(|(_, count)| *count > 0) // Only show patterns that matched something
-            .collect()
+    
+    fn get_stats(&self) -> SmallVec<[(String, String); 8]> {
+        let mut stats = SmallVec::new();
+        let total_patterns = self.patterns.len();
+        let mut active_patterns = 0;
+        
+        // First collect active pattern stats
+        let mut pattern_stats: SmallVec<[(String, String); 8]> = SmallVec::new();
+        for (pattern, counter) in self.patterns.iter().zip(self.pattern_usage.iter()) {
+            let count = counter.load(Ordering::Relaxed);
+            if count > 0 {
+                pattern_stats.push((format!("Pattern: {}", pattern), count.to_string()));
+                active_patterns += 1;
+            }
+        }
+        
+        // Build final stats with summary first, then pattern details
+        stats.push(("Total patterns".to_string(), total_patterns.to_string()));
+        stats.push(("Active patterns".to_string(), active_patterns.to_string()));
+        stats.extend(pattern_stats);
+        
+        stats
     }
 }
 
-impl DirectoryFilter for PathFilter {}
+

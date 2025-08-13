@@ -43,6 +43,7 @@ impl ReportGenerator for JsonReportGenerator {
             "performance": {
                 "total_bytes_processed": result.stats.total_bytes_processed,
                 "total_lines_processed": performance_stats.total_lines_processed,
+                "total_file_scan_time_ms": performance_stats.total_file_scan_time_ms,
                 "lines_per_second": performance_stats.lines_per_second(metadata.scan_duration_ms),
                 "files_failed": result.stats.files_failed,
                 "slowest_files": performance_stats.slowest_files.iter().take(10).map(|(path, time_ms)| {
@@ -59,6 +60,12 @@ impl ReportGenerator for JsonReportGenerator {
                         "formatted_size": utils::format_file_size(*size)
                     })
                 }).collect::<Vec<Value>>(),
+                "files_with_matches": performance_stats.files_with_matches.iter().map(|(path, count)| {
+                    json!({
+                        "file": path.as_ref(),
+                        "match_count": count
+                    })
+                }).collect::<Vec<Value>>(),
             },
             "secrets_by_type": matches_by_type.iter().map(|(secret_type, matches)| {
                 json!({
@@ -70,7 +77,7 @@ impl ReportGenerator for JsonReportGenerator {
                             "line": secret.line_number(),
                             "column_start": secret.coordinate().column_start,
                             "column_end": secret.coordinate().column_end(),
-                            "matched_text": utils::get_secret_display_value(secret, config),
+                            "matched_text": utils::get_secret_display_value_for_format(secret, config, super::ReportFormat::Json),
                             "pattern_description": secret.pattern_description.as_ref(),
                         })
                     }).collect::<Vec<Value>>()
@@ -86,7 +93,7 @@ impl ReportGenerator for JsonReportGenerator {
                             "line": secret.line_number(),
                             "column_start": secret.coordinate().column_start,
                             "column_end": secret.coordinate().column_end(),
-                            "matched_text": utils::get_secret_display_value(secret, config),
+                            "matched_text": utils::get_secret_display_value_for_format(secret, config, super::ReportFormat::Json),
                         })
                     }).collect::<Vec<Value>>()
                 })
@@ -117,11 +124,4 @@ impl ReportGenerator for JsonReportGenerator {
         Ok(serde_json::to_string_pretty(&report)?)
     }
     
-    fn file_extension(&self) -> &'static str {
-        "json"
-    }
-    
-    fn mime_type(&self) -> &'static str {
-        "application/json"
-    }
 }

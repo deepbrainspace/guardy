@@ -59,15 +59,11 @@ impl SecretMatch {
         &self.location.coordinate
     }
     
-    /// Get a redacted version of the matched text for safe display
-    pub fn redacted_match(&self) -> String {
-        let len = self.matched_text.len();
-        if len <= 8 {
-            "*".repeat(len)
-        } else {
-            format!("{}...{}", 
-                &self.matched_text[..3],
-                &self.matched_text[len-3..])
-        }
+    /// Get a fully redacted version for high-security contexts (logs, console output)
+    pub fn redacted_match_secure(&self) -> String {
+        use crate::scan::reports::utils::redact_secret_with_style;
+        use crate::scan::reports::RedactionStyle;
+        
+        redact_secret_with_style(&self.matched_text, RedactionStyle::Full)
     }
 }

@@ -4,9 +4,10 @@
 //! Stage 1: Extension check (O(1) HashSet lookup, no I/O)
 //! Stage 2: Content inspection (reads first 512 bytes for unknown extensions)
 
-use crate::scan::filters::{DirectoryFilter, Filter, FilterDecision};
+use crate::scan::filters::{Filter, FilterDecision};
 use crate::scan::static_data::binary_extensions::is_binary_extension;
 use anyhow::Result;
+use smallvec::SmallVec;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -161,20 +162,6 @@ impl BinaryFilter {
         
         Ok(is_binary)
     }
-    
-    /// Get current filter statistics
-    pub fn get_stats(&self) -> BinaryFilterStats {
-        self.stats.lock()
-            .map(|stats| stats.clone())
-            .unwrap_or_default()
-    }
-    
-    /// Reset statistics counters
-    pub fn reset_stats(&self) {
-        if let Ok(mut stats) = self.stats.lock() {
-            *stats = BinaryFilterStats::default();
-        }
-    }
 }
 
 impl Filter for BinaryFilter {
@@ -201,6 +188,20 @@ impl Filter for BinaryFilter {
     fn name(&self) -> &'static str {
         "BinaryFilter"
     }
+    
+    fn get_stats(&self) -> SmallVec<[(String, String); 8]> {
+        let stats = self.stats.lock()
+            .map(|s| s.clone())
+            .unwrap_or_default();
+            
+        smallvec::smallvec![
+            ("Files checked".to_string(), stats.files_checked.to_string()),
+            ("Binary by extension".to_string(), stats.files_binary_by_extension.to_string()),
+            ("Binary by content".to_string(), stats.files_binary_by_content.to_string()),
+            ("Text confirmed".to_string(), stats.files_text_confirmed.to_string()),
+            ("Extension cache hits".to_string(), stats.extension_cache_hits.to_string()),
+            ("Content inspections".to_string(), stats.content_inspections_performed.to_string()),
+        ]
+    }
 }
 
-impl DirectoryFilter for BinaryFilter {}

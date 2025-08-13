@@ -5,7 +5,7 @@
 
 use crate::scan::{
     data::{Coordinate, SecretMatch},
-    filters::{ContentFilter, Filter},
+    filters::{Filter},
     static_data::pattern_library::get_pattern_library,
 };
 use anyhow::{Context, Result};
@@ -158,7 +158,6 @@ impl Filter for RegexExecutor {
     }
 }
 
-impl ContentFilter for RegexExecutor {}
 
 #[cfg(test)]
 mod tests {

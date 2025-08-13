@@ -7,8 +7,6 @@ use std::time::SystemTime;
 pub struct ReportConfig {
     /// Include per-file timing details
     pub include_file_timing: bool,
-    /// Include line content in reports (may contain sensitive data)
-    pub include_line_content: bool,
     /// Display actual secrets (DANGEROUS - false by default)
     pub display_secrets: bool,
     /// How to redact secrets when display_secrets=false
@@ -17,13 +15,33 @@ pub struct ReportConfig {
     pub max_matches: usize,
 }
 
+impl ReportConfig {
+    /// Get the appropriate redaction style based on report format and context
+    pub fn redaction_style_for_format(&self, format: ReportFormat) -> RedactionStyle {
+        if self.display_secrets {
+            // No redaction needed when secrets are explicitly requested
+            return self.redaction_style;
+        }
+        
+        match format {
+            ReportFormat::Json => {
+                // JSON: Use Length for programmatic analysis (preserves data structure)
+                RedactionStyle::Length
+            },
+            ReportFormat::Html => {
+                // HTML: Use Partial for human readability (shows pattern structure)
+                RedactionStyle::Partial
+            },
+        }
+    }
+}
+
 impl Default for ReportConfig {
     fn default() -> Self {
         Self {
             include_file_timing: true,
-            include_line_content: false, // Safe by default
             display_secrets: false,      // Safe by default
-            redaction_style: RedactionStyle::Partial,
+            redaction_style: RedactionStyle::Partial, // Default when display_secrets=true
             max_matches: 0,              // Unlimited by default
         }
     }

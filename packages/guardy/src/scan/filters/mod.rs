@@ -5,4 +5,4 @@ pub mod directory;
 pub mod content;
 
 // Re-export core traits
-pub use traits::{ContentFilter, DirectoryFilter, Filter, FilterDecision};
+pub use traits::{Filter, FilterDecision};

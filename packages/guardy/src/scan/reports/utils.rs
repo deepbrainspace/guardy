@@ -3,17 +3,22 @@
 use super::{ReportConfig, RedactionStyle};
 use crate::scan::data::SecretMatch;
 
-/// Get display value for a secret based on configuration
-pub fn get_secret_display_value(secret: &SecretMatch, config: &ReportConfig) -> String {
+/// Get display value for a secret in a specific report format (context-aware)
+pub fn get_secret_display_value_for_format(
+    secret: &SecretMatch, 
+    config: &ReportConfig, 
+    format: super::ReportFormat
+) -> String {
     if config.display_secrets {
         secret.matched_text.clone()
     } else {
-        redact_secret(&secret.matched_text, config.redaction_style)
+        let style = config.redaction_style_for_format(format);
+        redact_secret_with_style(&secret.matched_text, style)
     }
 }
 
 /// Redact a secret according to the specified style
-fn redact_secret(secret: &str, style: RedactionStyle) -> String {
+pub fn redact_secret_with_style(secret: &str, style: RedactionStyle) -> String {
     match style {
         RedactionStyle::Full => "**REDACTED**".to_string(),
         RedactionStyle::Partial => {

@@ -2,7 +2,7 @@
 
 use crate::scan::{
     config::ScannerConfig,
-    data::{FileResult, StatsCollector},
+    data::StatsCollector,
     filters::{
         directory::{BinaryFilter, PathFilter, SizeFilter}, Filter, FilterDecision,
     },
@@ -10,9 +10,21 @@ use crate::scan::{
 };
 use anyhow::Result;
 use ignore::{WalkBuilder, WalkState};
+use smallvec::SmallVec;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use system_profile::SYSTEM;
+
+/// Combined filter statistics for performance analysis
+#[derive(Debug, Clone)]
+pub struct FilterStats {
+    /// Binary filter performance stats (key-value pairs)
+    pub binary_filter_stats: SmallVec<[(String, String); 8]>,
+    /// Path filter statistics (key-value pairs)
+    pub path_filter_stats: SmallVec<[(String, String); 8]>,
+    /// Size filter statistics (key-value pairs)
+    pub size_filter_stats: SmallVec<[(String, String); 8]>,
+}
 
 /// Pipeline for directory traversal and file filtering
 pub struct DirectoryPipeline {
@@ -52,7 +64,12 @@ impl DirectoryPipeline {
     
     /// Discover all files to scan from a path using the ignore crate
     /// This respects .gitignore files and provides efficient parallel walking
-    pub fn discover_files(&self, path: &Path, stats: Arc<StatsCollector>) -> Result<Vec<PathBuf>> {
+    pub fn discover_files(
+        &self, 
+        path: &Path, 
+        stats: Arc<StatsCollector>,
+        progress: Option<&ProgressTracker>
+    ) -> Result<Vec<PathBuf>> {
         // Verify path exists
         if !path.exists() {
             anyhow::bail!("Path does not exist: {}", path.display());
@@ -89,6 +106,7 @@ impl DirectoryPipeline {
         let size_filter = self.size_filter.clone();
         let binary_filter = self.binary_filter.clone();
         let stats_collector = stats.clone();
+        let progress_clone = progress.map(|p| p.clone());
         let follow_symlinks = self.config.follow_symlinks;
         
         // Walk the directory tree in parallel
@@ -100,6 +118,7 @@ impl DirectoryPipeline {
             let size_filter = size_filter.clone();
             let binary_filter = binary_filter.clone();
             let stats = stats_collector.clone();
+            let progress = progress_clone.clone();
             
             Box::new(move |result| {
                 // This closure processes each file/directory entry
@@ -113,8 +132,19 @@ impl DirectoryPipeline {
                             return WalkState::Continue;
                         }
                         
-                        // Count discovered files
+                        // Count discovered files and update progress periodically
                         stats.increment_files_discovered();
+                        
+                        // Update discovery progress every 100 files (performance optimization)
+                        let files_discovered = stats.to_scan_stats(0).total_files_discovered;
+                        if files_discovered % 100 == 0 {
+                            if let Some(ref p) = progress {
+                                p.update_discovery_progress(
+                                    files_discovered,
+                                    stats.to_scan_stats(0).directories_traversed
+                                );
+                            }
+                        }
                         
                         // Skip symlinks if not following them
                         if entry.file_type().map_or(false, |ft| ft.is_symlink()) 
@@ -167,46 +197,18 @@ impl DirectoryPipeline {
     }
     
     /// Process files in parallel using rayon
-    /// The global thread pool was already configured in the constructor
-    /// With 1 thread configured, this effectively becomes sequential
-    pub fn process_files(
-        &self,
-        files: Vec<PathBuf>,
-        file_pipeline: Arc<super::FilePipeline>,
-        stats: Arc<StatsCollector>,
-        progress: Option<&ProgressTracker>,
-    ) -> Result<Vec<FileResult>> {
-        use rayon::prelude::*;
-        
-        // Always use par_iter - rayon handles optimization
-        // Thread pool was already configured in constructor with thread_count
-        // With 1 thread, this effectively becomes sequential
-        // With multiple threads, rayon's work-stealing provides optimal distribution
-        Ok(files
-            .par_iter()
-            .map(|file_path| {
-                // Use Arc::from for zero-copy string sharing across threads
-                let file_path_str = Arc::from(file_path.to_string_lossy().as_ref());
-                
-                // Update progress atomically if available
-                if let Some(p) = progress {
-                    p.increment_files_processed();
-                }
-                
-                // Process the file and handle errors gracefully
-                match file_pipeline.process_file(file_path, stats.clone()) {
-                    Ok(result) => result,
-                    Err(e) => {
-                        stats.increment_files_failed();
-                        FileResult::failure(file_path_str, e.to_string())
-                    },
-                }
-            })
-            .collect())
+    /// Get filter statistics for performance analysis
+    pub fn get_filter_stats(&self) -> FilterStats {
+        FilterStats {
+            binary_filter_stats: self.binary_filter.get_stats(),
+            path_filter_stats: self.path_filter.get_stats(),
+            size_filter_stats: self.size_filter.get_stats(),
+        }
     }
     
+    
     /// Get path filter statistics for trace-level debugging
-    pub fn path_filter_stats(&self) -> Vec<(String, usize)> {
+    pub fn path_filter_stats(&self) -> SmallVec<[(String, String); 8]> {
         self.path_filter.get_stats()
     }
 }

@@ -142,7 +142,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     
     // Generate reports if requested
     if args.report {
-        generate_reports(&all_results, &args, elapsed.as_millis() as u64).await?;
+        generate_reports(&all_results, &args).await?;
     }
     
     // Handle count-only mode
@@ -166,7 +166,19 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             print_files_only(&all_results);
         }
         OutputFormat::Summary => {
-            print_summary_results(&all_results, elapsed, verbose_level, &args)?;
+            print_summary_results(&all_results, elapsed, verbose_level, &args, Some(&scanner))?;
+            
+            // Show detailed summary for verbose mode
+            if verbose_level > 1 && !all_results.is_empty() {
+                println!();
+                for (i, result) in all_results.iter().enumerate() {
+                    if all_results.len() > 1 {
+                        output::styled!("Path {}: {}", ((i + 1).to_string(), "number"), (result.summary(), "info"));
+                    } else {
+                        output::styled!("Summary: {}", (result.summary(), "info"));
+                    }
+                }
+            }
         }
         OutputFormat::Detailed => {
             print_detailed_results(&all_results, elapsed, &args, verbose_level)?;
@@ -196,7 +208,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     }
     
     // Exit with error code if secrets found
-    let has_secrets = all_results.iter().any(|r| !r.matches.is_empty());
+    let has_secrets = all_results.iter().any(|r| r.has_secrets());
     if has_secrets {
         std::process::exit(1);
     }
@@ -210,6 +222,7 @@ fn print_summary_results(
     elapsed: std::time::Duration,
     _verbose_level: u8,
     args: &ScanArgs,
+    scanner_ref: Option<&crate::scan::Scanner>,
 ) -> Result<()> {
     let total_matches: usize = results.iter().map(|r| r.matches.len()).sum();
     let total_files: usize = results.iter().map(|r| r.stats.files_scanned).sum();
@@ -228,7 +241,7 @@ fn print_summary_results(
         // Show brief summary of findings
         println!();
         for result in results {
-            if !result.matches.is_empty() {
+            if result.has_secrets() {
                 let file_groups = group_matches_by_file(&result.matches);
                 for (file_path, matches) in file_groups.iter().take(5) { // Show first 5 files
                     output::styled!(
@@ -283,6 +296,7 @@ fn print_summary_results(
         // Aggregate detailed stats from all results
         let stats = &results[0].stats; // Use first result's stats (they should all be similar)
         
+        output::styled!("  Directories traversed: {}", (stats.directories_traversed.to_string(), "symbol"));
         output::styled!("  Files discovered: {}", (stats.total_files_discovered.to_string(), "symbol"));
         output::styled!("  Files scanned: {}", (stats.files_scanned.to_string(), "symbol"));
         output::styled!("  Files skipped: {}", (stats.files_skipped.to_string(), "symbol"));
@@ -295,6 +309,7 @@ fn print_summary_results(
         output::styled!("    By size: {}", (stats.files_filtered_by_size.to_string(), "symbol"));
         output::styled!("    By binary: {}", (stats.files_filtered_by_binary.to_string(), "symbol"));
         output::styled!("    By path: {}", (stats.files_filtered_by_path.to_string(), "symbol"));
+        output::styled!("    Filter efficiency: {:.1}%", (format!("{:.1}", stats.filter_efficiency()), "symbol"));
         
         println!();
         output::styled!("  {} Match Statistics", ("🔍", "info_symbol"));
@@ -310,15 +325,23 @@ fn print_summary_results(
         output::styled!("  {} Performance", ("⚡", "info_symbol"));
         output::styled!("    Scan time: {}", (format!("{:.2}s", elapsed.as_secs_f64()), "symbol"));
         output::styled!("    Throughput: {}", (format!("{:.1} MB/s", throughput), "symbol"));
+        output::styled!("    Files per second: {}", (format!("{:.1} files/s", stats.files_per_sec()), "symbol"));
         output::styled!("    Data processed: {}", (format!("{:.1} MB", total_bytes as f64 / 1_000_000.0), "symbol"));
         output::styled!("    Lines processed: {}", (stats.total_lines_processed.to_string(), "symbol"));
         
         // Add prefilter performance stats
         let prefilter_stats = ContextPrefilter::stats();
-        output::styled!("    Pattern library: {} patterns, {} keywords", 
+        output::styled!("    Pattern library: {} patterns, {} keywords, {:.1} patterns/keyword", 
             (prefilter_stats.total_patterns.to_string(), "symbol"),
-            (prefilter_stats.total_keywords.to_string(), "symbol")
+            (prefilter_stats.total_keywords.to_string(), "symbol"),
+            (prefilter_stats.avg_patterns_per_keyword.to_string(), "symbol")
         );
+        
+        // Add filter performance stats
+        if let Some(ref scanner) = scanner_ref {
+            let filter_stats = scanner.get_filter_stats();
+            print_filter_performance_stats(&filter_stats);
+        }
         
         if total_warnings > 0 {
             println!();
@@ -329,6 +352,37 @@ fn print_summary_results(
     Ok(())
 }
 
+/// Print filter performance statistics
+fn print_filter_performance_stats(filter_stats: &crate::scan::pipeline::directory::FilterStats) {
+    println!();
+    output::styled!("    {} Filter Performance:", ("🔍", "info_symbol"));
+    
+    // Binary filter stats
+    if !filter_stats.binary_filter_stats.is_empty() {
+        output::styled!("      Binary Filter:");
+        for (key, value) in &filter_stats.binary_filter_stats {
+            output::styled!("        {}: {}", (key, "property"), (value, "symbol"));
+        }
+    }
+    
+    // Path filter stats
+    if !filter_stats.path_filter_stats.is_empty() {
+        output::styled!("      Path Filter:");
+        for (key, value) in &filter_stats.path_filter_stats {
+            output::styled!("        {}: {}", (key, "property"), (value, "symbol"));
+        }
+    }
+    
+    // Size filter stats
+    if !filter_stats.size_filter_stats.is_empty() {
+        output::styled!("      Size Filter:");
+        for (key, value) in &filter_stats.size_filter_stats {
+            output::styled!("        {}: {}", (key, "property"), (value, "symbol"));
+        }
+    }
+}
+
+
 /// Print detailed results (equivalent to old format)
 fn print_detailed_results(
     results: &[crate::scan::ScanResult],
@@ -337,7 +391,7 @@ fn print_detailed_results(
     verbose_level: u8,
 ) -> Result<()> {
     for result in results {
-        if !result.matches.is_empty() {
+        if result.has_secrets() {
             let file_groups = group_matches_by_file(&result.matches);
             
             println!();
@@ -369,6 +423,11 @@ fn print_detailed_results(
                             output::styled!(
                                 "  Content: {}",
                                 (secret_match.matched_text.clone(), "hash_value")
+                            );
+                        } else if verbose_level > 0 {
+                            output::styled!(
+                                "  Content: {}",
+                                (secret_match.redacted_match_secure(), "muted")
                             );
                         }
                     }
@@ -474,7 +533,6 @@ fn group_matches_by_file(
 async fn generate_reports(
     results: &[crate::scan::ScanResult], 
     args: &ScanArgs,
-    scan_duration_ms: u64,
 ) -> Result<()> {
     if results.is_empty() {
         return Ok(());
@@ -488,7 +546,6 @@ async fn generate_reports(
         display_secrets: args.report_show_secrets,
         redaction_style: RedactionStyle::Partial,
         include_file_timing: true,
-        include_line_content: false, // Don't include line content by default
         max_matches: 0, // Include all matches
     };
     

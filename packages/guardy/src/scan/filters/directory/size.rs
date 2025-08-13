@@ -1,7 +1,8 @@
 //! File size filtering for performance and memory management
 
-use crate::scan::filters::{DirectoryFilter, Filter, FilterDecision};
+use crate::scan::filters::{Filter, FilterDecision};
 use anyhow::Result;
+use smallvec::SmallVec;
 use std::fs;
 use std::path::Path;
 
@@ -21,10 +22,6 @@ impl SizeFilter {
         }
     }
     
-    /// Get the max size in bytes
-    pub fn max_size_bytes(&self) -> u64 {
-        self.max_size_bytes
-    }
 }
 
 impl Filter for SizeFilter {
@@ -65,6 +62,11 @@ impl Filter for SizeFilter {
     fn name(&self) -> &'static str {
         "SizeFilter"
     }
+    
+    fn get_stats(&self) -> SmallVec<[(String, String); 8]> {
+        smallvec::smallvec![
+            ("Max file size (MB)".to_string(), (self.max_size_bytes / (1024 * 1024)).to_string()),
+        ]
+    }
 }
 
-impl DirectoryFilter for SizeFilter {}

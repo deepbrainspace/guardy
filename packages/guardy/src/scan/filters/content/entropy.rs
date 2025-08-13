@@ -7,7 +7,7 @@
 
 use crate::scan::{
     data::SecretMatch,
-    filters::{ContentFilter, Filter}
+    filters::{Filter}
 };
 use anyhow::Result;
 use regex::bytes::Regex;
@@ -305,4 +305,3 @@ impl Default for EntropyFilter {
     }
 }
 
-impl ContentFilter for EntropyFilter {}

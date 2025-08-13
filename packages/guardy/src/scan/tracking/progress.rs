@@ -75,9 +75,6 @@ pub struct ProgressTracker {
     /// Timing information
     start_time: Arc<RwLock<Option<Instant>>>,
     discovery_duration: Arc<RwLock<Option<Duration>>>,
-    
-    /// Progress mode
-    mode: ProgressMode,
 }
 
 impl ProgressTracker {
@@ -138,7 +135,6 @@ impl ProgressTracker {
             bytes_processed: Arc::new(AtomicU64::new(0)),
             start_time: Arc::new(RwLock::new(None)),
             discovery_duration: Arc::new(RwLock::new(None)),
-            mode,
         }
     }
     
@@ -194,6 +190,13 @@ impl ProgressTracker {
         }
     }
     
+    /// Update discovery progress with current counts
+    pub fn update_discovery_progress(&self, files_found: usize, dirs_found: usize) {
+        if let Some(ref bar) = self.discovery_bar {
+            bar.set_message(format!("{} files, {} dirs found", files_found, dirs_found));
+        }
+    }
+    
     /// Update scan details (matches and bytes)
     pub fn update_scan_details(&self, new_matches: usize, bytes: u64) {
         let total_matches = self.matches_found.fetch_add(new_matches, Ordering::Relaxed) + new_matches;
@@ -246,39 +249,8 @@ impl ProgressTracker {
             mp.clear().ok();
         }
     }
-    
-    /// Get current statistics
-    pub fn stats(&self) -> ProgressStats {
-        ProgressStats {
-            files_discovered: self.files_discovered.load(Ordering::Relaxed),
-            files_processed: self.files_processed.load(Ordering::Relaxed),
-            matches_found: self.matches_found.load(Ordering::Relaxed),
-            bytes_processed: self.bytes_processed.load(Ordering::Relaxed),
-            discovery_duration: self.discovery_duration.read().ok().and_then(|d| *d),
-        }
-    }
-    
-    /// Legacy methods for backward compatibility
-    pub fn set_stage(&self, stage: &str) {
-        // This is now handled by phase-specific methods
-        tracing::debug!("Progress stage: {}", stage);
-    }
-    
-    /// Get files processed count
-    pub fn files_processed(&self) -> usize {
-        self.files_processed.load(Ordering::Relaxed)
-    }
 }
 
-/// Progress statistics snapshot
-#[derive(Debug, Clone)]
-pub struct ProgressStats {
-    pub files_discovered: usize,
-    pub files_processed: usize,
-    pub matches_found: usize,
-    pub bytes_processed: u64,
-    pub discovery_duration: Option<Duration>,
-}
 
 impl Default for ProgressTracker {
     fn default() -> Self {

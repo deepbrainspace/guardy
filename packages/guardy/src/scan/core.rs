@@ -18,7 +18,7 @@ use crate::scan::{
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
     time::Instant,
 };
@@ -96,6 +96,11 @@ impl Scanner {
         static_data::is_initialized()
     }
     
+    /// Get filter performance statistics
+    pub fn get_filter_stats(&self) -> crate::scan::pipeline::directory::FilterStats {
+        self.directory_pipeline.get_filter_stats()
+    }
+    
     /// Scan a path (file or directory) for secrets
     /// 
     /// # Performance Optimizations
@@ -130,7 +135,7 @@ impl Scanner {
         // Phase 1: File Discovery
         progress.start_discovery();
         let files = self.directory_pipeline
-            .discover_files(path, self.stats_collector.clone())
+            .discover_files(path, self.stats_collector.clone(), Some(&progress))
             .context("Failed to discover files")?;
         let total_files = files.len();
         progress.finish_discovery(total_files);
@@ -210,6 +215,9 @@ impl Scanner {
         let stats = self.stats_collector.to_scan_stats(duration_ms);
         
         progress.finish_aggregation();
+        
+        // Clean up progress bars for proper terminal state
+        progress.clear();
         
         // Log summary
         info!(

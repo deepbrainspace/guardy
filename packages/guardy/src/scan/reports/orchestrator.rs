@@ -47,23 +47,6 @@ impl ReportOrchestrator {
         Ok(report_path)
     }
     
-    /// Generate multiple report formats at once (efficient for large datasets)
-    pub fn generate_multiple_reports(
-        result: &ScanResult,
-        formats: &[ReportFormat],
-        output_dir: Option<PathBuf>,
-        config: ReportConfig,
-    ) -> Result<Vec<PathBuf>> {
-        let mut paths = Vec::with_capacity(formats.len());
-        
-        for &format in formats {
-            let path = Self::generate_report(result, format, None, output_dir.clone(), config.clone())?;
-            paths.push(path);
-        }
-        
-        Ok(paths)
-    }
-    
     /// Resolve the final output path based on user preferences
     fn resolve_output_path(
         report_output: Option<PathBuf>,    // --report-output

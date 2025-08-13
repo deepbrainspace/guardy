@@ -7,7 +7,7 @@
 
 use crate::scan::{
     data::SecretMatch,
-    filters::{ContentFilter, Filter}
+    filters::{Filter}
 };
 use anyhow::Result;
 use std::collections::HashSet;
@@ -135,4 +135,3 @@ impl Default for CommentFilter {
     }
 }
 
-impl ContentFilter for CommentFilter {}

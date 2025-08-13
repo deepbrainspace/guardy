@@ -8,7 +8,7 @@ mod config;
 mod core;
 mod data;
 pub mod filters;
-mod pipeline;
+pub mod pipeline;
 pub mod reports;
 mod static_data;
 mod tracking;

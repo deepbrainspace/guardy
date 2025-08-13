@@ -14,12 +14,6 @@ pub trait ReportGenerator {
         config: &ReportConfig,
         metadata: &ReportMetadata,
     ) -> Result<String>;
-    
-    /// Get the file extension for this format
-    fn file_extension(&self) -> &'static str;
-    
-    /// Get the MIME type for this format
-    fn mime_type(&self) -> &'static str;
 }
 
 // Public re-exports
@@ -34,4 +28,4 @@ mod config;
 mod aggregator;
 mod json;
 mod html;
-mod utils;
+pub mod utils;

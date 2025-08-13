@@ -57,13 +57,6 @@ impl ReportGenerator for HtmlReportGenerator {
         Ok(html)
     }
     
-    fn file_extension(&self) -> &'static str {
-        "html"
-    }
-    
-    fn mime_type(&self) -> &'static str {
-        "text/html"
-    }
 }
 
 impl HtmlReportGenerator {
@@ -108,7 +101,7 @@ impl HtmlReportGenerator {
             
             for secret in secrets {
                 let file_path = utils::html_escape(secret.file_path());
-                let secret_value = utils::html_escape(&utils::get_secret_display_value(secret, config));
+                let secret_value = utils::html_escape(&utils::get_secret_display_value_for_format(secret, config, super::ReportFormat::Html));
                 let pattern_desc = utils::html_escape(secret.pattern_description.as_ref());
                 
                 sections.push_str(&format!(
@@ -167,13 +160,18 @@ impl HtmlReportGenerator {
                         </div>
                         <div class="perf-stat">
                             <span class="perf-label">Total lines:</span>
-                            <span class="perf-value">{}</span>
+                            <span class="perf-value">{total_lines}</span>
+                        </div>
+                        <div class="perf-stat">
+                            <span class="perf-label">File scan time:</span>
+                            <span class="perf-value">{scan_time} ms</span>
                         </div>
                     </div>
 "#);
         
         section = section.replace("{:.0}", &format!("{:.0}", performance_stats.lines_per_second(scan_duration_ms)));
-        section = section.replace("{}", &performance_stats.total_lines_processed.to_string());
+        section = section.replace("{total_lines}", &performance_stats.total_lines_processed.to_string());
+        section = section.replace("{scan_time}", &performance_stats.total_file_scan_time_ms.to_string());
         
         // Slowest files
         if !performance_stats.slowest_files.is_empty() {
@@ -212,6 +210,27 @@ impl HtmlReportGenerator {
 "#,
                     utils::html_escape(file_path.as_ref()),
                     utils::format_file_size(*size_bytes)
+                ));
+            }
+            section.push_str("                    </div>\n");
+        }
+        
+        // Files with matches
+        if !performance_stats.files_with_matches.is_empty() {
+            section.push_str(r#"
+                    <div class="perf-card">
+                        <h4>Files with Matches</h4>
+"#);
+            for (file_path, match_count) in performance_stats.files_with_matches.iter().take(10) {
+                section.push_str(&format!(
+                    r#"
+                        <div class="perf-item">
+                            <span class="file-name">{}</span>
+                            <span class="match-count">{} secrets</span>
+                        </div>
+"#,
+                    utils::html_escape(file_path.as_ref()),
+                    match_count
                 ));
             }
             section.push_str("                    </div>\n");

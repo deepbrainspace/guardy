@@ -3,7 +3,7 @@
 //! This module provides ultra-fast pattern prefiltering using Aho-Corasick
 //! to eliminate ~85% of patterns before expensive regex execution.
 
-use crate::scan::filters::{ContentFilter, Filter};
+use crate::scan::filters::{Filter};
 use crate::scan::static_data::pattern_library::get_pattern_library;
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use anyhow::{Context, Result};
@@ -152,7 +152,6 @@ impl Filter for ContextPrefilter {
     }
 }
 
-impl ContentFilter for ContextPrefilter {}
 
 /// Statistics about prefilter performance
 #[derive(Debug, Clone)]

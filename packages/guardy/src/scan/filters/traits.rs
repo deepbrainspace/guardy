@@ -4,7 +4,7 @@
 //! allowing for clean composition and testing.
 
 use anyhow::Result;
-use std::path::Path;
+use smallvec::SmallVec;
 
 /// Base filter trait that all filters implement
 pub trait Filter {
@@ -18,6 +18,13 @@ pub trait Filter {
     
     /// Get the name of this filter for debugging/logging
     fn name(&self) -> &'static str;
+    
+    /// Get performance statistics for this filter (key, value pairs)
+    /// Default implementation returns empty stats for filters without performance tracking
+    /// Uses SmallVec to avoid heap allocation for small collections (typical 5-10 items)
+    fn get_stats(&self) -> SmallVec<[(String, String); 8]> {
+        SmallVec::new()
+    }
 }
 
 /// Decision for whether to process or skip a file/directory
@@ -29,26 +36,3 @@ pub enum FilterDecision {
     Skip(&'static str),
 }
 
-/// Directory-level filter for path-based filtering
-pub trait DirectoryFilter: Filter<Input = Path, Output = FilterDecision> {
-    /// Check if a directory should be filtered (skipped)
-    /// Returns true if the directory should be skipped
-    fn should_skip_directory(&self, path: &Path) -> bool {
-        matches!(self.filter(path), Ok(FilterDecision::Skip(_)))
-    }
-    
-    /// Check if a file should be filtered (skipped)
-    /// Returns true if the file should be skipped
-    fn should_skip_file(&self, path: &Path) -> bool {
-        matches!(self.filter(path), Ok(FilterDecision::Skip(_)))
-    }
-}
-
-/// Content-level filter for analyzing file contents
-pub trait ContentFilter: Filter {
-    /// Pre-process check to see if this filter applies to the file
-    /// Can be used to skip expensive content filtering based on file metadata
-    fn applies_to(&self, _path: &Path) -> bool {
-        true // By default, apply to all files
-    }
-}

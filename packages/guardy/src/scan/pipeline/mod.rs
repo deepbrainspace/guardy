@@ -1,6 +1,6 @@
 //! Pipeline modules for directory and file processing
 
-mod directory;
+pub mod directory;
 mod file;
 
 pub use directory::DirectoryPipeline;
