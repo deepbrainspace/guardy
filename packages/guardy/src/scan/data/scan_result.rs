@@ -78,4 +78,14 @@ impl ScanResult {
             self.stats.throughput_mb_per_sec()
         )
     }
+    
+    /// Create an empty result (no files scanned)
+    pub fn empty() -> Self {
+        Self {
+            matches: Vec::new(),
+            stats: ScanStats::new(),
+            file_results: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
 }

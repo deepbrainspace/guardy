@@ -32,10 +32,7 @@ impl DirectoryPipeline {
     pub fn new(config: Arc<ScannerConfig>) -> Result<Self> {
         let path_filter = PathFilter::new(config.ignore_paths.clone());
         let size_filter = SizeFilter::new(config.max_file_size_mb);
-        let binary_filter = BinaryFilter::new(
-            get_binary_extensions(),
-            config.skip_binary_files,
-        );
+        let binary_filter = BinaryFilter::new(config.skip_binary_files);
         
         // Calculate thread count for directory walking
         // Rayon thread pool is already configured globally in static_data::init_config

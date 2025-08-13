@@ -9,7 +9,8 @@ mod hooks;
 mod parallel;
 mod profiling;
 mod reports;
-mod scanner;
+mod scan;
+mod scan_v1;
 mod shared;
 mod sync;
 

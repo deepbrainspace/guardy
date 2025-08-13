@@ -6,7 +6,7 @@ use std::process::Command;
 use crate::cli::output;
 use crate::config::GuardyConfig;
 use crate::git::GitRepo;
-use crate::scanner::Scanner;
+use crate::scan_v1::Scanner;
 
 use super::config::{CustomCommand, HookConfig};
 

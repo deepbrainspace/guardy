@@ -181,7 +181,7 @@ impl Scanner {
 
     pub fn parse_scanner_config_with_cli_overrides(
         config: &GuardyConfig,
-        args: &crate::cli::commands::scan::ScanArgs,
+        args: &crate::cli::commands::scan_v1::ScanArgs,
     ) -> Result<ScannerConfig> {
         let mut scanner_config = Self::parse_scanner_config(config)?;
 
