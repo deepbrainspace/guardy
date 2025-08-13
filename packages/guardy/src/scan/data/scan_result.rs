@@ -1,5 +1,6 @@
 //! Overall scan result with hierarchical statistics
 
+
 use super::{FileResult, ScanStats, SecretMatch};
 
 /// Complete result of a scanning operation
@@ -39,21 +40,6 @@ impl ScanResult {
         !self.matches.is_empty()
     }
     
-    /// Get count of critical severity matches
-    pub fn critical_count(&self) -> usize {
-        self.matches
-            .iter()
-            .filter(|m| m.severity == super::MatchSeverity::Critical)
-            .count()
-    }
-    
-    /// Get count of high severity matches
-    pub fn high_severity_count(&self) -> usize {
-        self.matches
-            .iter()
-            .filter(|m| m.severity == super::MatchSeverity::High)
-            .count()
-    }
     
     /// Get files with matches
     pub fn files_with_secrets(&self) -> Vec<&str> {

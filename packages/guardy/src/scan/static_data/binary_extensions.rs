@@ -115,11 +115,6 @@ pub static BINARY_EXTENSIONS: LazyLock<Arc<HashSet<String>>> = LazyLock::new(|| 
     Arc::new(all_extensions)
 });
 
-/// Get the global binary extensions set
-pub fn get_binary_extensions() -> Arc<HashSet<String>> {
-    BINARY_EXTENSIONS.clone()
-}
-
 /// Check if a file extension is binary
 pub fn is_binary_extension(extension: &str) -> bool {
     BINARY_EXTENSIONS.contains(extension)

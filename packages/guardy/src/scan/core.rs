@@ -7,9 +7,10 @@
 //! - Indicatif for progress tracking
 //! - Good OOP encapsulation and trait boundaries
 
+
 use crate::scan::{
     config::ScannerConfig,
-    data::{FileResult, ScanResult, ScanStats, MatchSeverity},
+    data::{FileResult, ScanResult, StatsCollector},
     pipeline::{DirectoryPipeline, FilePipeline},
     static_data,
     tracking::ProgressTracker,
@@ -18,7 +19,7 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Instant,
 };
 use tracing::{info, warn};
@@ -48,50 +49,6 @@ pub struct Scanner {
     stats_collector: Arc<StatsCollector>,
 }
 
-/// Thread-safe statistics collector
-/// Uses interior mutability pattern for concurrent updates
-struct StatsCollector {
-    /// Mutex-protected stats for thread-safe updates
-    inner: Mutex<ScanStats>,
-}
-
-impl StatsCollector {
-    fn new() -> Self {
-        Self {
-            inner: Mutex::new(ScanStats::new()),
-        }
-    }
-    
-    /// Update stats with a file result (thread-safe)
-    fn update(&self, result: &FileResult) {
-        if let Ok(mut stats) = self.inner.lock() {
-            if result.success {
-                stats.files_scanned += 1;
-                stats.total_bytes_processed += result.file_size;
-                stats.total_lines_processed += result.lines_processed;
-                stats.total_matches += result.matches.len();
-                
-                // Count severity levels
-                for match_ in &result.matches {
-                    match match_.severity {
-                        MatchSeverity::Critical => stats.critical_matches += 1,
-                        MatchSeverity::High => stats.high_severity_matches += 1,
-                        _ => {}
-                    }
-                }
-            } else {
-                stats.files_failed += 1;
-            }
-        }
-    }
-    
-    /// Get final stats
-    fn finalize(&self, duration_ms: u64) -> ScanStats {
-        let mut stats = self.inner.lock().unwrap().clone();
-        stats.scan_duration_ms = duration_ms;
-        stats
-    }
-}
 
 impl Scanner {
     /// Create a new scanner with the given configuration
@@ -127,38 +84,6 @@ impl Scanner {
             file_pipeline,
             stats_collector,
         })
-    }
-    
-    /// Create a new scanner with custom pipelines (for testing/customization)
-    /// 
-    /// # Design Pattern: Dependency Injection
-    /// Allows injecting custom pipelines for testing or specialized use cases
-    pub fn with_pipelines(
-        config: ScannerConfig,
-        directory_pipeline: DirectoryPipeline,
-        file_pipeline: FilePipeline,
-    ) -> Result<Self> {
-        if !static_data::is_initialized() {
-            static_data::init_config(config.clone());
-        }
-        
-        Ok(Self {
-            config: Arc::new(config),
-            directory_pipeline: Arc::new(directory_pipeline),
-            file_pipeline: Arc::new(file_pipeline),
-            stats_collector: Arc::new(StatsCollector::new()),
-        })
-    }
-    
-    /// Create a scanner using the global configuration
-    /// 
-    /// # Performance Note
-    /// This reuses the globally initialized configuration,
-    /// avoiding redundant initialization overhead
-    pub fn from_global_config() -> Result<Self> {
-        let config = static_data::get_config();
-        let config_owned = (*config).clone();
-        Self::new(config_owned)
     }
     
     /// Get scanner configuration (immutable reference)
@@ -205,7 +130,7 @@ impl Scanner {
         // Phase 1: File Discovery
         progress.start_discovery();
         let files = self.directory_pipeline
-            .discover_files(path)
+            .discover_files(path, self.stats_collector.clone())
             .context("Failed to discover files")?;
         let total_files = files.len();
         progress.finish_discovery(total_files);
@@ -232,20 +157,18 @@ impl Scanner {
                 // Update progress
                 progress_clone.increment_files_processed();
                 
-                // Process file
-                let result = match file_pipeline.process_file(file_path) {
+                // Process file with stats collection
+                let result = match file_pipeline.process_file(file_path, stats_collector.clone()) {
                     Ok(result) => result,
                     Err(e) => {
                         warn!("Failed to process {}: {}", file_path.display(), e);
+                        stats_collector.increment_files_failed();
                         FileResult::failure(
                             Arc::from(file_path.to_string_lossy().as_ref()),
                             e.to_string(),
                         )
                     }
                 };
-                
-                // Update statistics atomically
-                stats_collector.update(&result);
                 
                 // Update progress with details
                 if result.success {
@@ -284,7 +207,7 @@ impl Scanner {
         
         // Finalize statistics
         let duration_ms = start.elapsed().as_millis() as u64;
-        let stats = self.stats_collector.finalize(duration_ms);
+        let stats = self.stats_collector.to_scan_stats(duration_ms);
         
         progress.finish_aggregation();
         
@@ -297,32 +220,38 @@ impl Scanner {
             duration_ms
         );
         
+        // Show detailed filter statistics in trace mode
+        if tracing::enabled!(tracing::Level::TRACE) {
+            // Scanner configuration info
+            tracing::trace!("Scanner configuration:");
+            tracing::trace!("  Ready: {}", self.is_ready());
+            let config = self.config();
+            tracing::trace!("  Max file size: {} MB", config.max_file_size_mb);
+            tracing::trace!("  CPU usage: {}%", config.max_cpu_percentage);
+            tracing::trace!("  Follow symlinks: {}", config.follow_symlinks);
+            tracing::trace!("  Entropy analysis: {}", config.enable_entropy_analysis);
+            tracing::trace!("  Entropy threshold: {}", config.min_entropy_threshold);
+            tracing::trace!("  Skip binary files: {}", config.skip_binary_files);
+            tracing::trace!("  Show progress: {}", config.show_progress);
+            if !config.ignore_paths.is_empty() {
+                tracing::trace!("  Ignore patterns: {:?}", config.ignore_paths);
+            }
+            
+            // Path filter statistics
+            let path_stats = self.directory_pipeline.path_filter_stats();
+            if !path_stats.is_empty() {
+                tracing::trace!("Path filter statistics:");
+                for (pattern, count) in path_stats {
+                    tracing::trace!("  '{}': {} files filtered", pattern, count);
+                }
+            }
+        }
+        
         Ok(ScanResult::new(
             all_matches,
             stats,
             file_results,
             warnings,
         ))
-    }
-    
-    /// Scan a single file (convenience method)
-    pub fn scan_file(&self, file_path: &Path) -> Result<FileResult> {
-        if !file_path.exists() {
-            anyhow::bail!("File does not exist: {}", file_path.display());
-        }
-        
-        if !file_path.is_file() {
-            anyhow::bail!("Path is not a file: {}", file_path.display());
-        }
-        
-        self.file_pipeline.process_file(file_path)
-    }
-    
-    /// Scan multiple paths in parallel
-    pub fn scan_multiple(&self, paths: &[PathBuf]) -> Result<Vec<ScanResult>> {
-        paths
-            .par_iter()
-            .map(|path| self.scan(path))
-            .collect()
     }
 }

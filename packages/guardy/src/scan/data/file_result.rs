@@ -66,11 +66,4 @@ impl FileResult {
         !self.matches.is_empty()
     }
     
-    /// Get the highest severity match in this file
-    pub fn highest_severity(&self) -> Option<super::MatchSeverity> {
-        self.matches
-            .iter()
-            .map(|m| m.severity)
-            .max()
-    }
 }

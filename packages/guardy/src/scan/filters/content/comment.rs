@@ -47,15 +47,18 @@ impl CommentFilter {
             let line_number = (line_index + 1) as u32; // Convert to 1-indexed and u32
             let line_lower = line.to_lowercase();
             
-            // Check for guardy:ignore directives in various comment formats
-            if line_lower.contains("guardy:ignore-next") {
-                // Ignore the next line
-                ignored_lines.insert(line_number + 1);
-                tracing::debug!("Found guardy:ignore-next on line {}, ignoring line {}", line_number, line_number + 1);
-            } else if line_lower.contains("guardy:ignore-line") || line_lower.contains("guardy:ignore") {
-                // Ignore the current line
-                ignored_lines.insert(line_number);
-                tracing::debug!("Found guardy:ignore on line {}, ignoring line {}", line_number, line_number);
+            // Only process lines that contain comment markers
+            if self.has_comment_markers(line) {
+                // Check for guardy:ignore directives in comment lines
+                if line_lower.contains("guardy:ignore-next") {
+                    // Ignore the next line
+                    ignored_lines.insert(line_number + 1);
+                    tracing::debug!("Found guardy:ignore-next on line {}, ignoring line {}", line_number, line_number + 1);
+                } else if line_lower.contains("guardy:ignore-line") || line_lower.contains("guardy:ignore") {
+                    // Ignore the current line
+                    ignored_lines.insert(line_number);
+                    tracing::debug!("Found guardy:ignore on line {}, ignoring line {}", line_number, line_number);
+                }
             }
         }
         

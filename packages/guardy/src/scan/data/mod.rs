@@ -10,5 +10,5 @@ mod stats;
 pub use coordinate::{Coordinate, FileSpan};
 pub use file_result::FileResult;
 pub use scan_result::ScanResult;
-pub use secret_match::{MatchSeverity, SecretMatch};
-pub use stats::{DirectoryStats, FileStats, ScanStats};
+pub use secret_match::SecretMatch;
+pub use stats::{ScanStats, StatsCollector};

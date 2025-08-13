@@ -3,14 +3,6 @@
 use super::Coordinate;
 use std::sync::Arc;
 
-/// Severity level for a detected secret
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum MatchSeverity {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
 
 /// Represents a detected secret match in a file
 /// 
@@ -33,12 +25,6 @@ pub struct SecretMatch {
     /// Pattern description for user display
     /// Shared from PatternLibrary via Arc
     pub pattern_description: Arc<str>,
-    
-    /// Severity of the match
-    pub severity: MatchSeverity,
-    
-    /// Confidence score (0.0 to 1.0)
-    pub confidence: f32,
 }
 
 impl SecretMatch {
@@ -49,16 +35,12 @@ impl SecretMatch {
         matched_text: String,
         secret_type: Arc<str>,
         pattern_description: Arc<str>,
-        severity: MatchSeverity,
-        confidence: f32,
     ) -> Self {
         Self {
             location: super::FileSpan::new(file_path, coordinate),
             matched_text,
             secret_type,
             pattern_description,
-            severity,
-            confidence,
         }
     }
     

@@ -2,4 +2,4 @@
 
 mod progress;
 
-pub use progress::{ProgressTracker, ProgressMode, ProgressStats};
+pub use progress::ProgressTracker;

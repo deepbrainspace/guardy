@@ -48,7 +48,7 @@ pub trait DirectoryFilter: Filter<Input = Path, Output = FilterDecision> {
 pub trait ContentFilter: Filter {
     /// Pre-process check to see if this filter applies to the file
     /// Can be used to skip expensive content filtering based on file metadata
-    fn applies_to(&self, path: &Path) -> bool {
+    fn applies_to(&self, _path: &Path) -> bool {
         true // By default, apply to all files
     }
 }

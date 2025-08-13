@@ -13,6 +13,7 @@ pub struct ScannerConfig {
     // Entropy analysis
     pub enable_entropy_analysis: bool,
     pub min_entropy_threshold: f64,
+    pub no_entropy: bool,
     
     // Path filtering
     pub ignore_paths: Vec<String>,
@@ -39,6 +40,7 @@ impl Default for ScannerConfig {
             follow_symlinks: false,
             enable_entropy_analysis: true,
             min_entropy_threshold: 4.5,
+            no_entropy: false,
             ignore_paths: vec![
                 "node_modules".to_string(),
                 ".git".to_string(),
@@ -90,8 +92,14 @@ impl ScannerConfig {
         // Apply CLI overrides
         scanner_config.max_file_size_mb = args.max_file_size;
         scanner_config.max_cpu_percentage = args.max_cpu;
-        scanner_config.show_progress = args.progress;
+        
+        // Handle progress: if not specified, keep auto-detection; if specified, override
+        if let Some(progress_override) = args.progress {
+            scanner_config.show_progress = progress_override;
+        }
+        // Otherwise keep the default TTY auto-detection
         scanner_config.enable_entropy_analysis = !args.no_entropy;
+        scanner_config.no_entropy = args.no_entropy;
         
         if let Some(threshold) = args.entropy_threshold {
             scanner_config.min_entropy_threshold = threshold;

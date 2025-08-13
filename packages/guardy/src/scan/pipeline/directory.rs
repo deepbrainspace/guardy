@@ -2,19 +2,16 @@
 
 use crate::scan::{
     config::ScannerConfig,
-    data::FileResult,
+    data::{FileResult, StatsCollector},
     filters::{
-        directory::{BinaryFilter, PathFilter, SizeFilter},
-        DirectoryFilter, Filter, FilterDecision,
+        directory::{BinaryFilter, PathFilter, SizeFilter}, Filter, FilterDecision,
     },
-    static_data::get_binary_extensions,
     tracking::ProgressTracker,
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use ignore::{WalkBuilder, WalkState};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::fs;
 use system_profile::SYSTEM;
 
 /// Pipeline for directory traversal and file filtering
@@ -55,7 +52,7 @@ impl DirectoryPipeline {
     
     /// Discover all files to scan from a path using the ignore crate
     /// This respects .gitignore files and provides efficient parallel walking
-    pub fn discover_files(&self, path: &Path) -> Result<Vec<PathBuf>> {
+    pub fn discover_files(&self, path: &Path, stats: Arc<StatsCollector>) -> Result<Vec<PathBuf>> {
         // Verify path exists
         if !path.exists() {
             anyhow::bail!("Path does not exist: {}", path.display());
@@ -86,11 +83,12 @@ impl DirectoryPipeline {
             builder.add_custom_ignore_filename(pattern);
         }
         
-        // Clone filters once to move into the closure (cheap - just Arc ref count)
+        // Clone filters and stats once to move into the closure (cheap - just Arc ref count)
         // Each filter uses Arc internally, so cloning is just incrementing ref count
         let path_filter = self.path_filter.clone();
         let size_filter = self.size_filter.clone();
         let binary_filter = self.binary_filter.clone();
+        let stats_collector = stats.clone();
         let follow_symlinks = self.config.follow_symlinks;
         
         // Walk the directory tree in parallel
@@ -101,6 +99,7 @@ impl DirectoryPipeline {
             let path_filter = path_filter.clone();
             let size_filter = size_filter.clone();
             let binary_filter = binary_filter.clone();
+            let stats = stats_collector.clone();
             
             Box::new(move |result| {
                 // This closure processes each file/directory entry
@@ -108,10 +107,14 @@ impl DirectoryPipeline {
                     Ok(entry) => {
                         let path = entry.path();
                         
-                        // Skip directories
+                        // Skip directories, but count them
                         if entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                            stats.increment_directories_traversed();
                             return WalkState::Continue;
                         }
+                        
+                        // Count discovered files
+                        stats.increment_files_discovered();
                         
                         // Skip symlinks if not following them
                         if entry.file_type().map_or(false, |ft| ft.is_symlink()) 
@@ -121,14 +124,17 @@ impl DirectoryPipeline {
                         
                         // Apply filters - these are read-only operations
                         if let Ok(FilterDecision::Skip(_)) = path_filter.filter(path) {
+                            stats.increment_files_filtered_by_path();
                             return WalkState::Continue;
                         }
                         
                         if let Ok(FilterDecision::Skip(_)) = size_filter.filter(path) {
+                            stats.increment_files_filtered_by_size();
                             return WalkState::Continue;
                         }
                         
                         if let Ok(FilterDecision::Skip(_)) = binary_filter.filter(path) {
+                            stats.increment_files_filtered_by_binary();
                             return WalkState::Continue;
                         }
                         
@@ -167,6 +173,7 @@ impl DirectoryPipeline {
         &self,
         files: Vec<PathBuf>,
         file_pipeline: Arc<super::FilePipeline>,
+        stats: Arc<StatsCollector>,
         progress: Option<&ProgressTracker>,
     ) -> Result<Vec<FileResult>> {
         use rayon::prelude::*;
@@ -187,11 +194,19 @@ impl DirectoryPipeline {
                 }
                 
                 // Process the file and handle errors gracefully
-                match file_pipeline.process_file(file_path) {
+                match file_pipeline.process_file(file_path, stats.clone()) {
                     Ok(result) => result,
-                    Err(e) => FileResult::failure(file_path_str, e.to_string()),
+                    Err(e) => {
+                        stats.increment_files_failed();
+                        FileResult::failure(file_path_str, e.to_string())
+                    },
                 }
             })
             .collect())
+    }
+    
+    /// Get path filter statistics for trace-level debugging
+    pub fn path_filter_stats(&self) -> Vec<(String, usize)> {
+        self.path_filter.get_stats()
     }
 }

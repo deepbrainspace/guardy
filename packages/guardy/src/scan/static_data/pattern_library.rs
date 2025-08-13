@@ -9,20 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
-/// Pattern classification for optimization
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PatternClass {
-    /// High-specificity patterns with reliable keywords (e.g., "sk_live_")
-    #[serde(rename = "specific")]
-    Specific,
-    /// Patterns needing context analysis (e.g., generic API keys)
-    #[serde(rename = "contextual")]
-    Contextual,
-    /// Patterns without reliable keywords (e.g., entropy-only)
-    #[serde(rename = "always_run")]
-    AlwaysRun,
-}
-
 /// A compiled pattern ready for matching
 #[derive(Debug, Clone)]
 pub struct CompiledPattern {
@@ -34,8 +20,6 @@ pub struct CompiledPattern {
     pub regex: Regex,
     /// Description of what this detects
     pub description: Arc<str>,
-    /// Classification for optimization
-    pub class: PatternClass,
     /// Keywords for Aho-Corasick prefiltering
     pub keywords: Vec<String>,
     /// Priority (1-10, higher = run first)
@@ -146,14 +130,13 @@ impl PatternLibrary {
         Ok(config.patterns)
     }
     
-    /// Load custom patterns from configuration
+    /// Load custom patterns from scanner configuration
     fn load_custom_patterns() -> Result<Vec<YamlPattern>> {
-        // TODO: Implement loading from:
-        // - ~/.config/guardy/patterns.yaml
-        // - Environment variable GUARDY_CUSTOM_PATTERNS
-        // - CLI argument --patterns-file
-        
-        // For now, return empty
+        // Get patterns from the scanner config section
+        // This handles all configuration mixing via GuardyConfig
+        let _config = crate::scan::static_data::get_config();
+        // Try to get custom patterns from config if they exist
+        // For now return empty - patterns will be added via config sections
         Ok(Vec::new())
     }
     
@@ -162,22 +145,11 @@ impl PatternLibrary {
         let regex = Regex::new(&yaml.regex)
             .with_context(|| format!("Failed to compile regex for pattern '{}'", yaml.name))?;
         
-        let class = match yaml.classification.as_str() {
-            "specific" => PatternClass::Specific,
-            "contextual" => PatternClass::Contextual,
-            "always_run" => PatternClass::AlwaysRun,
-            other => {
-                tracing::warn!("Unknown pattern class '{}', defaulting to contextual", other);
-                PatternClass::Contextual
-            }
-        };
-        
         Ok(CompiledPattern {
             index,
             name: Arc::from(yaml.name.as_str()),
             regex,
             description: Arc::from(yaml.description.as_str()),
-            class,
             keywords: yaml.keywords,
             priority: yaml.priority,
         })
@@ -196,14 +168,6 @@ impl PatternLibrary {
     /// Get a pattern by index (zero-copy via Arc)
     pub fn get_pattern(&self, index: usize) -> Option<Arc<CompiledPattern>> {
         self.pattern_map.get(&index).cloned()
-    }
-    
-    /// Get patterns filtered by class
-    pub fn patterns_by_class(&self, class: PatternClass) -> Vec<&CompiledPattern> {
-        self.patterns
-            .iter()
-            .filter(|p| p.class == class)
-            .collect()
     }
     
     /// Get total pattern count

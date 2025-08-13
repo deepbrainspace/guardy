@@ -136,8 +136,13 @@ impl Filter for ContextPrefilter {
             }
         }
         
-        // Sort for consistent processing order (higher priority first)
-        active_patterns.sort_unstable();
+        // Sort by pattern priority (higher priority first) for optimized execution
+        let pattern_lib = get_pattern_library();
+        active_patterns.sort_unstable_by(|&a, &b| {
+            let priority_a = pattern_lib.get_pattern(a).map_or(0, |p| p.priority);
+            let priority_b = pattern_lib.get_pattern(b).map_or(0, |p| p.priority);
+            priority_b.cmp(&priority_a) // Reverse for descending order (higher first)
+        });
         
         Ok(active_patterns)
     }

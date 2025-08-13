@@ -4,7 +4,7 @@
 //! extracts precise match coordinates using the optimized Coordinate system.
 
 use crate::scan::{
-    data::{Coordinate, MatchSeverity, SecretMatch},
+    data::{Coordinate, SecretMatch},
     filters::{ContentFilter, Filter},
     static_data::pattern_library::get_pattern_library,
 };
@@ -69,8 +69,6 @@ impl RegexExecutor {
                         regex_match.as_str().to_string(),
                         pattern.name.clone(),
                         pattern.description.clone(),
-                        Self::determine_severity(&pattern.name),
-                        Self::calculate_confidence(&pattern.class, regex_match.as_str()),
                     );
                     
                     matches.push(secret_match);
@@ -134,54 +132,6 @@ impl RegexExecutor {
             .count()
     }
     
-    /// Determine severity based on pattern type
-    fn determine_severity(pattern_name: &str) -> MatchSeverity {
-        let name_lower = pattern_name.to_lowercase();
-        
-        if name_lower.contains("private") || name_lower.contains("secret") {
-            MatchSeverity::Critical
-        } else if name_lower.contains("api") || name_lower.contains("token") {
-            MatchSeverity::High
-        } else if name_lower.contains("password") || name_lower.contains("key") {
-            MatchSeverity::High
-        } else {
-            MatchSeverity::Medium
-        }
-    }
-    
-    /// Calculate confidence based on pattern class and match characteristics
-    fn calculate_confidence(
-        pattern_class: &crate::scan::static_data::pattern_library::PatternClass,
-        matched_text: &str,
-    ) -> f32 {
-        use crate::scan::static_data::pattern_library::PatternClass;
-        
-        let base_confidence = match pattern_class {
-            PatternClass::Specific => 0.9_f32,     // High confidence for specific patterns
-            PatternClass::Contextual => 0.7_f32,   // Medium confidence, needs context
-            PatternClass::AlwaysRun => 0.5_f32,    // Lower confidence, entropy-based
-        };
-        
-        // Adjust based on match characteristics
-        let length_factor = if matched_text.len() >= 20 {
-            1.1_f32 // Longer matches tend to be more reliable
-        } else if matched_text.len() < 8 {
-            0.8_f32 // Very short matches might be false positives
-        } else {
-            1.0_f32
-        };
-        
-        // Check for obvious test/dummy values
-        let test_penalty = if matched_text.to_lowercase().contains("test")
-            || matched_text.to_lowercase().contains("dummy")
-            || matched_text.to_lowercase().contains("example") {
-            0.5_f32
-        } else {
-            1.0_f32
-        };
-        
-        (base_confidence * length_factor * test_penalty).min(1.0_f32)
-    }
 }
 
 impl Default for RegexExecutor {
@@ -229,38 +179,4 @@ mod tests {
         assert_eq!(coord.byte_end as usize, end);
     }
     
-    #[test]
-    fn test_severity_determination() {
-        assert_eq!(
-            RegexExecutor::determine_severity("private_key"),
-            MatchSeverity::Critical
-        );
-        assert_eq!(
-            RegexExecutor::determine_severity("api_token"),
-            MatchSeverity::High
-        );
-        assert_eq!(
-            RegexExecutor::determine_severity("generic_pattern"),
-            MatchSeverity::Medium
-        );
-    }
-    
-    #[test]
-    fn test_confidence_calculation() {
-        use crate::scan::static_data::pattern_library::PatternClass;
-        
-        let confidence = RegexExecutor::calculate_confidence(
-            &PatternClass::Specific,
-            "sk_live_1234567890abcdef",
-        );
-        
-        assert!(confidence > 0.8); // Should be high confidence for specific, long pattern
-        
-        let test_confidence = RegexExecutor::calculate_confidence(
-            &PatternClass::Specific,
-            "test_key_123",
-        );
-        
-        assert!(test_confidence < confidence); // Test values should have lower confidence
-    }
 }

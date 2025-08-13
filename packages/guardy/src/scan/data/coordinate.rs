@@ -87,29 +87,6 @@ impl Coordinate {
         self.column_start as u32 + self.column_width as u32
     }
     
-    /// Get the length of the match in bytes
-    pub fn byte_length(&self) -> u32 {
-        self.byte_end - self.byte_start
-    }
-    
-    /// Get the length of the match in columns
-    pub fn column_length(&self) -> u16 {
-        self.column_width
-    }
-    
-    /// Check if this coordinate contains another coordinate
-    pub fn contains(&self, other: &Coordinate) -> bool {
-        self.line == other.line
-            && self.byte_start <= other.byte_start
-            && self.byte_end >= other.byte_end
-    }
-    
-    /// Check if this coordinate overlaps with another
-    pub fn overlaps(&self, other: &Coordinate) -> bool {
-        self.line == other.line
-            && self.byte_start < other.byte_end
-            && self.byte_end > other.byte_start
-    }
 }
 
 impl fmt::Display for Coordinate {

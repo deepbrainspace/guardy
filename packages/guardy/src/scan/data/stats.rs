@@ -1,37 +1,7 @@
 //! Hierarchical statistics for scan operations
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
 
-/// Thread-safe statistics for a single file
-#[derive(Debug, Default)]
-pub struct FileStats {
-    pub lines_processed: AtomicUsize,
-    pub bytes_processed: AtomicU64,
-    pub matches_found: AtomicUsize,
-    pub scan_time_ms: AtomicU64,
-}
-
-impl FileStats {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-/// Thread-safe statistics for a directory
-#[derive(Debug, Default)]
-pub struct DirectoryStats {
-    pub files_discovered: AtomicUsize,
-    pub files_filtered: AtomicUsize,
-    pub directories_traversed: AtomicUsize,
-    pub total_size_bytes: AtomicU64,
-}
-
-impl DirectoryStats {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
 
 /// Overall scan statistics
 #[derive(Debug, Clone)]
@@ -47,8 +17,6 @@ pub struct ScanStats {
     
     // Match stats
     pub total_matches: usize,
-    pub high_severity_matches: usize,
-    pub critical_matches: usize,
     
     // Performance stats
     pub total_bytes_processed: u64,
@@ -73,8 +41,6 @@ impl ScanStats {
             directories_traversed: 0,
             total_files_discovered: 0,
             total_matches: 0,
-            high_severity_matches: 0,
-            critical_matches: 0,
             total_bytes_processed: 0,
             total_lines_processed: 0,
             scan_duration_ms: 0,
@@ -122,44 +88,118 @@ impl Default for ScanStats {
     }
 }
 
-/// Thread-safe wrapper for accumulating stats during parallel processing
+/// Thread-safe statistics collector for parallel scanning
 #[derive(Debug)]
-pub struct StatsAccumulator {
-    pub directory: Arc<DirectoryStats>,
-    pub file: Arc<FileStats>,
+pub struct StatsCollector {
+    pub files_scanned: AtomicUsize,
+    pub files_skipped: AtomicUsize,
+    pub files_failed: AtomicUsize,
+    pub directories_traversed: AtomicUsize,
+    pub total_files_discovered: AtomicUsize,
+    pub total_matches: AtomicUsize,
+    pub total_bytes_processed: AtomicU64,
+    pub total_lines_processed: AtomicUsize,
+    pub files_filtered_by_size: AtomicUsize,
+    pub files_filtered_by_binary: AtomicUsize,
+    pub files_filtered_by_path: AtomicUsize,
+    pub matches_filtered_by_comments: AtomicUsize,
+    pub matches_filtered_by_entropy: AtomicUsize,
 }
 
-impl StatsAccumulator {
+impl StatsCollector {
     pub fn new() -> Self {
         Self {
-            directory: Arc::new(DirectoryStats::new()),
-            file: Arc::new(FileStats::new()),
+            files_scanned: AtomicUsize::new(0),
+            files_skipped: AtomicUsize::new(0),
+            files_failed: AtomicUsize::new(0),
+            directories_traversed: AtomicUsize::new(0),
+            total_files_discovered: AtomicUsize::new(0),
+            total_matches: AtomicUsize::new(0),
+            total_bytes_processed: AtomicU64::new(0),
+            total_lines_processed: AtomicUsize::new(0),
+            files_filtered_by_size: AtomicUsize::new(0),
+            files_filtered_by_binary: AtomicUsize::new(0),
+            files_filtered_by_path: AtomicUsize::new(0),
+            matches_filtered_by_comments: AtomicUsize::new(0),
+            matches_filtered_by_entropy: AtomicUsize::new(0),
         }
     }
     
-    /// Increment files discovered
-    pub fn add_file_discovered(&self) {
-        self.directory.files_discovered.fetch_add(1, Ordering::Relaxed);
+    pub fn increment_files_discovered(&self) {
+        self.total_files_discovered.fetch_add(1, Ordering::Relaxed);
     }
     
-    /// Increment files filtered
-    pub fn add_file_filtered(&self) {
-        self.directory.files_filtered.fetch_add(1, Ordering::Relaxed);
+    pub fn increment_files_filtered_by_size(&self) {
+        self.files_filtered_by_size.fetch_add(1, Ordering::Relaxed);
+        self.files_skipped.fetch_add(1, Ordering::Relaxed);
     }
     
-    /// Add bytes processed
+    pub fn increment_files_filtered_by_binary(&self) {
+        self.files_filtered_by_binary.fetch_add(1, Ordering::Relaxed);
+        self.files_skipped.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn increment_files_filtered_by_path(&self) {
+        self.files_filtered_by_path.fetch_add(1, Ordering::Relaxed);
+        self.files_skipped.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn increment_files_scanned(&self) {
+        self.files_scanned.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn increment_files_failed(&self) {
+        self.files_failed.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn increment_directories_traversed(&self) {
+        self.directories_traversed.fetch_add(1, Ordering::Relaxed);
+    }
+    
     pub fn add_bytes_processed(&self, bytes: u64) {
-        self.file.bytes_processed.fetch_add(bytes, Ordering::Relaxed);
-        self.directory.total_size_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.total_bytes_processed.fetch_add(bytes, Ordering::Relaxed);
     }
     
-    /// Add lines processed
     pub fn add_lines_processed(&self, lines: usize) {
-        self.file.lines_processed.fetch_add(lines, Ordering::Relaxed);
+        self.total_lines_processed.fetch_add(lines, Ordering::Relaxed);
     }
     
-    /// Add match found
-    pub fn add_match_found(&self) {
-        self.file.matches_found.fetch_add(1, Ordering::Relaxed);
+    pub fn add_matches(&self, count: usize) {
+        self.total_matches.fetch_add(count, Ordering::Relaxed);
+    }
+    
+    pub fn add_matches_filtered_by_comments(&self, count: usize) {
+        self.matches_filtered_by_comments.fetch_add(count, Ordering::Relaxed);
+    }
+    
+    pub fn add_matches_filtered_by_entropy(&self, count: usize) {
+        self.matches_filtered_by_entropy.fetch_add(count, Ordering::Relaxed);
+    }
+    
+    /// Convert to final ScanStats with scan duration
+    pub fn to_scan_stats(&self, scan_duration_ms: u64) -> ScanStats {
+        ScanStats {
+            files_scanned: self.files_scanned.load(Ordering::Relaxed),
+            files_skipped: self.files_skipped.load(Ordering::Relaxed),
+            files_failed: self.files_failed.load(Ordering::Relaxed),
+            directories_traversed: self.directories_traversed.load(Ordering::Relaxed),
+            total_files_discovered: self.total_files_discovered.load(Ordering::Relaxed),
+            total_matches: self.total_matches.load(Ordering::Relaxed),
+            total_bytes_processed: self.total_bytes_processed.load(Ordering::Relaxed),
+            total_lines_processed: self.total_lines_processed.load(Ordering::Relaxed),
+            scan_duration_ms,
+            files_filtered_by_size: self.files_filtered_by_size.load(Ordering::Relaxed),
+            files_filtered_by_binary: self.files_filtered_by_binary.load(Ordering::Relaxed),
+            files_filtered_by_path: self.files_filtered_by_path.load(Ordering::Relaxed),
+            matches_filtered_by_comments: self.matches_filtered_by_comments.load(Ordering::Relaxed),
+            matches_filtered_by_entropy: self.matches_filtered_by_entropy.load(Ordering::Relaxed),
+        }
     }
 }
+
+impl Default for StatsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

@@ -40,10 +40,8 @@ static SPINNER_STYLE: LazyLock<ProgressStyle> = LazyLock::new(|| {
 pub enum ProgressMode {
     /// No progress bars (for non-TTY or quiet mode)
     Silent,
-    /// Basic progress with single bar
-    Basic,
-    /// Advanced multi-bar progress with detailed stats
-    Advanced,
+    /// Show progress bars with detailed stats
+    Visible,
 }
 
 /// Progress tracker with indicatif integration
@@ -86,7 +84,7 @@ impl ProgressTracker {
     /// Create a new progress tracker with automatic mode detection
     pub fn new() -> Self {
         Self::new_with_mode(if atty::is(atty::Stream::Stdout) {
-            ProgressMode::Advanced
+            ProgressMode::Visible
         } else {
             ProgressMode::Silent
         })
@@ -95,7 +93,7 @@ impl ProgressTracker {
     /// Create with explicit indicatif enable/disable
     pub fn new_with_indicatif(enabled: bool) -> Self {
         Self::new_with_mode(if enabled {
-            ProgressMode::Advanced
+            ProgressMode::Visible
         } else {
             ProgressMode::Silent
         })
@@ -105,7 +103,7 @@ impl ProgressTracker {
     pub fn new_with_mode(mode: ProgressMode) -> Self {
         let (multi_progress, discovery_bar, scanning_bar, aggregation_spinner) = match mode {
             ProgressMode::Silent => (None, None, None, None),
-            ProgressMode::Basic | ProgressMode::Advanced => {
+            ProgressMode::Visible => {
                 let mp = Arc::new(MultiProgress::new());
                 
                 // Set draw target based on TTY availability

@@ -4,7 +4,7 @@ use crate::scan::filters::{DirectoryFilter, Filter, FilterDecision};
 use anyhow::Result;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 
 /// Filter based on path patterns and gitignore
 /// Uses globset for O(n) matching where n is the number of patterns
@@ -12,8 +12,10 @@ use std::sync::Arc;
 pub struct PathFilter {
     /// Compiled glob patterns for efficient matching
     ignore_set: Arc<GlobSet>,
-    /// Original patterns for debugging
+    /// Original patterns for debugging and stats
     patterns: Arc<Vec<String>>,
+    /// Usage statistics per pattern (atomic for thread safety)
+    pattern_usage: Arc<Vec<AtomicUsize>>,
 }
 
 impl PathFilter {
@@ -43,9 +45,15 @@ impl PathFilter {
             GlobSet::empty()
         });
         
+        // Initialize usage counters for each pattern
+        let pattern_usage: Vec<AtomicUsize> = (0..ignore_patterns.len())
+            .map(|_| AtomicUsize::new(0))
+            .collect();
+        
         Self {
             ignore_set: Arc::new(ignore_set),
             patterns: Arc::new(ignore_patterns),
+            pattern_usage: Arc::new(pattern_usage),
         }
     }
 }
@@ -55,8 +63,16 @@ impl Filter for PathFilter {
     type Output = FilterDecision;
     
     fn filter(&self, path: &Path) -> Result<FilterDecision> {
-        // Check if path matches any ignore pattern
-        if self.ignore_set.is_match(path) {
+        // Check if path matches any ignore pattern and get which ones
+        let matches: Vec<_> = self.ignore_set.matches(path);
+        if !matches.is_empty() {
+            // Increment usage counter for each matching pattern (atomic, thread-safe)
+            for match_idx in &matches {
+                if let Some(counter) = self.pattern_usage.get(*match_idx) {
+                    counter.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+            
             return Ok(FilterDecision::Skip("matched ignore pattern"));
         }
         
@@ -81,6 +97,21 @@ impl Filter for PathFilter {
     
     fn name(&self) -> &'static str {
         "PathFilter"
+    }
+}
+
+impl PathFilter {
+    /// Get usage statistics for trace-level debugging
+    /// Only call this with trace-level logging to avoid overhead
+    pub fn get_stats(&self) -> Vec<(String, usize)> {
+        self.patterns
+            .iter()
+            .zip(self.pattern_usage.iter())
+            .map(|(pattern, counter)| {
+                (pattern.clone(), counter.load(Ordering::Relaxed))
+            })
+            .filter(|(_, count)| *count > 0) // Only show patterns that matched something
+            .collect()
     }
 }
 

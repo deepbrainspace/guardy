@@ -5,7 +5,7 @@
 //! Stage 2: Content inspection (reads first 512 bytes for unknown extensions)
 
 use crate::scan::filters::{DirectoryFilter, Filter, FilterDecision};
-use crate::scan::static_data::get_binary_extensions;
+use crate::scan::static_data::binary_extensions::is_binary_extension;
 use anyhow::Result;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -69,9 +69,8 @@ impl BinaryFilter {
         if let Some(extension) = path.extension() {
             if let Some(ext_str) = extension.to_str() {
                 let ext_lower = ext_str.to_lowercase();
-                let binary_extensions = get_binary_extensions();
                 
-                if binary_extensions.contains(&ext_lower) {
+                if is_binary_extension(&ext_lower) {
                     // Update statistics
                     if let Ok(mut stats) = self.stats.lock() {
                         stats.extension_cache_hits += 1;

@@ -160,3 +160,8 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Guardy reports and user data
+.guardy/
+guardy-reports/
+*.sensitive.*

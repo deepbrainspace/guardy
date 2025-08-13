@@ -12,6 +12,8 @@ use std::time::Instant;
 use crate::cli::output;
 use crate::config::GuardyConfig;
 use crate::scan::{Scanner, ScannerConfig};
+use crate::scan::filters::content::ContextPrefilter;
+use crate::scan::reports::{ReportOrchestrator, ReportConfig, ReportFormat, RedactionStyle};
 
 /// Simplified scan arguments optimized for v3 scanner
 #[derive(Args, Serialize)]
@@ -30,7 +32,7 @@ pub struct ScanArgs {
     
     /// Show progress bars (auto-detects TTY if not specified)
     #[arg(long)]
-    pub progress: bool,
+    pub progress: Option<bool>,
     
     /// Disable entropy analysis for faster scanning
     #[arg(long)]
@@ -63,6 +65,26 @@ pub struct ScanArgs {
     /// Show matched text content (potentially sensitive)
     #[arg(long)]
     pub show_content: bool,
+
+    /// Show detailed statistics after scanning
+    #[arg(long)]
+    pub stats: bool,
+
+    /// Generate report files (HTML and JSON)
+    #[arg(long)]
+    pub report: bool,
+
+    /// Directory to save reports (default: ./.guardy/reports/)
+    #[arg(long)]
+    pub report_dir: Option<PathBuf>,
+
+    /// Specific output path for report (overrides --report-dir)
+    #[arg(long)]
+    pub report_output: Option<PathBuf>,
+
+    /// Include real secrets in report (creates .sensitive. files)
+    #[arg(long)]
+    pub report_show_secrets: bool,
 }
 
 /// Output format options optimized for v3
@@ -118,6 +140,11 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     
     let elapsed = start_time.elapsed();
     
+    // Generate reports if requested
+    if args.report {
+        generate_reports(&all_results, &args, elapsed.as_millis() as u64).await?;
+    }
+    
     // Handle count-only mode
     if args.count_only {
         let total_matches: usize = all_results.iter()
@@ -139,11 +166,33 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             print_files_only(&all_results);
         }
         OutputFormat::Summary => {
-            print_summary_results(&all_results, elapsed, verbose_level)?;
+            print_summary_results(&all_results, elapsed, verbose_level, &args)?;
         }
         OutputFormat::Detailed => {
             print_detailed_results(&all_results, elapsed, &args, verbose_level)?;
         }
+    }
+    
+    // Print final completion message
+    let total_matches: usize = all_results.iter().map(|r| r.matches.len()).sum();
+    let total_files: usize = all_results.iter().map(|r| r.stats.files_scanned).sum();
+    
+    println!();
+    if total_matches == 0 {
+        output::styled!(
+            "{} Scan completed successfully - no secrets detected in {} files in {}s",
+            ("✅", "success_symbol"),
+            (total_files.to_string(), "number"),
+            (format!("{:.2}", elapsed.as_secs_f64()), "number")
+        );
+    } else {
+        output::styled!(
+            "{} Scan completed - found {} potential secrets in {} files in {}s",
+            ("⚠️", "warning_symbol"),
+            (total_matches.to_string(), "caution"),
+            (total_files.to_string(), "number"),
+            (format!("{:.2}", elapsed.as_secs_f64()), "number")
+        );
     }
     
     // Exit with error code if secrets found
@@ -159,7 +208,8 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
 fn print_summary_results(
     results: &[crate::scan::ScanResult], 
     elapsed: std::time::Duration,
-    verbose_level: u8,
+    _verbose_level: u8,
+    args: &ScanArgs,
 ) -> Result<()> {
     let total_matches: usize = results.iter().map(|r| r.matches.len()).sum();
     let total_files: usize = results.iter().map(|r| r.stats.files_scanned).sum();
@@ -205,7 +255,7 @@ fn print_summary_results(
     } else { 0.0 };
     
     output::styled!(
-        "{} Scanned {} files ({:.1} MB) in {:.2}s • {:.1} MB/s",
+        "{} Scanned {} files ({} MB) in {}s • {} MB/s",
         ("📊", "info_symbol"),
         (total_files.to_string(), "number"),
         (format!("{:.1}", total_bytes as f64 / 1_000_000.0), "number"),
@@ -221,13 +271,68 @@ fn print_summary_results(
         );
     }
     
+    // Show detailed statistics if --stats requested
+    if args.stats && !results.is_empty() {
+        println!();
+        output::styled!(
+            "{} {}",
+            ("📊", "info_symbol"),
+            ("Scan Statistics", "property")
+        );
+        
+        // Aggregate detailed stats from all results
+        let stats = &results[0].stats; // Use first result's stats (they should all be similar)
+        
+        output::styled!("  Files discovered: {}", (stats.total_files_discovered.to_string(), "symbol"));
+        output::styled!("  Files scanned: {}", (stats.files_scanned.to_string(), "symbol"));
+        output::styled!("  Files skipped: {}", (stats.files_skipped.to_string(), "symbol"));
+        if stats.files_failed > 0 {
+            output::styled!("  Files failed: {}", (stats.files_failed.to_string(), "warning"));
+        }
+        
+        println!();
+        output::styled!("  {} Filtering Statistics", ("🔽", "info_symbol"));
+        output::styled!("    By size: {}", (stats.files_filtered_by_size.to_string(), "symbol"));
+        output::styled!("    By binary: {}", (stats.files_filtered_by_binary.to_string(), "symbol"));
+        output::styled!("    By path: {}", (stats.files_filtered_by_path.to_string(), "symbol"));
+        
+        println!();
+        output::styled!("  {} Match Statistics", ("🔍", "info_symbol"));
+        output::styled!("    Total matches: {}", (stats.total_matches.to_string(), "symbol"));
+        if stats.matches_filtered_by_comments > 0 {
+            output::styled!("    Filtered by comments: {}", (stats.matches_filtered_by_comments.to_string(), "symbol"));
+        }
+        if stats.matches_filtered_by_entropy > 0 {
+            output::styled!("    Filtered by entropy: {}", (stats.matches_filtered_by_entropy.to_string(), "symbol"));
+        }
+        
+        println!();
+        output::styled!("  {} Performance", ("⚡", "info_symbol"));
+        output::styled!("    Scan time: {}", (format!("{:.2}s", elapsed.as_secs_f64()), "symbol"));
+        output::styled!("    Throughput: {}", (format!("{:.1} MB/s", throughput), "symbol"));
+        output::styled!("    Data processed: {}", (format!("{:.1} MB", total_bytes as f64 / 1_000_000.0), "symbol"));
+        output::styled!("    Lines processed: {}", (stats.total_lines_processed.to_string(), "symbol"));
+        
+        // Add prefilter performance stats
+        let prefilter_stats = ContextPrefilter::stats();
+        output::styled!("    Pattern library: {} patterns, {} keywords", 
+            (prefilter_stats.total_patterns.to_string(), "symbol"),
+            (prefilter_stats.total_keywords.to_string(), "symbol")
+        );
+        
+        if total_warnings > 0 {
+            println!();
+            output::styled!("  {} Warnings: {}", ("⚠️", "warning_symbol"), (total_warnings.to_string(), "warning"));
+        }
+    }
+    
     Ok(())
 }
 
 /// Print detailed results (equivalent to old format)
 fn print_detailed_results(
     results: &[crate::scan::ScanResult],
-    elapsed: std::time::Duration, 
+    _elapsed: std::time::Duration, 
     args: &ScanArgs,
     verbose_level: u8,
 ) -> Result<()> {
@@ -306,8 +411,7 @@ fn print_json_results(
             "line": m.line_number(),
             "column": m.coordinate().column_start,
             "pattern": m.secret_type.to_string(),
-            "matched_text": m.matched_text,
-            "confidence": m.confidence
+            "matched_text": m.matched_text
         })).collect::<Vec<_>>(),
         "warnings": all_warnings,
         "summary": {
@@ -364,5 +468,108 @@ fn group_matches_by_file(
     let mut result: Vec<_> = grouped.into_iter().collect();
     result.sort_by(|a, b| a.0.cmp(&b.0)); // Sort by file path
     result
+}
+
+/// Generate reports for scan results
+async fn generate_reports(
+    results: &[crate::scan::ScanResult], 
+    args: &ScanArgs,
+    scan_duration_ms: u64,
+) -> Result<()> {
+    if results.is_empty() {
+        return Ok(());
+    }
+    
+    // Combine all results into a single result for reporting
+    let combined_result = combine_scan_results(results);
+    
+    // Create report configuration
+    let report_config = ReportConfig {
+        display_secrets: args.report_show_secrets,
+        redaction_style: RedactionStyle::Partial,
+        include_file_timing: true,
+        include_line_content: false, // Don't include line content by default
+        max_matches: 0, // Include all matches
+    };
+    
+    // Generate both HTML and JSON reports
+    let formats = vec![ReportFormat::Html, ReportFormat::Json];
+    
+    for format in formats {
+        let result = ReportOrchestrator::generate_report(
+            &combined_result,
+            format,
+            args.report_output.clone(),
+            args.report_dir.clone(),
+            report_config.clone(),
+        );
+        
+        match result {
+            Ok(file_path) => {
+                let format_name = match format {
+                    ReportFormat::Html => "HTML",
+                    ReportFormat::Json => "JSON",
+                };
+                output::styled!(
+                    "{} {} report generated: {}",
+                    ("📄", "info_symbol"),
+                    (format_name, "info"),
+                    (file_path.display().to_string(), "file_path")
+                );
+            }
+            Err(e) => {
+                output::styled!(
+                    "{} Failed to generate {} report: {}",
+                    ("❌", "error_symbol"),
+                    (format!("{:?}", format), "error"),
+                    (e.to_string(), "error")
+                );
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Combine multiple scan results into a single result for reporting
+fn combine_scan_results(results: &[crate::scan::ScanResult]) -> crate::scan::ScanResult {
+    if results.len() == 1 {
+        let result = &results[0];
+        return crate::scan::ScanResult::new(
+            result.matches.clone(),
+            result.stats.clone(),
+            result.file_results.clone(),
+            result.warnings.clone(),
+        );
+    }
+    
+    use crate::scan::{ScanResult, ScanStats};
+    
+    let mut all_matches = Vec::new();
+    let mut all_warnings = Vec::new();
+    let mut all_file_results = Vec::new();
+    let mut combined_stats = ScanStats::default();
+    
+    for result in results {
+        all_matches.extend_from_slice(&result.matches);
+        all_warnings.extend_from_slice(&result.warnings);
+        all_file_results.extend_from_slice(&result.file_results);
+        
+        // Combine stats
+        combined_stats.files_scanned += result.stats.files_scanned;
+        combined_stats.total_files_discovered += result.stats.total_files_discovered;
+        combined_stats.files_skipped += result.stats.files_skipped;
+        combined_stats.files_failed += result.stats.files_failed;
+        combined_stats.total_bytes_processed += result.stats.total_bytes_processed;
+        combined_stats.total_lines_processed += result.stats.total_lines_processed;
+        combined_stats.total_matches += result.stats.total_matches;
+        combined_stats.files_filtered_by_size += result.stats.files_filtered_by_size;
+        combined_stats.files_filtered_by_binary += result.stats.files_filtered_by_binary;
+        combined_stats.files_filtered_by_path += result.stats.files_filtered_by_path;
+        combined_stats.matches_filtered_by_comments += result.stats.matches_filtered_by_comments;
+        combined_stats.matches_filtered_by_entropy += result.stats.matches_filtered_by_entropy;
+    }
+    
+    ScanResult::new(all_matches, combined_stats, all_file_results, all_warnings)
 }
 
