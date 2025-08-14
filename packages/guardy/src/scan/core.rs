@@ -340,28 +340,41 @@ impl Scanner {
             .hidden(false) // Don't ignore hidden files by default
             .parents(true); // Check parent directories for .gitignore
 
-        // Apply PathFilter during directory walk to prevent traversing filtered directories
+        // Create directory handler for fast directory filtering
+        let directory_handler = super::directory::DirectoryHandler::new();
         let path_filter = self.path_filter.clone();
 
         builder.filter_entry(move |entry| {
-            use super::filters::Filter;
+            // FIRST: Fast directory filtering by name (prevents descent)
+            if entry.file_type().is_some_and(|ft| ft.is_dir())
+                && let Some(dir_name) = entry.file_name().to_str()
+                && directory_handler.should_filter_directory(dir_name)
+            {
+                tracing::debug!("[DirectoryHandler] Skipping directory: {}", entry.path().display());
+                path_filter_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return false; // Don't descend into this directory
+            }
             
-            // Apply PathFilter to prevent traversing into filtered directories
-            match path_filter.filter(entry.path()) {
-                Ok(super::filters::FilterDecision::Skip(reason)) => {
-                    tracing::debug!("[PathFilter] Skipped during walk {}: {}", entry.path().display(), reason);
-                    path_filter_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    false
-                }
-                Ok(super::filters::FilterDecision::Process) => {
-                    tracing::trace!("[PathFilter] Allowed during walk {}", entry.path().display());
-                    true
-                }
-                Err(e) => {
-                    tracing::warn!("[PathFilter] Failed for {}: {}", entry.path().display(), e);
-                    true // If filter fails, allow processing
+            // SECOND: Apply PathFilter for file patterns (user-configurable)
+            // Only check files, not directories (directories already handled above)
+            if entry.file_type().is_some_and(|ft| ft.is_file()) {
+                use super::filters::Filter;
+                match path_filter.filter(entry.path()) {
+                    Ok(super::filters::FilterDecision::Skip(reason)) => {
+                        tracing::debug!("[PathFilter] Skipped file {}: {}", entry.path().display(), reason);
+                        path_filter_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        return false;
+                    }
+                    Ok(super::filters::FilterDecision::Process) => {
+                        tracing::trace!("[PathFilter] Allowed file {}", entry.path().display());
+                    }
+                    Err(e) => {
+                        tracing::warn!("[PathFilter] Failed for {}: {}", entry.path().display(), e);
+                    }
                 }
             }
+            
+            true // Allow everything else
         });
 
         builder

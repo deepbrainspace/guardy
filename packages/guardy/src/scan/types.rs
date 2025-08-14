@@ -88,7 +88,10 @@ impl Default for ScannerConfig {
             follow_symlinks: false,
             max_file_size_mb: 50,
             include_binary: false, // Skip binary files by default
-            ignore_paths: super::static_data::directory_patterns::get_directory_patterns(),
+            ignore_paths: vec![
+                // File-specific patterns only - directories are handled by DirectoryHandler
+                // Users can add custom patterns via config
+            ],
             ignore_patterns: vec![
                 "# TEST_SECRET:".to_string(),
                 "DEMO_KEY_".to_string(),

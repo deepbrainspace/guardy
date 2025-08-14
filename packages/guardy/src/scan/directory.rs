@@ -1,4 +1,5 @@
 use super::filters::directory::BinaryFilter;
+use super::static_data::directory_patterns::SKIP_DIRECTORIES_SET;
 use super::types::{ScanFileResult, ScanResult, ScanStats, Scanner, Warning};
 use crate::cli::output;
 use crate::parallel::{ExecutionStrategy, progress::factories};
@@ -165,75 +166,19 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 ///
 /// ## Unified Scanning
 /// [`DirectoryHandler::scan()`] - Main entry point that orchestrates the entire scanning process
-#[derive(Debug)]
-pub struct DirectoryHandler {
-    /// Rust-specific directories
-    pub rust: &'static [&'static str],
-    /// Node.js/JavaScript directories
-    pub nodejs: &'static [&'static str],
-    /// Python directories
-    pub python: &'static [&'static str],
-    /// Go directories
-    pub go: &'static [&'static str],
-    /// Java directories
-    pub java: &'static [&'static str],
-    /// Generic build/cache directories
-    pub generic: &'static [&'static str],
-    /// Version control directories
-    pub vcs: &'static [&'static str],
-    /// IDE directories
-    pub ide: &'static [&'static str],
-    /// Test coverage directories
-    pub coverage: &'static [&'static str],
-}
-
-impl Default for DirectoryHandler {
-    fn default() -> Self {
-        Self {
-            rust: &["target"],
-            nodejs: &["node_modules", "dist", "build", ".next", ".nuxt"],
-            python: &[
-                "__pycache__",
-                ".pytest_cache",
-                "venv",
-                ".venv",
-                "env",
-                ".env",
-            ],
-            go: &["vendor"],
-            java: &["out"],
-            generic: &["cache", ".cache", "tmp", ".tmp", "temp", ".temp"],
-            vcs: &[".git", ".svn", ".hg"],
-            ide: &[".vscode", ".idea", ".vs"],
-            coverage: &["coverage", ".nyc_output"],
-        }
-    }
-}
+#[derive(Debug, Default)]
+pub struct DirectoryHandler {}
 
 impl DirectoryHandler {
-    /// Create a new directory handler with default configuration
+    /// Create a new directory handler
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Get all directory names that should be filtered during scanning
-    pub fn all_filtered_directories(&self) -> Vec<&'static str> {
-        let mut dirs = Vec::new();
-        dirs.extend_from_slice(self.rust);
-        dirs.extend_from_slice(self.nodejs);
-        dirs.extend_from_slice(self.python);
-        dirs.extend_from_slice(self.go);
-        dirs.extend_from_slice(self.java);
-        dirs.extend_from_slice(self.generic);
-        dirs.extend_from_slice(self.vcs);
-        dirs.extend_from_slice(self.ide);
-        dirs.extend_from_slice(self.coverage);
-        dirs
+        Self {}
     }
 
     /// Check if a directory name should be filtered (skipped) during scanning
+    /// Uses O(1) HashSet lookup for performance
     pub fn should_filter_directory(&self, dir_name: &str) -> bool {
-        self.all_filtered_directories().contains(&dir_name)
+        SKIP_DIRECTORIES_SET.contains(dir_name)
     }
 
     /// Get directories that should be analyzed for gitignore patterns
@@ -253,55 +198,6 @@ impl DirectoryHandler {
             // Go
             ("vendor", "Go dependencies"),
         ]
-    }
-
-    /// Adapt worker count based on file count (domain-specific logic)
-    ///
-    /// This method implements file scanning domain knowledge to optimize parallel execution:
-    ///
-    /// # Parameters
-    /// - `file_count`: Number of files to be scanned
-    /// - `max_workers`: Maximum workers available (from resource calculation)
-    ///
-    /// # Returns
-    /// Optimal worker count for the given file count, constrained by max_workers
-    ///
-    /// # Adaptation Strategy
-    /// ```text
-    /// ≤10 files    → min(2, max_workers)         # Minimal overhead
-    /// ≤50 files    → min(max_workers/2, max_workers)   # Conservative scaling
-    /// ≤100 files   → min(max_workers*3/4, max_workers) # Moderate scaling
-    /// >100 files   → max_workers                 # Full utilization
-    /// ```
-    ///
-    /// # Rationale
-    /// - **Small workloads**: Parallel overhead exceeds benefits
-    /// - **Medium workloads**: Conservative parallelism provides good balance
-    /// - **Large workloads**: Full parallelism maximizes throughput
-    ///
-    /// # Example
-    /// ```rust
-    /// use guardy::scan_v1::directory::DirectoryHandler;
-    ///
-    /// // System has 16 cores, config allows 12 workers
-    /// let workers = DirectoryHandler::adapt_workers_for_file_count(36, 12);
-    /// assert_eq!(workers, 6); // 36 ≤ 50, so 12/2 = 6
-    /// ```
-    pub fn adapt_workers_for_file_count(file_count: usize, max_workers: usize) -> usize {
-        if file_count <= 10 {
-            // Very small workloads: use minimal parallelism
-            std::cmp::min(2, max_workers)
-        } else if file_count <= 50 {
-            // Small workloads: use conservative parallelism
-            std::cmp::min(max_workers / 2, max_workers)
-        } else if file_count <= 100 {
-            // Medium workloads: use moderate parallelism
-            std::cmp::min((max_workers * 3) / 4, max_workers)
-        } else {
-            // Large workloads: use full available parallelism
-            max_workers
-        }
-        // The result is capped by file count in the parallel executor
     }
 
     /// Unified directory scanning method that orchestrates the entire scanning process
