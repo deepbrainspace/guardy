@@ -7,8 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub struct ScanningStats {
     pub scanned: AtomicUsize,
     pub with_secrets: AtomicUsize,
-    pub skipped: AtomicUsize,
-    pub binary: AtomicUsize,
+    pub warnings: AtomicUsize,
 }
 
 impl ScanningStats {
@@ -24,18 +23,17 @@ impl ScanningStats {
         self.with_secrets.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn increment_skipped(&self) {
-        self.skipped.fetch_add(1, Ordering::Relaxed);
+    pub fn increment_warnings(&self) {
+        self.warnings.fetch_add(1, Ordering::Relaxed);
     }
 
-    // Note: binary file tracking removed - filtering now happens during directory walk
+    // Note: binary file filtering now happens during directory walk phase
 
-    pub fn get_counts(&self) -> (usize, usize, usize, usize) {
+    pub fn get_counts(&self) -> (usize, usize, usize) {
         (
             self.scanned.load(Ordering::Relaxed),
             self.with_secrets.load(Ordering::Relaxed),
-            self.skipped.load(Ordering::Relaxed),
-            self.binary.load(Ordering::Relaxed),
+            self.warnings.load(Ordering::Relaxed),
         )
     }
 }
@@ -63,7 +61,7 @@ impl StatisticsProgressReporter {
             "🔍 [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} files {spinner} {msg}",
         )
         .unwrap()
-        .progress_chars("##-")
+        .progress_chars("#>-")
         .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
 
         let main_bar = multi_progress.add(ProgressBar::new(total_files as u64));
@@ -89,8 +87,8 @@ impl StatisticsProgressReporter {
         // Simple color scheme that should work in most terminals
         let worker_colors = ["green/black", "blue/black", "red/black", "yellow/black"];
 
-        // Estimate files per worker for progress bar lengths
-        let estimated_files_per_worker = total_files.div_ceil(worker_count); // Round up division
+        // Calculate actual maximum files per worker (some workers might get fewer)
+        let max_files_per_worker = total_files.div_ceil(worker_count); // Round up division
 
         // Create worker bars with different colors and styles
         for worker_id in 0..worker_count {
@@ -101,11 +99,11 @@ impl StatisticsProgressReporter {
                 color
             ))
             .unwrap()
-            .progress_chars("##-");
+            .progress_chars("#>-");
 
-            // Set reasonable length based on estimated files per worker
+            // Set initial length based on maximum files per worker (will expand dynamically if needed)
             let worker_bar =
-                multi_progress.add(ProgressBar::new(estimated_files_per_worker as u64));
+                multi_progress.add(ProgressBar::new(max_files_per_worker as u64));
             worker_bar.set_style(style);
             worker_bar.enable_steady_tick(std::time::Duration::from_millis(100)); // Need tick for visibility
             worker_bars.push(worker_bar);
@@ -116,7 +114,7 @@ impl StatisticsProgressReporter {
             "Overall:\n[{elapsed_precise}] {bar:40.white/black} {pos:>7}/{len:7} files ({percent}%)\n{msg}"
         )
         .unwrap()
-        .progress_chars("##-");
+        .progress_chars("#>-");
 
         let overall_bar = multi_progress.add(ProgressBar::new(total_files as u64));
         overall_bar.set_style(overall_style);
@@ -164,9 +162,9 @@ impl StatisticsProgressReporter {
 
             // Only update message every few files to reduce flicker
             if completed % self.update_frequency == 0 || completed == total {
-                let (scanned, with_secrets, skipped, binary) = self.stats.get_counts();
+                let (scanned, with_secrets, warnings) = self.stats.get_counts();
                 let stats_msg = format!(
-                    "📊 Scanned: {scanned} | With Secrets: {with_secrets} | Skipped: {skipped} | Binary: {binary}"
+                    "📊 Scanned: {scanned} | With Secrets: {with_secrets} | Warnings: {warnings}"
                 );
 
                 overall_bar.set_message(stats_msg);
@@ -183,7 +181,7 @@ impl StatisticsProgressReporter {
     pub fn finish(&self) {
         // Finish all worker bars and keep them visible with final state
         for worker_bar in &self.worker_bars {
-            worker_bar.finish_with_message("");
+            worker_bar.finish(); // Preserve current display state
         }
 
         // Finish overall bar

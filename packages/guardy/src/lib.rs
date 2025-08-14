@@ -163,8 +163,6 @@ pub mod hooks;
 pub mod parallel;
 pub mod profiling;
 pub mod reports;
-pub mod scan;        // Current stable scanner (v1)
-#[path = "scan-v3/mod.rs"]
-pub mod scan_v3;     // New experimental scanner (v3)
+pub mod scan;        // High-performance scanner with scan-v3 optimizations
 pub mod shared;
 pub mod sync;

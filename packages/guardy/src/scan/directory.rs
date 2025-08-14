@@ -330,7 +330,7 @@ impl DirectoryHandler {
                         Err(e) => {
                             // Update statistics for errors
                             if let Some(ref stats) = stats {
-                                stats.increment_skipped();
+                                stats.increment_warnings();
                             }
                             ScanFileResult {
                                 matches: Vec::new(),

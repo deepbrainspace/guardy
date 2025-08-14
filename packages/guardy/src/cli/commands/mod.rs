@@ -6,7 +6,6 @@ pub mod config;
 pub mod install;
 pub mod run;
 pub mod scan;
-pub mod scan_v3;
 pub mod status;
 pub mod sync;
 pub mod uninstall;
@@ -48,10 +47,8 @@ pub enum Commands {
     Install(install::InstallArgs),
     /// Manually execute a specific hook for testing
     Run(run::RunArgs),
-    /// Scan files or directories for secrets (stable v1-based scanner)
+    /// Scan files or directories for secrets
     Scan(scan::ScanArgs),
-    /// Scan files or directories for secrets (experimental v3 scanner)
-    ScanV3(scan_v3::ScanArgs),
     /// Configuration management
     Config(config::ConfigArgs),
     /// Show current installation and configuration status
@@ -80,9 +77,6 @@ impl Cli {
             Some(Commands::Scan(args)) => {
                 tracing::debug!(config_path = ?self.config, "CLI config path");
                 scan::execute(args, self.verbose, self.config.as_deref()).await
-            }
-            Some(Commands::ScanV3(args)) => {
-                scan_v3::execute(args, self.verbose, self.config.as_deref()).await
             }
             Some(Commands::Config(args)) => {
                 config::execute(args, self.config.as_deref(), self.verbose).await
