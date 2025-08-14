@@ -1,0 +1,284 @@
+   │ Revised Implementation Plan - Optimize Scan Module                                                                                                                     │
+     │                                                                                                                                                                        │
+     │ You're absolutely right! The current scan module does line-by-line scanning which is inefficient. Let's fix the fundamental approach first before adding Aho-Corasick. │
+     │                                                                                                                                                                        │
+     │ Current Problems                                                                                                                                                       │
+     │                                                                                                                                                                        │
+     │ 1. Line-by-line scanning: Runs every regex on every line (40 patterns × 1000 lines = 40,000 regex executions!)                                                         │
+     │ 2. Runtime pattern compilation: Patterns compiled on each Scanner creation                                                                                             │
+     │ 3. No prefiltering: All patterns run on all content                                                                                                                    │
+     │                                                                                                                                                                        │
+     │ Phase 1: Whole-File Scanning (Biggest Impact)                                                                                                                          │
+     │                                                                                                                                                                        │
+     │ Changes to scan/core.rs:                                                                                                                                               │
+     │ 1. Refactor scan_single_path():                                                                                                                                        │
+     │   - Keep content as single string (already done for small files)                                                                                                       │
+     │   - Remove line-by-line pattern matching loop                                                                                                                          │
+     │ 2. Replace scan_line() with scan_content():                                                                                                                            │
+     │ // Instead of: for each line -> for each pattern -> find matches                                                                                                       │
+     │ // New approach: for each pattern -> find all matches in content                                                                                                       │
+     │ fn scan_content(&self, content: &str, path: &Path) -> Vec<SecretMatch> {                                                                                               │
+     │     let mut matches = Vec::new();                                                                                                                                      │
+     │     for pattern in &self.patterns.patterns {                                                                                                                           │
+     │         for regex_match in pattern.regex.find_iter(content) {                                                                                                          │
+     │             // Calculate line number from byte position                                                                                                                │
+     │             let line_number = calculate_line_number(content, regex_match.start());                                                                                     │
+     │             // Create SecretMatch...                                                                                                                                   │
+     │         }                                                                                                                                                              │
+     │     }                                                                                                                                                                  │
+     │     matches                                                                                                                                                            │
+     │ }                                                                                                                                                                      │
+     │ 3. Line number calculation helper:                                                                                                                                     │
+     │ fn calculate_line_number(content: &str, byte_pos: usize) -> usize {                                                                                                    │
+     │     content[..byte_pos].bytes().filter(|&b| b == b'\n').count() + 1                                                                                                    │
+     │ }                                                                                                                                                                      │
+     │ 4. Preserve ignore logic:                                                                                                                                              │
+     │   - Pre-calculate ignore ranges (test blocks, comments)                                                                                                                │
+     │   - Filter matches that fall within ignored ranges                                                                                                                     │
+     │                                                                                                                                                                        │
+     │ Phase 2: Pre-compiled Pattern Library                                                                                                                                  │
+     │                                                                                                                                                                        │
+     │ New pattern structure (like scan-v3):                                                                                                                                  │
+     │ 1. Create PatternLibrary with LazyLock for one-time compilation:                                                                                                       │
+     │ static PATTERN_LIBRARY: LazyLock<Arc<PatternLibrary>> = LazyLock::new(|| {                                                                                             │
+     │     Arc::new(PatternLibrary::build().expect("Failed to build patterns"))                                                                                               │
+     │ });                                                                                                                                                                    │
+     │ 2. Add pattern metadata:                                                                                                                                               │
+     │   - Keywords for future Aho-Corasick                                                                                                                                   │
+     │   - Priority for execution order                                                                                                                                       │
+     │   - Pattern index for fast lookup                                                                                                                                      │
+     │                                                                                                                                                                        │
+     │ Phase 3: Add Aho-Corasick Prefilter                                                                                                                                    │
+     │                                                                                                                                                                        │
+     │ 1. Build automaton from keywords at startup                                                                                                                            │
+     │ 2. Prefilter content to get active pattern indices                                                                                                                     │
+     │ 3. Only execute regex for patterns with keyword matches                                                                                                                │
+     │ 4. Expected: ~85% pattern elimination                                                                                                                                  │
+     │                                                                                                                                                                        │
+     │ Benefits of This Approach                                                                                                                                              │
+     │                                                                                                                                                                        │
+     │ - Phase 1 alone: ~10-40x speedup (1 regex pass vs per-line)                                                                                                            │
+     │ - Phase 2: Faster startup, shared patterns across threads                                                                                                              │
+     │ - Phase 3: Additional 5-10x speedup from prefiltering                                                                                                                  │
+     │ - Non-breaking: Existing functionality preserved                                                                                                                       │
+     │                                                                                                                                                                        │
+     │ Implementation Order                                                                                                                                                   │
+     │                                                                                                                                                                        │
+     │ 1. Start with Phase 1 (whole-file scanning) - biggest immediate impact                                                                                                 │
+     │ 2. Test and benchmark Phase 1                                                                                                                                          │
+     │ 3. Add Phase 2 (pre-compiled patterns)                                                                                                                                 │
+     │ 4. Finally add Phase 3 (Aho-Corasick)                                                                                                                                  │
+     │                                                                                                                                                                        │
+     │ This incremental approach ensures each optimization is stable before adding the next!                                                                                  │
+     ╰──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+     │ Analysis Summary                                                                                                                                                                                │
+     │                                                                                                                                                                                                 │
+     │ After comparing the scan and scan-v3 modules, I've identified that Aho-Corasick prefiltering is indeed the key performance improvement that would benefit the scan module. Here's what I found: │
+     │                                                                                                                                                                                                 │
+     │ Current Scan Module (scan/)                                                                                                                                                                     │
+     │                                                                                                                                                                                                 │
+     │ - Pattern Matching: Sequential regex execution on every line for ALL patterns (~40+ patterns)                                                                                                   │
+     │ - Performance: O(n*m) where n = content size, m = number of patterns                                                                                                                            │
+     │ - No prefiltering: Every pattern regex is executed on every line                                                                                                                                │
+     │                                                                                                                                                                                                 │
+     │ Scan-v3 Module                                                                                                                                                                                  │
+     │                                                                                                                                                                                                 │
+     │ - Pattern Matching: Two-stage approach with Aho-Corasick prefiltering                                                                                                                           │
+     │ - Performance: O(n) for prefiltering, then only ~15% of patterns need regex execution                                                                                                           │
+     │ - Key optimization: ~85% pattern elimination before expensive regex operations                                                                                                                  │
+     │                                                                                                                                                                                                 │
+     │ Implementation Plan                                                                                                                                                                             │
+     │                                                                                                                                                                                                 │
+     │ Phase 1: Add Aho-Corasick Prefilter (Quick Win - Most Impact)                                                                                                                                   │
+     │                                                                                                                                                                                                 │
+     │ 1. Add dependency: Add aho-corasick to Cargo.toml                                                                                                                                               │
+     │ 2. Extract keywords: Add keywords field to SecretPattern struct                                                                                                                                 │
+     │ 3. Build automaton: Create static Aho-Corasick automaton from pattern keywords                                                                                                                  │
+     │ 4. Implement prefilter: Add prefiltering step in scan_line_sequential()                                                                                                                         │
+     │ 5. Only run regex on active patterns: Execute regex only for patterns whose keywords matched                                                                                                    │
+     │                                                                                                                                                                                                 │
+     │ Phase 2: Optimize Pattern Structure                                                                                                                                                             │
+     │                                                                                                                                                                                                 │
+     │ 1. Pattern library refactor: Move from Vec to indexed pattern library                                                                                                                           │
+     │ 2. Add priority field: Sort patterns by priority for better cache utilization                                                                                                                   │
+     │ 3. Lazy compilation: Use LazyLock for one-time pattern compilation                                                                                                                              │
+     │                                                                                                                                                                                                 │
+     │ Phase 3: Additional Optimizations (Optional)                                                                                                                                                    │
+     │                                                                                                                                                                                                 │
+     │ 1. SmallVec optimization: Use SmallVec for allocation-free pattern tracking                                                                                                                     │
+     │ 2. Coordinate system: Implement optimized coordinate tracking (if needed)                                                                                                                       │
+     │ 3. Streaming for large files: Already exists but could be enhanced                                                                                                                              │
+     │                                                                                                                                                                                                 │
+     │ Expected Performance Improvements                                                                                                                                                               │
+     │                                                                                                                                                                                                 │
+     │ Based on scan-v3's implementation:                                                                                                                                                              │
+     │ - ~85% reduction in regex executions (most patterns eliminated by Aho-Corasick)                                                                                                                 │
+     │ - O(n) prefiltering instead of O(n*m) pattern matching                                                                                                                                          │
+     │ - Faster than gitleaks for directories with many files (parallel processing + prefiltering)                                                                                                     │
+     │                                                                                                                                                                                                 │
+     │ Implementation Priority                                                                                                                                                                         │
+     │                                                                                                                                                                                                 │
+     │ Start with Phase 1 only - This gives the biggest performance boost with minimal changes:                                                                                                        │
+     │ 1. Add Aho-Corasick dependency                                                                                                                                                                  │
+     │ 2. Add keywords to patterns                                                                                                                                                                     │
+     │ 3. Build global automaton                                                                                                                                                                       │
+     │ 4. Modify scan_line_sequential to use prefilter                                                                                                                                                 │
+     │ 5. Benchmark to verify improvements                                                                                                                                                             │
+     │                                                                                                                                                                                                 │
+     │ This approach is non-breaking and can be implemented incrementally without affecting existing functionality.                                                                                    │
+
+     After analyzing both modules, here's what I found:
+
+     Current scan Module Directory Filters
+
+     Already Implemented:
+     1. ✅ Binary file detection (directory.rs)
+       - Extension-based check (fast)
+       - Content inspection fallback (for unknown extensions)
+       - Hybrid approach similar to scan-v3
+     2. ✅ Path/Glob filtering (core.rs)
+       - Uses GlobSet for pattern matching
+       - Supports ignore_paths config
+       - Applied during directory walk
+     3. ✅ File size filtering (core.rs)
+       - Checks max_file_size_mb
+       - Skips files over the limit
+     4. ✅ Directory exclusion (directory.rs)
+       - Hardcoded list of common directories to skip
+       - node_modules, target, .git, pycache, etc.
+
+     scan-v3 Directory Filters (More Organized)
+
+     1. BinaryFilter - Two-stage detection with optimization
+       - Extension check (O(1) HashSet lookup)
+       - Content inspection with 4KB size threshold
+       - Better statistics tracking
+     2. PathFilter - Glob pattern matching
+       - Per-pattern usage statistics
+       - Common directory exclusion built-in
+       - Thread-safe atomic counters
+     3. SizeFilter - File size limits
+       - Also skips empty files
+       - Better error handling
+
+     Key Differences
+
+     scan module:
+     - Filters are scattered across multiple files
+     - Mixed with other logic (not cleanly separated)
+     - No consistent Filter trait/interface
+     - No statistics collection
+
+     scan-v3 module:
+     - Clean separation with Filter trait
+     - Each filter in its own file
+     - Consistent interface (Filter trait)
+     - Built-in statistics collection
+     - Better performance optimizations (4KB threshold for binary detection)
+
+     Implementation Plan
+
+     Phase 1: Refactor Existing Directory Filters (Foundation)
+
+     1. Create filters module structure in scan/
+     scan/
+     ├── filters/
+     │   ├── mod.rs
+     │   ├── directory/
+     │   │   ├── mod.rs
+     │   │   ├── binary.rs
+     │   │   ├── path.rs
+     │   │   └── size.rs
+     2. Extract existing logic into filters:
+       - Move binary detection from directory.rs → filters/directory/binary.rs
+       - Move glob/path filtering from core.rs → filters/directory/path.rs
+       - Move size checking from core.rs → filters/directory/size.rs
+     3. Create common Filter trait:
+     trait Filter {
+         type Input;
+         type Output;
+         fn filter(&self, input: &Self::Input) -> Result<Self::Output>;
+     }
+     4. Add optimizations from scan-v3:
+       - 4KB threshold for binary content inspection
+       - HashSet for O(1) extension lookup
+       - Statistics collection
+
+     Phase 2: Content Filters Preparation
+
+     Once directory filters are refactored:
+     1. Add content filters structure
+     2. Implement whole-file scanning
+     3. Add Aho-Corasick prefilter
+
+     Benefits of This Approach
+
+     1. Clean architecture - Separates concerns properly
+     2. Reusable components - Filters can be composed/reused
+     3. Better testing - Each filter can be unit tested
+     4. Performance tracking - Built-in statistics
+     5. Easy to add new filters - Just implement the Filter trait
+
+     Why Start With Directory Filters?
+
+     - They're already partially implemented
+     - Refactoring creates the structure needed for content filters
+     - Sets up the Filter trait pattern
+     - No breaking changes to existing functionality
+     - Performance gains from optimizations (4KB threshold)
+
+     This refactoring will make adding content filters (including Aho-Corasick) much cleaner!
+
+│ Performance Issue Analysis                                                                        │
+     │                                                                                                   │
+     │ Problem Identified                                                                                │
+     │                                                                                                   │
+     │ The scan module is creating new filter instances multiple times:                                  │
+     │ 1. BinaryFilter: Created for EACH file in the worker closure (line 484 in directory.rs)           │
+     │ 2. PathFilter: Created for each call to should_ignore_path() and in build_directory_walker()      │
+     │ 3. SizeFilter: Created for each call to scan_single_path()                                        │
+     │ 4. Statistics collection: Creates all filters again                                               │
+     │                                                                                                   │
+     │ This is causing:                                                                                  │
+     │ - Multiple "Binary filter initialized" debug messages                                             │
+     │ - Repeated initialization of binary extensions                                                    │
+     │ - Unnecessary memory allocations and Arc increments                                               │
+     │                                                                                                   │
+     │ How scan-v3 Handles It (Correctly)                                                                │
+     │                                                                                                   │
+     │ 1. Creates filters ONCE in DirectoryPipeline constructor                                          │
+     │ 2. Stores them as struct fields                                                                   │
+     │ 3. Clones them (cheap Arc increment) when needed in closures                                      │
+     │ 4. Reuses the same filter instances throughout the scan                                           │
+     │                                                                                                   │
+     │ Fix Plan                                                                                          │
+     │                                                                                                   │
+     │ 1. Cache filters in Scanner struct                                                                │
+     │                                                                                                   │
+     │ - Add filter fields to Scanner struct (with Arc wrapping for cheap cloning)                       │
+     │ - Initialize filters once in Scanner::new()                                                       │
+     │ - This matches scan-v3's approach                                                                 │
+     │                                                                                                   │
+     │ 2. Update Scanner initialization                                                                  │
+     │                                                                                                   │
+     │ - In Scanner::new() and Scanner::with_config(), create all filters once                           │
+     │ - Wrap them in Arc for cheap cloning                                                              │
+     │                                                                                                   │
+     │ 3. Update filter usage sites                                                                      │
+     │                                                                                                   │
+     │ - directory.rs worker closure: Clone the binary_filter from scanner instead of creating new       │
+     │ - core.rs should_ignore_path(): Use cached path_filter from self                                  │
+     │ - core.rs scan_single_path(): Use cached size_filter from self                                    │
+     │ - core.rs build_directory_walker(): Clone cached path_filter                                      │
+     │ - directory.rs statistics: Use cached filters from scanner                                        │
+     │                                                                                                   │
+     │ 4. Expected improvements                                                                          │
+     │                                                                                                   │
+     │ - Only one "Binary filter initialized" message                                                    │
+     │ - Binary extensions loaded once                                                                   │
+     │ - Filters reused across all operations                                                            │
+     │ - Should restore original performance                                                             │
+     │                                                                                                   │
+     │ This approach follows scan-v3's proven pattern while keeping our existing filter implementations. │

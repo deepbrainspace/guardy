@@ -1,11 +1,11 @@
 use super::entropy::is_likely_secret;
+// All filtering now handled through cached filters in Scanner struct and collect_file_paths
 use super::patterns::SecretPatterns;
 use super::test_detection::TestDetector;
 use super::types::{ScanResult, ScanStats, Scanner, ScannerConfig, SecretMatch, Warning};
 use crate::config::GuardyConfig;
 use crate::parallel::ExecutionStrategy;
 use anyhow::{Context, Result};
-use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,98 +24,39 @@ impl Scanner {
         // Parse scanner-specific config
         let scanner_config = Self::parse_scanner_config(config)?;
 
+        // Initialize filters once for reuse throughout scanning
+        let binary_filter = std::sync::Arc::new(super::filters::directory::BinaryFilter::new(!scanner_config.include_binary));
+        let path_filter = std::sync::Arc::new(super::filters::directory::PathFilter::new(scanner_config.ignore_paths.clone()));
+        let size_filter = std::sync::Arc::new(super::filters::directory::SizeFilter::new(scanner_config.max_file_size_mb));
+
         Ok(Scanner {
             patterns,
             config: scanner_config,
-            cached_path_ignorer: std::sync::OnceLock::new(),
+            binary_filter,
+            path_filter,
+            size_filter,
         })
     }
 
     pub fn with_config(patterns: SecretPatterns, config: ScannerConfig) -> Result<Self> {
+        // Initialize filters once for reuse throughout scanning
+        let binary_filter = std::sync::Arc::new(super::filters::directory::BinaryFilter::new(!config.include_binary));
+        let path_filter = std::sync::Arc::new(super::filters::directory::PathFilter::new(config.ignore_paths.clone()));
+        let size_filter = std::sync::Arc::new(super::filters::directory::SizeFilter::new(config.max_file_size_mb));
+
         Ok(Scanner {
             patterns,
             config,
-            cached_path_ignorer: std::sync::OnceLock::new(),
+            binary_filter,
+            path_filter,
+            size_filter,
         })
     }
 
-    /// Fast file counting using lightweight directory traversal
-    /// This is much faster than full WalkBuilder traversal because it doesn't
-    /// apply all the gitignore rules and filters - just basic directory filtering
-    pub(crate) fn fast_count_files(&self, path: &Path) -> Result<usize> {
-        use std::fs;
+    // fast_count_files() method removed - no longer needed since we always use parallel execution
 
-        let directory_handler = super::directory::DirectoryHandler::new();
 
-        fn count_files_recursive(
-            dir: &Path,
-            config: &ScannerConfig,
-            directory_handler: &super::directory::DirectoryHandler,
-        ) -> Result<usize> {
-            let mut count = 0;
-
-            if let Ok(entries) = fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-
-                    if path.is_file() {
-                        // Basic file size check (skip very large files)
-                        if let Ok(metadata) = entry.metadata() {
-                            let size_mb = metadata.len() / (1024 * 1024);
-                            if size_mb <= config.max_file_size_mb as u64 {
-                                count += 1;
-                            }
-                        } else {
-                            count += 1; // Count if we can't get metadata
-                        }
-                    } else if path.is_dir() {
-                        // Skip directories using shared filter logic
-                        if let Some(dir_name) = path.file_name().and_then(|n| n.to_str())
-                            && !directory_handler.should_filter_directory(dir_name)
-                        {
-                            count += count_files_recursive(&path, config, directory_handler)?;
-                        }
-                    }
-                }
-            }
-
-            Ok(count)
-        }
-
-        if path.is_file() {
-            Ok(1)
-        } else {
-            count_files_recursive(path, &self.config, &directory_handler)
-        }
-    }
-
-    /// Build globset for path ignoring
-    fn build_path_ignorer(&self) -> Result<GlobSet> {
-        let mut builder = GlobSetBuilder::new();
-
-        for pattern in &self.config.ignore_paths {
-            let glob =
-                Glob::new(pattern).with_context(|| format!("Invalid glob pattern: {pattern}"))?;
-            builder.add(glob);
-        }
-
-        builder
-            .build()
-            .with_context(|| "Failed to build path ignore globset")
-    }
-
-    /// Check if a file path should be ignored
-    fn should_ignore_path(&self, path: &Path) -> Result<bool> {
-        // Build and cache the GlobSet on first use, preserving errors
-        let globset_result = self
-            .cached_path_ignorer
-            .get_or_init(|| self.build_path_ignorer().map_err(|e| e.to_string()));
-
-        match globset_result {
-            Ok(globset) => Ok(globset.is_match(path)),
-            Err(e) => Err(anyhow::anyhow!("Failed to build path ignorer: {}", e)),
-        }
-    }
+    // Note: should_ignore_path method removed - all filtering now happens during directory walk
 
     /// Check if a line contains ignore patterns
     fn should_ignore_line(&self, line: &str) -> bool {
@@ -388,8 +329,8 @@ impl Scanner {
         })
     }
 
-    /// Build a WalkBuilder with common directory filtering logic
-    pub(crate) fn build_directory_walker(&self, path: &Path) -> WalkBuilder {
+    /// Build a WalkBuilder with common directory filtering logic and statistics tracking
+    pub(crate) fn build_directory_walker(&self, path: &Path, path_filter_counter: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> WalkBuilder {
         let mut builder = WalkBuilder::new(path);
         builder
             .follow_links(self.config.follow_symlinks)
@@ -399,28 +340,28 @@ impl Scanner {
             .hidden(false) // Don't ignore hidden files by default
             .parents(true); // Check parent directories for .gitignore
 
-        // Use shared directory handler for consistent filtering logic
-        let directory_handler = super::directory::DirectoryHandler::new();
-
-        // Build ignore patterns for use in filter
-        let ignore_globset = self.build_path_ignorer().ok();
+        // Apply PathFilter during directory walk to prevent traversing filtered directories
+        let path_filter = self.path_filter.clone();
 
         builder.filter_entry(move |entry| {
-            // Skip directories that should always be ignored for security/performance
-            if let Some(file_name) = entry.file_name().to_str()
-                && directory_handler.should_filter_directory(file_name)
-            {
-                return false;
+            use super::filters::Filter;
+            
+            // Apply PathFilter to prevent traversing into filtered directories
+            match path_filter.filter(entry.path()) {
+                Ok(super::filters::FilterDecision::Skip(reason)) => {
+                    tracing::debug!("[PathFilter] Skipped during walk {}: {}", entry.path().display(), reason);
+                    path_filter_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    false
+                }
+                Ok(super::filters::FilterDecision::Process) => {
+                    tracing::trace!("[PathFilter] Allowed during walk {}", entry.path().display());
+                    true
+                }
+                Err(e) => {
+                    tracing::warn!("[PathFilter] Failed for {}: {}", entry.path().display(), e);
+                    true // If filter fails, allow processing
+                }
             }
-
-            // Apply ignore_paths patterns
-            if let Some(ref globset) = ignore_globset
-                && globset.is_match(entry.path())
-            {
-                return false;
-            }
-
-            true
         });
 
         builder
@@ -477,20 +418,8 @@ impl Scanner {
     }
 
     pub(crate) fn scan_single_path(&self, path: &Path) -> Result<Vec<SecretMatch>> {
-        // Check if path should be ignored
-        if self.should_ignore_path(path)? {
-            return Ok(vec![]);
-        }
-
-        // Check file size
-        if let Ok(metadata) = std::fs::metadata(path) {
-            let size_mb = metadata.len() / (1024 * 1024);
-            if size_mb > self.config.max_file_size_mb as u64 {
-                return Ok(vec![]);
-            }
-        }
-
-        // Binary file check is now handled at the directory level for better performance
+        // All filtering (path, size, binary) now happens during directory walk for better performance
+        // Files reaching this method have already passed all filters
 
         // Read file content - use streaming for large files
         const STREAMING_THRESHOLD_MB: u64 = 5; // Stream files larger than 5MB

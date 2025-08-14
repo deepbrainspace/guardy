@@ -1,3 +1,4 @@
+use super::filters::directory::BinaryFilter;
 use super::types::{ScanFileResult, ScanResult, ScanStats, Scanner, Warning};
 use crate::cli::output;
 use crate::parallel::{ExecutionStrategy, progress::factories};
@@ -388,58 +389,27 @@ impl DirectoryHandler {
         let start_time = Instant::now();
         let mut warnings: Vec<Warning> = Vec::new();
 
-        // Determine execution strategy (smart mode by default)
+        // Determine execution strategy - always use parallel for best performance
+        // (parallel executor automatically adapts to file count)
         let execution_strategy = strategy.unwrap_or_else(|| {
-            let file_count = scanner.fast_count_files(path).unwrap_or(0);
-
             match &scanner.config.mode {
                 super::types::ScanMode::Sequential => ExecutionStrategy::Sequential,
-
+                
                 super::types::ScanMode::Parallel | super::types::ScanMode::Auto => {
                     // Calculate optimal workers based on available system resources
-                    let max_workers_by_resources = ExecutionStrategy::calculate_optimal_workers(
+                    let optimal_workers = ExecutionStrategy::calculate_optimal_workers(
                         scanner.config.max_threads,
                         scanner.config.thread_percentage,
                     );
 
-                    // Apply domain-specific file count adaptation
-                    let optimal_workers =
-                        Self::adapt_workers_for_file_count(file_count, max_workers_by_resources);
-
-                    match &scanner.config.mode {
-                        super::types::ScanMode::Parallel => ExecutionStrategy::Parallel {
-                            workers: optimal_workers,
-                        },
-                        super::types::ScanMode::Auto => ExecutionStrategy::auto(
-                            file_count,
-                            scanner.config.min_files_for_parallel,
-                            optimal_workers,
-                        ),
-                        _ => unreachable!(), // Already handled Sequential above
+                    ExecutionStrategy::Parallel {
+                        workers: optimal_workers,
                     }
                 }
             }
         });
 
-        // Common setup: file counting and directory analysis
-        let file_count = scanner.fast_count_files(path)?;
-        match &execution_strategy {
-            ExecutionStrategy::Sequential => {
-                output::styled!(
-                    "{} Scanning {} files...",
-                    ("🔍", "info_symbol"),
-                    (file_count.to_string(), "number")
-                );
-            }
-            ExecutionStrategy::Parallel { workers } => {
-                output::styled!(
-                    "{} Scanning {} files using {} workers...",
-                    ("⚡", "info_symbol"),
-                    (file_count.to_string(), "number"),
-                    (workers.to_string(), "accent")
-                );
-            }
-        };
+        // Note: Scanning message now shown by discovery progress bar in collect_file_paths()
 
         // Analyze directories and display results
         let analysis = self.analyze_directories(path);
@@ -447,6 +417,25 @@ impl DirectoryHandler {
 
         // Collect all file paths using unified walker logic
         let file_paths = self.collect_file_paths(&scanner, path, &mut warnings)?;
+
+        // Now show scanning strategy message with worker count
+        match &execution_strategy {
+            ExecutionStrategy::Sequential => {
+                output::styled!(
+                    "{} Scanning {} files sequentially...",
+                    ("🔍", "info_symbol"),
+                    (file_paths.len().to_string(), "accent")
+                );
+            }
+            ExecutionStrategy::Parallel { workers } => {
+                output::styled!(
+                    "{} Scanning {} files using {} workers...",
+                    ("⚡", "info_symbol"),
+                    (file_paths.len().to_string(), "accent"),
+                    (workers.to_string(), "accent")
+                );
+            }
+        };
 
         // Create enhanced progress reporter based on strategy
         let enhanced_progress = match &execution_strategy {
@@ -477,25 +466,8 @@ impl DirectoryHandler {
                         progress.update_worker_file(worker_id, &file_path.to_string_lossy());
                     }
 
-                    // Check if this is a binary file first
-                    if !scanner.config.include_binary
-                        && super::directory::is_binary_file(
-                            file_path,
-                            &scanner.config.binary_extensions,
-                        )
-                    {
-                        // Update statistics for binary files
-                        if let Some(ref stats) = stats {
-                            stats.increment_binary();
-                        }
-                        return ScanFileResult {
-                            matches: Vec::new(),
-                            file_path: file_path.to_string_lossy().to_string(),
-                            success: true,
-                            error: None,
-                        };
-                    }
-
+                    // All filtering now happens during directory walk - no need to re-filter here
+                    // This eliminates the performance regression caused by repeated filter creation
                     match scanner.scan_single_path(file_path) {
                         Ok(matches) => {
                             // Update statistics - file was successfully scanned
@@ -570,6 +542,53 @@ impl DirectoryHandler {
 
         // Binary files are tracked internally but not displayed to users
 
+        // Show detailed filter statistics if in debug mode
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let binary_filter = BinaryFilter::new(!scanner.config.include_binary);
+            let path_filter = super::filters::directory::PathFilter::new(scanner.config.ignore_paths.clone());
+            
+            // Get detailed statistics
+            let binary_detailed_stats = binary_filter.get_statistics();
+            let path_detailed_stats = path_filter.get_statistics();
+            
+            // Show detailed binary filter stats
+            if binary_detailed_stats.files_checked > 0 {
+                tracing::debug!("Binary Filter Performance:");
+                tracing::debug!("  Files checked: {}", binary_detailed_stats.files_checked);
+                tracing::debug!("  Binary by extension: {} ({:.1}%)", 
+                    binary_detailed_stats.files_binary_by_extension,
+                    (binary_detailed_stats.files_binary_by_extension as f64 / binary_detailed_stats.files_checked as f64) * 100.0
+                );
+                tracing::debug!("  Binary by content: {}", binary_detailed_stats.files_binary_by_content);
+                tracing::debug!("  Text confirmed: {}", binary_detailed_stats.files_text_confirmed);
+                tracing::debug!("  Extension cache hits: {}", binary_detailed_stats.extension_cache_hits);
+                tracing::debug!("  Content inspections: {}", binary_detailed_stats.content_inspections_performed);
+                tracing::debug!("  Content inspections skipped: {}", binary_detailed_stats.files_content_inspection_skipped);
+            }
+            
+            // Show detailed path filter stats
+            if path_detailed_stats.total_usage > 0 {
+                tracing::debug!("Path Filter Performance:");
+                tracing::debug!("  Total patterns: {}", path_detailed_stats.total_patterns);
+                tracing::debug!("  Active patterns: {}", path_detailed_stats.active_patterns);
+                tracing::debug!("  Total matches: {}", path_detailed_stats.total_usage);
+                tracing::debug!("  Pattern efficiency: {:.1}%", 
+                    (path_detailed_stats.active_patterns as f64 / path_detailed_stats.total_patterns as f64) * 100.0
+                );
+            }
+            
+            // Show size filter stats using trait method
+            use super::filters::Filter;
+            let size_filter = super::filters::directory::SizeFilter::new(scanner.config.max_file_size_mb);
+            let size_stats = size_filter.get_stats();
+            if !size_stats.is_empty() {
+                tracing::debug!("Size Filter Configuration:");
+                for (key, value) in size_stats {
+                    tracing::debug!("  {}: {}", key, value);
+                }
+            }
+        }
+
         // Show timing summary
         let (summary_icon, mode_info) = match &execution_strategy {
             ExecutionStrategy::Sequential => (output::symbols::STOPWATCH, String::new()),
@@ -594,21 +613,103 @@ impl DirectoryHandler {
         })
     }
 
-    /// Collect file paths from directory walker
+    /// Collect file paths from directory walker with all filtering applied during walk
+    /// This matches scan-v3's architecture where filtering happens during discovery, not processing
     fn collect_file_paths(
         &self,
         scanner: &Arc<Scanner>,
         path: &Path,
         warnings: &mut Vec<Warning>,
     ) -> Result<Vec<PathBuf>> {
-        let walker = scanner.build_directory_walker(path).build();
+        use indicatif::{ProgressBar, ProgressStyle};
+        
+        let discovery_start = Instant::now();
+        
+        // Show progress bar only if not in debug/trace mode to prevent scrolling issues
+        let show_progress_bar = !tracing::enabled!(tracing::Level::DEBUG);
+        let discovery_bar = if show_progress_bar {
+            let bar = ProgressBar::new_spinner();
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "📁 [{elapsed_precise}] {spinner} Discovering files... {msg}"
+                )
+                .unwrap()
+                .tick_strings(&["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"])
+            );
+            bar.enable_steady_tick(std::time::Duration::from_millis(100));
+            Some(bar)
+        } else {
+            // In debug mode, just show the static message once
+            output::styled!("📁 Discovering files...");
+            None
+        };
+        
+        // Create counter for PathFilter statistics
+        let path_filter_counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let walker = scanner.build_directory_walker(path, path_filter_counter.clone()).build();
         let mut file_paths = Vec::new();
+        
+        // Track filter statistics during walk
+        let mut files_filtered_by_size = 0;
+        let mut files_filtered_by_binary = 0;
+        let mut files_discovered = 0;
 
         for entry in walker {
             match entry {
                 Ok(entry) => {
                     if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                        file_paths.push(entry.path().to_path_buf());
+                        let file_path = entry.path();
+                        files_discovered += 1;
+                        
+                        // Update discovery progress every 100 files to avoid too much overhead
+                        if files_discovered % 100 == 0
+                            && let Some(ref bar) = discovery_bar {
+                                bar.set_message(format!("Found {files_discovered} files"));
+                            }
+                        
+                        // Apply file-level filters (path filtering already done during directory walk)
+                        // This prevents filtered files from ever entering the work queue
+                        
+                        // 1. Size filter - using cached filter from Scanner
+                        {
+                            use super::filters::Filter;
+                            match scanner.size_filter.filter(file_path) {
+                                Ok(super::filters::FilterDecision::Skip(reason)) => {
+                                    tracing::trace!("Filter '{}' skipped {}: {}", scanner.size_filter.name(), file_path.display(), reason);
+                                    files_filtered_by_size += 1;
+                                    continue;
+                                }
+                                Ok(super::filters::FilterDecision::Process) => {
+                                    tracing::trace!("Filter '{}' allowed {}", scanner.size_filter.name(), file_path.display());
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Filter '{}' failed for {}: {}", scanner.size_filter.name(), file_path.display(), e);
+                                    // If size filter fails, continue processing
+                                }
+                            }
+                        }
+                        
+                        // 2. Binary filter - using cached filter from Scanner
+                        {
+                            use super::filters::Filter;
+                            match scanner.binary_filter.filter(file_path) {
+                                Ok(super::filters::FilterDecision::Skip(reason)) => {
+                                    tracing::trace!("Filter '{}' skipped {}: {}", scanner.binary_filter.name(), file_path.display(), reason);
+                                    files_filtered_by_binary += 1;
+                                    continue;
+                                }
+                                Ok(super::filters::FilterDecision::Process) => {
+                                    tracing::trace!("Filter '{}' allowed {}", scanner.binary_filter.name(), file_path.display());
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Filter '{}' failed for {}: {}", scanner.binary_filter.name(), file_path.display(), e);
+                                    // If binary filter fails, continue processing
+                                }
+                            }
+                        }
+                        
+                        // If we reach here, file passed all filters - add to work queue
+                        file_paths.push(file_path.to_path_buf());
                     }
                 }
                 Err(e) => {
@@ -617,6 +718,38 @@ impl DirectoryHandler {
                     });
                 }
             }
+        }
+        
+        // Finish discovery progress bar with final statistics
+        let discovery_duration = discovery_start.elapsed();
+        let files_filtered_by_path = path_filter_counter.load(std::sync::atomic::Ordering::Relaxed);
+        
+        // Format timing - use milliseconds for fast operations
+        let timing_str = if discovery_duration.as_millis() < 1000 {
+            format!("{}ms", discovery_duration.as_millis())
+        } else {
+            format!("{:.1}s", discovery_duration.as_secs_f64())
+        };
+        
+        let final_message = format!(
+            "Discovered {files_discovered} files in {timing_str}, selected {} for scanning (filtered: {files_filtered_by_path} path, {files_filtered_by_size} size, {files_filtered_by_binary} binary)",
+            file_paths.len()
+        );
+        
+        if let Some(bar) = discovery_bar {
+            bar.finish_with_message(final_message);
+        } else {
+            // In debug mode, show the final summary
+            output::styled!("📁 {final_message}");
+        }
+        
+        // Log filter statistics like scan-v3
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            tracing::debug!("Files discovered: {}", files_discovered);
+            tracing::debug!("Files filtered by path: {}", files_filtered_by_path);
+            tracing::debug!("Files filtered by size: {}", files_filtered_by_size);
+            tracing::debug!("Files filtered by binary: {}", files_filtered_by_binary);
+            tracing::debug!("Files selected for processing: {}", file_paths.len());
         }
 
         Ok(file_paths)

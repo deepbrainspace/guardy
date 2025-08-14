@@ -86,22 +86,9 @@ impl Default for ScannerConfig {
             enable_entropy_analysis: true,
             min_entropy_threshold: 1.0 / 1e5,
             follow_symlinks: false,
-            max_file_size_mb: 10,
+            max_file_size_mb: 50,
             include_binary: false, // Skip binary files by default
-            ignore_paths: vec![
-                "tests/*".to_string(),
-                "testdata/*".to_string(),
-                "*_test.rs".to_string(),
-                "test_*.rs".to_string(),
-                // Git objects and internal files (binary data)
-                ".git/objects/**".to_string(),
-                ".git_disabled/**".to_string(), // All of git_disabled is safe to skip
-                ".git/refs/**".to_string(),
-                ".git/logs/**".to_string(),
-                ".git/index".to_string(),          // Git index file (binary)
-                "**/.git/objects/**".to_string(),  // Match .git/objects anywhere in path
-                "**/.git_disabled/**".to_string(), // Match .git_disabled anywhere in path
-            ],
+            ignore_paths: super::static_data::directory_patterns::get_directory_patterns(),
             ignore_patterns: vec![
                 "# TEST_SECRET:".to_string(),
                 "DEMO_KEY_".to_string(),
@@ -302,6 +289,8 @@ impl Default for ScannerConfig {
 pub struct Scanner {
     pub(crate) patterns: super::patterns::SecretPatterns,
     pub(crate) config: ScannerConfig,
-    /// Cached GlobSet for path ignoring - built once and reused
-    pub(crate) cached_path_ignorer: std::sync::OnceLock<Result<globset::GlobSet, String>>,
+    /// Cached filters for performance (created once, reused everywhere)
+    pub(crate) binary_filter: std::sync::Arc<super::filters::directory::BinaryFilter>,
+    pub(crate) path_filter: std::sync::Arc<super::filters::directory::PathFilter>,
+    pub(crate) size_filter: std::sync::Arc<super::filters::directory::SizeFilter>,
 }

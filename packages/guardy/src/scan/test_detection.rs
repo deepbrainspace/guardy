@@ -140,7 +140,7 @@ impl<'a> TestDetector<'a> {
 mod tests {
     use super::*;
     use crate::config::GuardyConfig;
-    use crate::scan_v1::Scanner;
+    use crate::scan::Scanner;
     use std::fs;
     use tempfile::TempDir;
 

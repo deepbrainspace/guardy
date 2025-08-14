@@ -20,7 +20,7 @@ scan/
 
 **Key Characteristics:**
 - Synchronous file processing
-- Simple thread pool for parallel processing
+- specialized crossbeam thread management library in parallel module for parallel processing
 - Direct pattern matching without pre-filtering
 - Basic progress reporting
 - Inline filtering logic
@@ -47,7 +47,7 @@ scan-v3/
 - Context-aware prefiltering
 - Enhanced progress tracking
 
-## Identified Optimizations from Scan-v3
+## Identified Optimizations froin tm Scan-v3
 
 ### 1. **Context-Aware Prefiltering** [HIGH IMPACT, MEDIUM EFFORT]
 **Location:** `scan-v3/filters/content/prefilter.rs`

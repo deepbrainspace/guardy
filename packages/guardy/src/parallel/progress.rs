@@ -28,9 +28,7 @@ impl ScanningStats {
         self.skipped.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn increment_binary(&self) {
-        self.binary.fetch_add(1, Ordering::Relaxed);
-    }
+    // Note: binary file tracking removed - filtering now happens during directory walk
 
     pub fn get_counts(&self) -> (usize, usize, usize, usize) {
         (
@@ -113,9 +111,9 @@ impl StatisticsProgressReporter {
             worker_bars.push(worker_bar);
         }
 
-        // Overall progress bar
+        // Overall progress bar with bold white styling to stand out
         let overall_style = ProgressStyle::with_template(
-            "Overall:\n[{elapsed_precise}] {bar:40.green/red} {pos:>7}/{len:7} files ({percent}%)\n{msg}"
+            "Overall:\n[{elapsed_precise}] {bar:40.white/black} {pos:>7}/{len:7} files ({percent}%)\n{msg}"
         )
         .unwrap()
         .progress_chars("##-");
