@@ -1,6 +1,6 @@
 //! Directory traversal and file discovery pipeline
 
-use crate::scan::{
+use crate::scan_v3::{
     config::ScannerConfig,
     data::StatsCollector,
     filters::{

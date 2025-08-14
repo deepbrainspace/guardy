@@ -2,7 +2,7 @@
 
 use super::{ReportGenerator, ReportConfig, ReportFormat, ReportMetadata};
 use super::{JsonReportGenerator, HtmlReportGenerator};
-use crate::scan::data::ScanResult;
+use crate::scan_v3::data::ScanResult;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};

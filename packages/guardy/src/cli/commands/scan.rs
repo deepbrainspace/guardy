@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::scan_v1::Scanner;
-use crate::scan_v1::directory;
-use crate::scan_v1::types::{ScanMode, ScanResult, ScanStats, SecretMatch, Warning};
+use crate::scan::Scanner;
+use crate::scan::directory;
+use crate::scan::types::{ScanMode, ScanResult, ScanStats, SecretMatch, Warning};
 
 /// Format scan time intelligently - use ms for short times, mm:ss for longer times
 fn format_scan_time(duration: Duration) -> String {
@@ -117,7 +117,7 @@ pub enum OutputFormat {
 }
 
 pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str>) -> Result<()> {
-    use crate::scan_v1::patterns::SecretPatterns;
+    use crate::scan::patterns::SecretPatterns;
     use regex::Regex;
 
     // Load configuration (CLI overrides handled separately due to SuperConfig limitations)
@@ -156,7 +156,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             Ok(regex) => {
                 patterns
                     .patterns
-                    .push(crate::scan_v1::patterns::SecretPattern {
+                    .push(crate::scan::patterns::SecretPattern {
                         name: "Custom Pattern".to_string(),
                         regex,
                         description: "User-defined pattern".to_string(),

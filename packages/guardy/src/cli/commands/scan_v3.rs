@@ -11,9 +11,9 @@ use std::time::Instant;
 
 use crate::cli::output;
 use crate::config::GuardyConfig;
-use crate::scan::{Scanner, ScannerConfig};
-use crate::scan::filters::content::ContextPrefilter;
-use crate::scan::reports::{ReportOrchestrator, ReportConfig, ReportFormat, RedactionStyle};
+use crate::scan_v3::{Scanner, ScannerConfig};
+use crate::scan_v3::filters::content::ContextPrefilter;
+use crate::scan_v3::reports::{ReportOrchestrator, ReportConfig, ReportFormat, RedactionStyle};
 
 /// Simplified scan arguments optimized for v3 scanner
 #[derive(Args, Serialize)]
@@ -218,11 +218,11 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
 
 /// Print summary results (new default format)
 fn print_summary_results(
-    results: &[crate::scan::ScanResult], 
+    results: &[crate::scan_v3::ScanResult], 
     elapsed: std::time::Duration,
     _verbose_level: u8,
     args: &ScanArgs,
-    scanner_ref: Option<&crate::scan::Scanner>,
+    scanner_ref: Option<&crate::scan_v3::Scanner>,
 ) -> Result<()> {
     let total_matches: usize = results.iter().map(|r| r.matches.len()).sum();
     let total_files: usize = results.iter().map(|r| r.stats.files_scanned).sum();
@@ -353,7 +353,7 @@ fn print_summary_results(
 }
 
 /// Print filter performance statistics
-fn print_filter_performance_stats(filter_stats: &crate::scan::pipeline::directory::FilterStats) {
+fn print_filter_performance_stats(filter_stats: &crate::scan_v3::pipeline::directory::FilterStats) {
     println!();
     output::styled!("    {} Filter Performance:", ("🔍", "info_symbol"));
     
@@ -385,7 +385,7 @@ fn print_filter_performance_stats(filter_stats: &crate::scan::pipeline::director
 
 /// Print detailed results (equivalent to old format)
 fn print_detailed_results(
-    results: &[crate::scan::ScanResult],
+    results: &[crate::scan_v3::ScanResult],
     _elapsed: std::time::Duration, 
     args: &ScanArgs,
     verbose_level: u8,
@@ -454,7 +454,7 @@ fn print_detailed_results(
 
 /// Print JSON results
 fn print_json_results(
-    results: &[crate::scan::ScanResult],
+    results: &[crate::scan_v3::ScanResult],
     elapsed: std::time::Duration,
 ) -> Result<()> {
     use serde_json::json;
@@ -487,7 +487,7 @@ fn print_json_results(
 }
 
 /// Print only files containing secrets
-fn print_files_only(results: &[crate::scan::ScanResult]) {
+fn print_files_only(results: &[crate::scan_v3::ScanResult]) {
     let unique_files = unique_files_with_secrets(results);
     for file in unique_files {
         println!("{file}");
@@ -495,7 +495,7 @@ fn print_files_only(results: &[crate::scan::ScanResult]) {
 }
 
 /// Get unique files that contain secrets
-fn unique_files_with_secrets(results: &[crate::scan::ScanResult]) -> Vec<&str> {
+fn unique_files_with_secrets(results: &[crate::scan_v3::ScanResult]) -> Vec<&str> {
     use std::collections::HashSet;
     let mut files = HashSet::new();
     
@@ -512,11 +512,11 @@ fn unique_files_with_secrets(results: &[crate::scan::ScanResult]) -> Vec<&str> {
 
 /// Group matches by file path
 fn group_matches_by_file(
-    matches: &[crate::scan::SecretMatch],
-) -> Vec<(String, Vec<&crate::scan::SecretMatch>)> {
+    matches: &[crate::scan_v3::SecretMatch],
+) -> Vec<(String, Vec<&crate::scan_v3::SecretMatch>)> {
     use std::collections::HashMap;
     
-    let mut grouped: HashMap<String, Vec<&crate::scan::SecretMatch>> = HashMap::new();
+    let mut grouped: HashMap<String, Vec<&crate::scan_v3::SecretMatch>> = HashMap::new();
     for secret_match in matches {
         grouped
             .entry(secret_match.file_path().to_string())
@@ -531,7 +531,7 @@ fn group_matches_by_file(
 
 /// Generate reports for scan results
 async fn generate_reports(
-    results: &[crate::scan::ScanResult], 
+    results: &[crate::scan_v3::ScanResult], 
     args: &ScanArgs,
 ) -> Result<()> {
     if results.is_empty() {
@@ -589,10 +589,10 @@ async fn generate_reports(
 }
 
 /// Combine multiple scan results into a single result for reporting
-fn combine_scan_results(results: &[crate::scan::ScanResult]) -> crate::scan::ScanResult {
+fn combine_scan_results(results: &[crate::scan_v3::ScanResult]) -> crate::scan_v3::ScanResult {
     if results.len() == 1 {
         let result = &results[0];
-        return crate::scan::ScanResult::new(
+        return crate::scan_v3::ScanResult::new(
             result.matches.clone(),
             result.stats.clone(),
             result.file_results.clone(),
@@ -600,7 +600,7 @@ fn combine_scan_results(results: &[crate::scan::ScanResult]) -> crate::scan::Sca
         );
     }
     
-    use crate::scan::{ScanResult, ScanStats};
+    use crate::scan_v3::{ScanResult, ScanStats};
     
     let mut all_matches = Vec::new();
     let mut all_warnings = Vec::new();

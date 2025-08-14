@@ -3,7 +3,7 @@
 //! This module executes regex patterns (pre-filtered by Aho-Corasick) and
 //! extracts precise match coordinates using the optimized Coordinate system.
 
-use crate::scan::{
+use crate::scan_v3::{
     data::{Coordinate, SecretMatch},
     filters::{Filter},
     static_data::pattern_library::get_pattern_library,

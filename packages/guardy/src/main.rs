@@ -10,7 +10,8 @@ mod parallel;
 mod profiling;
 mod reports;
 mod scan;
-mod scan_v1;
+#[path = "scan-v3/mod.rs"]
+mod scan_v3;
 mod shared;
 mod sync;
 

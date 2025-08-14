@@ -1,7 +1,7 @@
 //! HTML report generator - modern, interactive reports
 
 use super::{ReportGenerator, ReportConfig, ReportMetadata, aggregator::ReportDataAggregator, utils};
-use crate::scan::data::ScanResult;
+use crate::scan_v3::data::ScanResult;
 use anyhow::Result;
 use std::time::UNIX_EPOCH;
 
@@ -61,7 +61,7 @@ impl ReportGenerator for HtmlReportGenerator {
 
 impl HtmlReportGenerator {
     fn generate_secrets_section(
-        matches_by_type: &[(std::sync::Arc<str>, Vec<&crate::scan::data::SecretMatch>)],
+        matches_by_type: &[(std::sync::Arc<str>, Vec<&crate::scan_v3::data::SecretMatch>)],
         config: &ReportConfig,
     ) -> String {
         if matches_by_type.is_empty() {

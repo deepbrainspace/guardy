@@ -3,7 +3,7 @@
 //! This provides a static configuration that can be initialized once
 //! (typically from CLI) and then accessed globally throughout the scan.
 
-use crate::scan::config::ScannerConfig;
+use crate::scan_v3::config::ScannerConfig;
 use std::sync::{Arc, LazyLock, RwLock};
 
 /// Container for the global configuration

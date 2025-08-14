@@ -99,7 +99,7 @@
 //! Guardy can also be used as a library for building custom security tools:
 //!
 //! ```rust,no_run
-//! use guardy::scan_v1::Scanner;
+//! use guardy::scan::Scanner;
 //! use guardy::config::GuardyConfig;
 //! use std::path::Path;
 //!
@@ -163,7 +163,8 @@ pub mod hooks;
 pub mod parallel;
 pub mod profiling;
 pub mod reports;
-pub mod scan;        // New optimized scanner (v3)
-pub mod scan_v1;     // Legacy scanner (v1)
+pub mod scan;        // Current stable scanner (v1)
+#[path = "scan-v3/mod.rs"]
+pub mod scan_v3;     // New experimental scanner (v3)
 pub mod shared;
 pub mod sync;

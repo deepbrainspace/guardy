@@ -61,8 +61,8 @@ impl SecretMatch {
     
     /// Get a fully redacted version for high-security contexts (logs, console output)
     pub fn redacted_match_secure(&self) -> String {
-        use crate::scan::reports::utils::redact_secret_with_style;
-        use crate::scan::reports::RedactionStyle;
+        use crate::scan_v3::reports::utils::redact_secret_with_style;
+        use crate::scan_v3::reports::RedactionStyle;
         
         redact_secret_with_style(&self.matched_text, RedactionStyle::Full)
     }

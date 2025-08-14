@@ -1,7 +1,7 @@
 //! JSON report generator
 
 use super::{ReportGenerator, ReportConfig, ReportMetadata, aggregator::ReportDataAggregator, utils};
-use crate::scan::data::ScanResult;
+use crate::scan_v3::data::ScanResult;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::time::UNIX_EPOCH;

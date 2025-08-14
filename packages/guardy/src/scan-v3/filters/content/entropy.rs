@@ -5,7 +5,7 @@
 //! 
 //! Uses the proven entropy algorithms from scan-v2 with optimizations for v3 architecture.
 
-use crate::scan::{
+use crate::scan_v3::{
     data::SecretMatch,
     filters::{Filter}
 };

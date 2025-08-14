@@ -1,6 +1,6 @@
 //! File content processing pipeline
 
-use crate::scan::{
+use crate::scan_v3::{
     config::ScannerConfig,
     data::{FileResult, StatsCollector},
     filters::content::{CommentFilter, CommentFilterInput, ContextPrefilter, EntropyFilter, RegexExecutor, RegexInput},

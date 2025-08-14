@@ -1,5 +1,5 @@
-use crate::scan::types::{ScannerConfig, SecretPattern, SecretPatterns};
-use crate::scan::file::RegexMatch;
+use crate::scan_v3::types::{ScannerConfig, SecretPattern, SecretPatterns};
+use crate::scan_v3::file::RegexMatch;
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
@@ -138,7 +138,7 @@ impl Pattern {
     }
 
     /// Get the entropy validation requirements
-    pub fn entropy(&self) -> &Option<crate::scan::types::EntropyConfig> {
+    pub fn entropy(&self) -> &Option<crate::scan_v3::types::EntropyConfig> {
         &self.pattern.entropy
     }
 

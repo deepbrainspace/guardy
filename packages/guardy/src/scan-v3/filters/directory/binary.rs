@@ -4,8 +4,8 @@
 //! Stage 1: Extension check (O(1) HashSet lookup, no I/O)
 //! Stage 2: Content inspection (reads first 512 bytes for unknown extensions)
 
-use crate::scan::filters::{Filter, FilterDecision};
-use crate::scan::static_data::binary_extensions::is_binary_extension;
+use crate::scan_v3::filters::{Filter, FilterDecision};
+use crate::scan_v3::static_data::binary_extensions::is_binary_extension;
 use anyhow::Result;
 use smallvec::SmallVec;
 use std::path::Path;

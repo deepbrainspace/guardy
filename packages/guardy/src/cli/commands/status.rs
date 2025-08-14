@@ -10,7 +10,7 @@ pub async fn execute(_args: StatusArgs, verbosity_level: u8) -> Result<()> {
     use crate::cli::output::*;
     use crate::config::GuardyConfig;
     use crate::git::GitRepo;
-    use crate::scan_v1::patterns::SecretPatterns;
+    use crate::scan::patterns::SecretPatterns;
 
     styled!("Checking {} status...", ("guardy", "primary"));
 

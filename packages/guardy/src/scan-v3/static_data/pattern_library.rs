@@ -134,7 +134,7 @@ impl PatternLibrary {
     fn load_custom_patterns() -> Result<Vec<YamlPattern>> {
         // Get patterns from the scanner config section
         // This handles all configuration mixing via GuardyConfig
-        let _config = crate::scan::static_data::get_config();
+        let _config = crate::scan_v3::static_data::get_config();
         // Try to get custom patterns from config if they exist
         // For now return empty - patterns will be added via config sections
         Ok(Vec::new())

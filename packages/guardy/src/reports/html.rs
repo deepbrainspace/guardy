@@ -1,4 +1,4 @@
-use crate::scan_v1::types::{SecretMatch, Warning};
+use crate::scan::types::{SecretMatch, Warning};
 use anyhow::Result;
 use serde_json::json;
 use std::fs;

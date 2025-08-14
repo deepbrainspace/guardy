@@ -1,6 +1,6 @@
 //! File size filtering for performance and memory management
 
-use crate::scan::filters::{Filter, FilterDecision};
+use crate::scan_v3::filters::{Filter, FilterDecision};
 use anyhow::Result;
 use smallvec::SmallVec;
 use std::fs;

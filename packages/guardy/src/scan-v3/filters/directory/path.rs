@@ -1,6 +1,6 @@
 //! Path-based filtering using globset for efficient pattern matching
 
-use crate::scan::filters::{Filter, FilterDecision};
+use crate::scan_v3::filters::{Filter, FilterDecision};
 use anyhow::Result;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use smallvec::SmallVec;

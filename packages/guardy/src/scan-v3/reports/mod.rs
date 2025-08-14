@@ -3,7 +3,7 @@
 //! Generates reports from scan results with pluggable formats
 
 use anyhow::Result;
-use crate::scan::data::ScanResult;
+use crate::scan_v3::data::ScanResult;
 
 /// Core reporting trait - allows pluggable report formats
 pub trait ReportGenerator {

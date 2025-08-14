@@ -1,7 +1,7 @@
 //! Common utilities for report generation
 
 use super::{ReportConfig, RedactionStyle};
-use crate::scan::data::SecretMatch;
+use crate::scan_v3::data::SecretMatch;
 
 /// Get display value for a secret in a specific report format (context-aware)
 pub fn get_secret_display_value_for_format(

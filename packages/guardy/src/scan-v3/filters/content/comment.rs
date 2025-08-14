@@ -5,7 +5,7 @@
 //! - `guardy:ignore-next` - ignore the next line
 //! - `guardy:ignore-line` - ignore the current line (alternative syntax)
 
-use crate::scan::{
+use crate::scan_v3::{
     data::SecretMatch,
     filters::{Filter}
 };

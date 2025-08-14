@@ -1,7 +1,7 @@
 //! Efficient data aggregation for report generation
 
 use super::ReportConfig;
-use crate::scan::data::{ScanResult, SecretMatch};
+use crate::scan_v3::data::{ScanResult, SecretMatch};
 use std::sync::Arc;
 
 /// Efficient data aggregation for report generation

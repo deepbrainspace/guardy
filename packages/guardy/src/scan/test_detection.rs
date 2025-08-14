@@ -1,4 +1,4 @@
-use crate::scan_v1::types::ScannerConfig;
+use crate::scan::types::ScannerConfig;
 use std::path::Path;
 
 /// Handles intelligent test code detection across multiple programming languages
