@@ -1,7 +1,6 @@
 use super::entropy::is_likely_secret;
 // All filtering now handled through cached filters in Scanner struct and collect_file_paths
 use super::patterns::SecretPatterns;
-use super::test_detection::TestDetector;
 use super::types::{ScanResult, ScanStats, Scanner, ScannerConfig, SecretMatch, Warning};
 use crate::config::GuardyConfig;
 use crate::parallel::ExecutionStrategy;
@@ -58,8 +57,13 @@ impl Scanner {
 
     // Note: should_ignore_path method removed - all filtering now happens during directory walk
 
-    /// Check if a line contains ignore patterns
-    fn should_ignore_line(&self, line: &str) -> bool {
+    /// Check if content contains ignore patterns at a specific position
+    fn should_ignore_at_position(&self, content: &str, position: usize) -> bool {
+        // Find the line containing this position
+        let line_start = content[..position].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let line_end = content[position..].find('\n').map(|i| position + i).unwrap_or(content.len());
+        let line = &content[line_start..line_end];
+        
         // Check for inline ignore comments
         for ignore_comment in &self.config.ignore_comments {
             if line.contains(ignore_comment) {
@@ -73,51 +77,17 @@ impl Scanner {
                 return true;
             }
         }
-
-        // Check for test code patterns (if enabled)
-        if self.is_test_code_line(line) {
-            return true;
-        }
-
-        false
-    }
-
-    /// Detect if a line is test code using config patterns
-    fn is_test_code_line(&self, line: &str) -> bool {
-        if !self.config.ignore_test_code {
-            return false;
-        }
-
-        let trimmed = line.trim();
-
-        // Check test attributes with glob patterns
-        for pattern in &self.config.test_attributes {
-            if Self::matches_glob_pattern(trimmed, pattern) {
-                return true;
-            }
-        }
-
-        // Check test module patterns
-        for pattern in &self.config.test_modules {
-            if trimmed.contains(pattern) {
+        
+        // Check if previous line has ignore-next directive
+        if line_start > 0 {
+            let prev_line_start = content[..line_start-1].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prev_line = &content[prev_line_start..line_start-1];
+            if prev_line.contains("guardy:ignore-next") {
                 return true;
             }
         }
 
         false
-    }
-
-    /// Simple glob pattern matching for test attributes
-    fn matches_glob_pattern(text: &str, pattern: &str) -> bool {
-        if pattern.contains('*') {
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                let prefix = parts[0];
-                let suffix = parts[1];
-                return text.starts_with(prefix) && text.ends_with(suffix);
-            }
-        }
-        text == pattern
     }
 
     pub fn parse_scanner_config_with_cli_overrides(
@@ -133,7 +103,6 @@ impl Scanner {
         }
         scanner_config.include_binary = args.include_binary;
         scanner_config.follow_symlinks = args.follow_symlinks;
-        scanner_config.ignore_test_code = !args.no_ignore_tests;
         scanner_config.max_file_size_mb = args.max_file_size;
 
         // Extend ignore lists with CLI values
@@ -240,22 +209,6 @@ impl Scanner {
 
         if let Ok(ignore_comments) = config.get_vec("scanner.ignore_comments") {
             scanner_config.ignore_comments = ignore_comments;
-        }
-
-        if let Ok(ignore_test_code) = config.get_section("scanner.ignore_test_code")
-            && let Some(enabled) = ignore_test_code.as_bool()
-        {
-            scanner_config.ignore_test_code = enabled;
-        }
-
-        if let Ok(test_attributes) = config.get_vec("scanner.test_attributes") {
-            // Keep test patterns case-sensitive for proper class name matching
-            scanner_config.test_attributes = test_attributes;
-        }
-
-        if let Ok(test_modules) = config.get_vec("scanner.test_modules") {
-            // Keep test patterns case-sensitive for proper class name matching
-            scanner_config.test_modules = test_modules;
         }
 
         // Parse processing mode settings
@@ -396,115 +349,41 @@ impl Scanner {
         self.scan_single_path(path)
     }
 
-    /// Scan a large file using streaming approach to minimize memory usage
-    fn scan_file_streaming(&self, path: &Path) -> Result<Vec<SecretMatch>> {
-        use std::fs::File;
-        use std::io::{BufRead, BufReader};
-
-        let file =
-            File::open(path).with_context(|| format!("Failed to open file: {}", path.display()))?;
-        let reader = BufReader::new(file);
-        let mut matches = Vec::new();
-
-        // Note: For large files, we sacrifice some test detection features
-        // (which require full file analysis) for memory efficiency
-        for (line_number, line_result) in reader.lines().enumerate() {
-            let line = line_result.with_context(|| {
-                format!(
-                    "Failed to read line {} in file: {}",
-                    line_number + 1,
-                    path.display()
-                )
-            })?;
-
-            // Skip ignored lines
-            if self.should_ignore_line(&line) {
-                continue;
-            }
-
-            // Scan this line for secrets
-            let line_matches = self.scan_line(&line, path, line_number + 1);
-            matches.extend(line_matches);
-        }
-
-        Ok(matches)
-    }
 
     pub(crate) fn scan_single_path(&self, path: &Path) -> Result<Vec<SecretMatch>> {
         // All filtering (path, size, binary) now happens during directory walk for better performance
         // Files reaching this method have already passed all filters
 
-        // Read file content - use streaming for large files
-        const STREAMING_THRESHOLD_MB: u64 = 5; // Stream files larger than 5MB
-        let mut matches = Vec::new();
-
-        // Check file size to decide on reading strategy
-        if let Ok(metadata) = std::fs::metadata(path) {
-            let size_mb = metadata.len() / (1024 * 1024);
-
-            if size_mb > STREAMING_THRESHOLD_MB {
-                // Use streaming approach for large files
-                return self.scan_file_streaming(path);
-            }
-        }
-
-        // Use in-memory approach for small files (original behavior)
+        // Read entire file content at once
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read file: {}", path.display()))?;
 
-        let lines: Vec<&str> = content.lines().collect();
-
-        // Build ignore ranges for test blocks
-        let detector = TestDetector::new(&self.config);
-        let ignore_ranges = detector.build_ignore_ranges(&lines, path);
-
-        // Collect line-by-line matches first
-        for (line_number, line) in lines.iter().enumerate() {
-            // Check if this line is in an ignored range
-            if ignore_ranges
-                .iter()
-                .any(|range| range.contains(&line_number))
-            {
-                continue;
-            }
-
-            // Check for ignore patterns on this line and next line
-            if self.should_ignore_line(line) {
-                continue;
-            }
-
-            // Check for ignore-next directive on previous line
-            if line_number > 0 {
-                let prev_line = lines[line_number - 1];
-                if prev_line.contains("guardy:ignore-next") {
-                    continue;
-                }
-            }
-
-            let line_matches = self.scan_line(line, path, line_number + 1);
-            matches.extend(line_matches);
-        }
-
-        Ok(matches)
+        // Scan the entire content for matches
+        self.scan_content(&content, path)
     }
 
-    fn scan_line(&self, line: &str, file_path: &Path, line_number: usize) -> Vec<SecretMatch> {
-        // Always use sequential pattern processing (parallel patterns proved to be 10x slower)
-        self.scan_line_sequential(line, file_path, line_number)
-    }
-
-    /// Sequential pattern matching (original implementation)
-    fn scan_line_sequential(
-        &self,
-        line: &str,
-        file_path: &Path,
-        line_number: usize,
-    ) -> Vec<SecretMatch> {
+    /// Scan entire file content for secrets
+    fn scan_content(&self, content: &str, file_path: &Path) -> Result<Vec<SecretMatch>> {
         let mut matches = Vec::new();
 
-        // Find potential secrets using sequential pattern matching
+        // Process each pattern against the entire content
         for pattern in &self.patterns.patterns {
-            for regex_match in pattern.regex.find_iter(line) {
+            for regex_match in pattern.regex.find_iter(content) {
+                // Skip if this position should be ignored
+                if self.should_ignore_at_position(content, regex_match.start()) {
+                    continue;
+                }
+                
+                // Calculate line number and extract line content
+                let line_number = content[..regex_match.start()].matches('\n').count() + 1;
+                
+                // Find the line containing this match
+                let line_start = content[..regex_match.start()].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                let line_end = content[regex_match.start()..].find('\n')
+                    .map(|i| regex_match.start() + i)
+                    .unwrap_or(content.len());
+                let line = &content[line_start..line_end];
+                
                 if let Some(secret_match) =
                     self.process_pattern_match(pattern, regex_match, line, file_path, line_number)
                 {
@@ -513,7 +392,7 @@ impl Scanner {
             }
         }
 
-        matches
+        Ok(matches)
     }
 
     /// Process a single pattern match (extracted for reuse between sequential and parallel)

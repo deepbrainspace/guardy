@@ -61,10 +61,6 @@ pub struct ScanArgs {
     #[arg(long)]
     pub entropy_threshold: Option<f64>,
 
-    /// Disable intelligent test code detection
-    #[arg(long)]
-    pub no_ignore_tests: bool,
-
     /// Additional patterns to ignore (regex)
     #[arg(long, value_delimiter = ',')]
     pub ignore_patterns: Vec<String>,
