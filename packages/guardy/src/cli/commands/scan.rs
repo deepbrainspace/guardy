@@ -539,7 +539,6 @@ fn print_json_results(
             "file": m.file_path,
             "line": m.line_number,
             "type": m.secret_type,
-            "content": m.line_content.trim(),
             "matched_text": m.matched_text,
             "start_pos": m.start_pos,
             "end_pos": m.end_pos

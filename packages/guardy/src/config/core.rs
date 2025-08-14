@@ -15,10 +15,20 @@ impl GuardyConfig {
         cli_overrides: Option<T>,
         verbosity_count: u8,
     ) -> Result<Self> {
-        // Debug: Show starting config load (only at trace level -vvv)
-        tracing::trace!("CONFIG LOAD: Starting");
+        // Debug: Show starting config load
+        tracing::debug!("Starting configuration load");
 
         // Clean 4-stage configuration hierarchy using SuperConfig's explicit API
+        tracing::debug!("Loading embedded default configuration ({} lines)", DEFAULT_CONFIG.lines().count());
+        tracing::debug!("Loading hierarchical config for: guardy");
+        if let Some(path) = custom_config {
+            tracing::debug!("Loading custom config file: {}", path);
+        }
+        tracing::debug!("Loading environment variables with prefix: GUARDY_");
+        if cli_overrides.is_some() {
+            tracing::debug!("Processing CLI overrides");
+        }
+
         let config = SuperConfig::new()
             .with_verbosity(VerbosityLevel::from_cli_args(verbosity_count)) // Set verbosity based on CLI args (-v, -vv, -vvv)
             .with_defaults_string(DEFAULT_CONFIG) // 1. Defaults (lowest)
@@ -27,14 +37,16 @@ impl GuardyConfig {
             .with_env_ignore_empty("GUARDY_") // 4. Environment variables (with empty filtering)
             .with_cli_opt(cli_overrides); // 5. CLI (highest priority)
 
-        // Debug: Show final config (only at trace level -vvv)
+        // Debug: Show final config 
         if let Ok(final_config) = config.extract::<serde_json::Value>() {
+            tracing::debug!("Configuration extraction successful");
             tracing::trace!(
-                "CONFIG LOAD: Final scanner.mode = {:?}",
+                "Final scanner.mode = {:?}",
                 final_config.get("scanner").and_then(|s| s.get("mode"))
             );
         }
 
+        tracing::debug!("Configuration loading completed");
         Ok(GuardyConfig { config })
     }
 

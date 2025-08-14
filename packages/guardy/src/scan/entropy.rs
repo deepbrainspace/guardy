@@ -26,8 +26,8 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
 
     // Use tracing for debug output instead of loading config every time
     tracing::trace!(
-        "Testing '{}' - prob: {:.2e}, threshold: {:.2e}",
-        String::from_utf8_lossy(data),
+        "Testing <REDACTED-{}-chars> - prob: {:.2e}, threshold: {:.2e}",
+        data.len(),
         probability,
         min_threshold
     );

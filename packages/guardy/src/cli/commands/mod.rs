@@ -78,12 +78,7 @@ impl Cli {
             Some(Commands::Install(args)) => install::execute(args, self.verbose).await,
             Some(Commands::Run(args)) => run::execute(args, self.verbose).await,
             Some(Commands::Scan(args)) => {
-                use crate::cli::output;
-                output::styled!(
-                    "{}: CLI config path: {}",
-                    ("DEBUG", "debug"),
-                    (format!("{:?}", self.config), "muted")
-                );
+                tracing::debug!(config_path = ?self.config, "CLI config path");
                 scan::execute(args, self.verbose, self.config.as_deref()).await
             }
             Some(Commands::ScanV3(args)) => {

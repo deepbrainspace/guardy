@@ -283,11 +283,7 @@ impl Scanner {
 
         // Load ignore patterns from config
         if let Ok(ignore_paths) = config.get_vec("scanner.ignore_paths") {
-            crate::cli::output::styled!(
-                "{}: Loaded ignore_paths from config: {}",
-                ("DEBUG", "debug"),
-                (format!("{:?}", ignore_paths), "muted")
-            );
+            tracing::debug!("Loaded {} ignore paths from config: {:?}", ignore_paths.len(), ignore_paths);
             scanner_config.ignore_paths = ignore_paths;
         } else {
             crate::cli::output::styled!(
