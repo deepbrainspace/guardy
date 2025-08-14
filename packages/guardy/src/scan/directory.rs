@@ -1,5 +1,5 @@
 use super::filters::directory::BinaryFilter;
-use super::static_data::directory_patterns::SKIP_DIRECTORIES_SET;
+use super::static_data::directory_patterns::{get_analyzable_directories, SKIP_DIRECTORIES_SET};
 use super::types::{ScanFileResult, ScanResult, ScanStats, Scanner, Warning};
 use crate::cli::output;
 use crate::parallel::{ExecutionStrategy, progress::factories};
@@ -8,46 +8,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Check if a file should be treated as binary using configured extensions
-pub(crate) fn is_binary_file_by_extension(path: &Path, binary_extensions: &[String]) -> bool {
-    if let Some(extension) = path.extension()
-        && let Some(ext_str) = extension.to_str()
-    {
-        let ext_lower = ext_str.to_lowercase();
-        return binary_extensions.contains(&ext_lower);
-    }
-    false
-}
-
-/// Check if a file is binary using content inspection
-pub(crate) fn is_binary_file_by_content(path: &Path) -> bool {
-    use std::fs::File;
-    use std::io::Read;
-
-    // Try to read a small sample of the file
-    if let Ok(mut file) = File::open(path) {
-        let mut buffer = vec![0; 512]; // Read first 512 bytes
-        if let Ok(bytes_read) = file.read(&mut buffer) {
-            buffer.truncate(bytes_read);
-            content_inspector::inspect(&buffer).is_binary()
-        } else {
-            false
-        }
-    } else {
-        false
-    }
-}
-
-/// Hybrid binary file detection: fast extension check first, then content inspection
-pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool {
-    // Fast extension-based check first
-    if is_binary_file_by_extension(path, binary_extensions) {
-        return true;
-    }
-
-    // For unknown extensions, use content inspection as fallback
-    is_binary_file_by_content(path)
-}
 
 /// Directory handling for the scanner - combines filtering and analysis logic
 ///
@@ -182,22 +142,9 @@ impl DirectoryHandler {
     }
 
     /// Get directories that should be analyzed for gitignore patterns
-    /// These are typically build/cache directories that projects generate
-    pub fn analyzable_directories(&self) -> Vec<(&'static str, &'static str)> {
-        vec![
-            // Rust
-            ("target", "Rust build directory"),
-            // Node.js
-            ("node_modules", "Node.js dependencies"),
-            ("dist", "Build output directory"),
-            ("build", "Build output directory"),
-            // Python
-            ("__pycache__", "Python cache directory"),
-            ("venv", "Python virtual environment"),
-            (".venv", "Python virtual environment"),
-            // Go
-            ("vendor", "Go dependencies"),
-        ]
+    /// Uses static data for consistency with directory filtering
+    pub fn analyzable_directories(&self) -> &'static Arc<Vec<(&'static str, &'static str)>> {
+        get_analyzable_directories()
     }
 
     /// Unified directory scanning method that orchestrates the entire scanning process
@@ -670,7 +617,7 @@ impl DirectoryHandler {
         };
 
         // Check all analyzable directories
-        for (dir_name, description) in self.analyzable_directories() {
+        for (dir_name, description) in self.analyzable_directories().iter() {
             if path.join(dir_name).exists() {
                 let dir_with_slash = format!("{dir_name}/");
                 if check_gitignore_pattern(&dir_with_slash) || check_gitignore_pattern(dir_name) {
@@ -696,54 +643,43 @@ pub struct DirectoryAnalysis {
 }
 
 impl DirectoryAnalysis {
-    /// Display the analysis results to the user
+    /// Display the analysis results to the user with improved UX
     pub fn display(&self) {
-        if self.properly_ignored.is_empty() && self.needs_gitignore.is_empty() {
-            return;
-        }
-
-        let total_dirs = self.properly_ignored.len() + self.needs_gitignore.len();
-        output::styled!(
-            "{} Discovered {} director{}:",
-            ("📁", "info_symbol"),
-            (total_dirs.to_string(), "number"),
-            (if total_dirs == 1 { "y" } else { "ies" }, "primary")
-        );
-
-        // Show properly ignored directories
-        for (dir, description) in &self.properly_ignored {
+        // Show properly ignored directories (brief, positive feedback)
+        if !self.properly_ignored.is_empty() {
+            let total_properly = self.properly_ignored.len();
             output::styled!(
-                "   {} {} ({})",
-                ("✔", "success_symbol"),
-                (dir, "file_path"),
-                (description, "muted")
+                "📁 Discovered {} properly ignored director{}:",
+                (total_properly.to_string(), "number"),
+                (if total_properly == 1 { "y" } else { "ies" }, "primary")
             );
+            
+            for (dir, description) in &self.properly_ignored {
+                output::styled!(
+                    "   {} {} ({})",
+                    ("✔", "success_symbol"),
+                    (dir, "file_path"),
+                    (description, "muted")
+                );
+            }
         }
 
-        // Show directories that need gitignore rules
-        for (dir, description) in &self.needs_gitignore {
-            output::styled!(
-                "   {} {} ({})",
-                ("⚠️", "warning_symbol"),
-                (dir, "file_path"),
-                (description, "muted")
-            );
-        }
-
-        // Only show gitignore recommendations for directories that need them
+        // Show gitignore recommendations (cleaner, more direct)
         if !self.needs_gitignore.is_empty() {
-            let patterns: Vec<&str> = self
-                .needs_gitignore
-                .iter()
-                .map(|(dir, _)| dir.as_str())
-                .collect();
-            output::info!(
-                &format!(
-                    "Consider adding to .gitignore: {}",
-                    output::property_name(patterns.join(", "))
-                ),
-                output::symbols::LIGHTBULB
+            println!(); // Add spacing before recommendations
+            output::styled!(
+                "{} Consider adding to .gitignore:",
+                ("💡", "info_symbol")
             );
+            
+            for (dir, description) in &self.needs_gitignore {
+                output::styled!(
+                    "   • {} ({})",
+                    (dir, "file_path"),
+                    (description, "muted")
+                );
+            }
+            println!(); // Add spacing after recommendations
         }
     }
 }

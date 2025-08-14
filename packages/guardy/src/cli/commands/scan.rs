@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use crate::cli::output;
 use crate::config::GuardyConfig;
 use crate::scan::Scanner;
-use crate::scan::directory;
 use crate::scan::types::{ScanMode, ScanResult, ScanStats, SecretMatch, Warning};
 
 /// Format scan time intelligently - use ms for short times, mm:ss for longer times
@@ -192,22 +191,19 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
 
     // Scan all paths and collect detailed results
     let mut all_scan_results = Vec::new();
+    
     for path in &scan_paths {
         if path.is_file() {
             let matches = scanner.scan_file(path)?;
-            // Check if file was actually processed (not skipped due to binary detection, etc.)
-            let was_processed = !matches.is_empty()
-                || scanner.config.include_binary
-                || !directory::is_binary_file(
-                    path,
-                    &scanner.config.binary_extensions,
-                );
+            // Note: If scan_file() returns, the file was processed (binary filtering is internal)
+            // For individual file scanning, we assume all files that don't error were processed
+            // This is a limitation - ideally scan_file() would return processing status
 
             all_scan_results.push(ScanResult {
                 matches,
                 stats: ScanStats {
-                    files_scanned: if was_processed { 1 } else { 0 },
-                    files_skipped: if was_processed { 0 } else { 1 },
+                    files_scanned: 1, // Single file was processed
+                    files_skipped: 0,  // No skipping at this level
                     total_matches: 0, // Will be updated below
                     scan_duration_ms: 0,
                 },

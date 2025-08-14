@@ -50,6 +50,26 @@ pub static SKIP_DIRECTORIES_SET: LazyLock<Arc<HashSet<&'static str>>> = LazyLock
     ].into_iter().collect())
 });
 
+/// Static list of directories that should be analyzed for gitignore patterns
+/// These are commonly generated build/cache directories that users should typically ignore
+static ANALYZABLE_DIRECTORIES: LazyLock<Arc<Vec<(&'static str, &'static str)>>> = LazyLock::new(|| {
+    Arc::new(vec![
+        ("target", "Rust build directory"),
+        ("node_modules", "Node.js dependencies"),
+        ("dist", "Build output directory"), 
+        ("build", "Build output directory"),
+        ("__pycache__", "Python cache directory"),
+        ("venv", "Python virtual environment"),
+        (".venv", "Python virtual environment"),
+        ("vendor", "Go dependencies"),
+    ])
+});
+
+/// Get analyzable directories for gitignore analysis (zero-copy access)
+pub fn get_analyzable_directories() -> &'static Arc<Vec<(&'static str, &'static str)>> {
+    &ANALYZABLE_DIRECTORIES
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

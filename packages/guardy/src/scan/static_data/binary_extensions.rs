@@ -26,12 +26,12 @@ pub static BINARY_EXTENSIONS: LazyLock<Arc<HashSet<String>>> = LazyLock::new(|| 
     let base_extensions = vec![
         // Images
         "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "tiff", "tif", "avif", "heic", "heif",
-        "dng", "raw", "nef", "cr2", "arw", "orf", "rw2",
+        "dng", "raw", "nef", "cr2", "arw", "orf", "rw2", "svg",
         // Documents
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "indd",
         // Archives
         "zip", "tar", "gz", "bz2", "xz", "7z", "rar", "dmg", "iso", "ace", "cab", "lzh", "arj",
-        "br", "zst", "lz4", "lzo", "lzma",
+        "br", "zst", "lz4", "lzo", "lzma", "tgz",
         // Executables & Object Files
         "exe", "dll", "so", "dylib", "bin", "app", "deb", "rpm", "o", "obj", "lib", "a", "pdb",
         "exp", "ilk",
@@ -43,7 +43,7 @@ pub static BINARY_EXTENSIONS: LazyLock<Arc<HashSet<String>>> = LazyLock::new(|| 
         // Security/Crypto (keeping PEM for secret detection)
         "gpg", "pgp", "p12", "pfx", "der", "crt", "keystore",
         // Database & Data Files
-        "db", "sqlite", "sqlite3", "mdb", "sst", "ldb", "wal", "snap", "dat", "sas7bdat", "sas7bcat",
+        "db", "sqlite", "sqlite3", "mdb", "sst", "ldb", "wal", "snap", "dat", "sas7bdat", "sas7bcat","rdb",
         // CAD & Design Files
         "dwg", "dxf", "skp", "3ds", "max", "blend", "fbx",
         // Compiler & Build Artifacts
@@ -51,17 +51,21 @@ pub static BINARY_EXTENSIONS: LazyLock<Arc<HashSet<String>>> = LazyLock::new(|| 
         // Binary Data & Image Files
         "img", "dmg", "vhd", "vmdk", "qcow2", "raw",
         // Other binary formats
-        "pyc", "pyo", "class", "jar", "war", "ear", "swf", "fla",
+        "pyc", "pyo", "class", "jar", "war", "ear", "swf", "fla","npy",
         // NX cache files
         "nxt",
         // Common DOS/Legacy executables
-        "com", "exe", "bat", "cmd",
+        "com", "bat", "cmd",
         // Specialized formats that are definitely binary
         "bas", "pic", "b", "mcw", "ind", "dsk", "z",
         // Test data and specialized formats that often cause UTF-8 issues
         "gdiff", "srt", "zeno", "cba", "parquet", "avro", "orc",
         // Additional problematic formats discovered in scans
         "pak", "rpak", "webc", "toast", "data",
+        // ai
+        "pt",
+        // other
+        "crl","ptx","sf","jrprint","sbt","nepprj","psf","mac","g3w","hpi","o5c","cf1","car","vwx","md8","amg","lb6","nk2","dwb","skn","signal","jsa","hlp","kcw","res","cf2","cwg","vpk","psbt","sb",
     ];
     
     let mut all_extensions = HashSet::new();
