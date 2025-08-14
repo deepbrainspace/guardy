@@ -6,7 +6,7 @@ pub mod config;
 pub mod install;
 pub mod run;
 pub mod scan;
-pub mod scan_v1;
+pub mod scan_v3;
 pub mod status;
 pub mod sync;
 pub mod uninstall;
@@ -48,10 +48,10 @@ pub enum Commands {
     Install(install::InstallArgs),
     /// Manually execute a specific hook for testing
     Run(run::RunArgs),
-    /// Scan files or directories for secrets
+    /// Scan files or directories for secrets (stable v1-based scanner)
     Scan(scan::ScanArgs),
-    /// Scan files or directories for secrets (legacy v1 scanner)
-    ScanV1(scan_v1::ScanArgs),
+    /// Scan files or directories for secrets (experimental v3 scanner)
+    ScanV3(scan_v3::ScanArgs),
     /// Configuration management
     Config(config::ConfigArgs),
     /// Show current installation and configuration status
@@ -78,16 +78,16 @@ impl Cli {
             Some(Commands::Install(args)) => install::execute(args, self.verbose).await,
             Some(Commands::Run(args)) => run::execute(args, self.verbose).await,
             Some(Commands::Scan(args)) => {
-                scan::execute(args, self.verbose, self.config.as_deref()).await
-            }
-            Some(Commands::ScanV1(args)) => {
                 use crate::cli::output;
                 output::styled!(
                     "{}: CLI config path: {}",
                     ("DEBUG", "debug"),
                     (format!("{:?}", self.config), "muted")
                 );
-                scan_v1::execute(args, self.verbose, self.config.as_deref()).await
+                scan::execute(args, self.verbose, self.config.as_deref()).await
+            }
+            Some(Commands::ScanV3(args)) => {
+                scan_v3::execute(args, self.verbose, self.config.as_deref()).await
             }
             Some(Commands::Config(args)) => {
                 config::execute(args, self.config.as_deref(), self.verbose).await

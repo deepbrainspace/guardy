@@ -55,7 +55,7 @@ pub struct SecretPattern {
 /// # Example
 ///
 /// ```rust
-/// use guardy::scanner::patterns::SecretPatterns;
+/// use guardy::scan_v1::patterns::SecretPatterns;
 /// use guardy::config::GuardyConfig;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,7 +88,7 @@ impl SecretPatterns {
     /// # Example
     ///
     /// ```rust
-    /// use guardy::scanner::patterns::SecretPatterns;
+    /// use guardy::scan_v1::patterns::SecretPatterns;
     /// use guardy::config::GuardyConfig;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -396,7 +396,7 @@ impl SecretPatterns {
     /// # Example
     ///
     /// ```rust
-    /// use guardy::scanner::patterns::SecretPatterns;
+    /// use guardy::scan_v1::patterns::SecretPatterns;
     /// use guardy::config::GuardyConfig;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {

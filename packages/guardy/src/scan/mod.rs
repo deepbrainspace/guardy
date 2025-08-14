@@ -11,7 +11,6 @@ pub mod filters;
 pub mod pipeline;
 pub mod reports;
 mod static_data;
-mod tracking;
 
 // Public API exports
 pub use config::ScannerConfig;

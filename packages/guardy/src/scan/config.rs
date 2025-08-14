@@ -25,7 +25,7 @@ pub struct ScannerConfig {
     // Comment filtering
     pub respect_ignore_comments: bool,
     
-    // Parallel processing (rayon)
+    // Parallel processing (ExecutionStrategy)
     pub max_cpu_percentage: u8,      // Percentage of CPUs to use (1-100)
     pub max_threads: Option<usize>,  // Override computed threads if set
     
@@ -75,7 +75,7 @@ impl Default for ScannerConfig {
 impl ScannerConfig {
     /// Create scanner config from CLI args + GuardyConfig
     pub fn from_cli_args(
-        args: &crate::cli::commands::scan::ScanArgs,
+        args: &crate::cli::commands::scan_v3::ScanArgs,
         config: &crate::config::GuardyConfig,
     ) -> anyhow::Result<Self> {
         // Start with default config

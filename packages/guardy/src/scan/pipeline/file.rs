@@ -43,6 +43,7 @@ impl FilePipeline {
     pub fn process_file(&self, path: &Path, stats: Arc<StatsCollector>) -> Result<FileResult> {
         let start_time = Instant::now();
         let file_path = Arc::from(path.to_string_lossy().as_ref());
+        tracing::trace!("Starting to process file: {}", file_path);
         
         // Read file contents with UTF-8 validation
         let content = match fs::read_to_string(path) {
@@ -125,7 +126,7 @@ impl FilePipeline {
         };
         
         // Stage 3: Comment filtering - remove matches ignored by comments
-        if !matches.is_empty() && !self.config.no_entropy {
+        if !matches.is_empty() && self.config.respect_ignore_comments {
             let original_count = matches.len();
             let comment_input = CommentFilterInput {
                 file_content: regex_input.content.clone(),
@@ -153,7 +154,7 @@ impl FilePipeline {
         }
         
         // Stage 4: Entropy filtering - validate randomness of potential secrets
-        if !matches.is_empty() && !self.config.no_entropy {
+        if !matches.is_empty() && self.config.enable_entropy_analysis {
             let original_count = matches.len();
             let mut entropy_filtered = Vec::new();
             for secret_match in matches {

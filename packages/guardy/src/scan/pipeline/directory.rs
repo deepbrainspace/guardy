@@ -6,7 +6,6 @@ use crate::scan::{
     filters::{
         directory::{BinaryFilter, PathFilter, SizeFilter}, Filter, FilterDecision,
     },
-    tracking::ProgressTracker,
 };
 use anyhow::Result;
 use ignore::{WalkBuilder, WalkState};
@@ -67,8 +66,7 @@ impl DirectoryPipeline {
     pub fn discover_files(
         &self, 
         path: &Path, 
-        stats: Arc<StatsCollector>,
-        progress: Option<&ProgressTracker>
+        stats: Arc<StatsCollector>
     ) -> Result<Vec<PathBuf>> {
         // Verify path exists
         if !path.exists() {
@@ -106,7 +104,6 @@ impl DirectoryPipeline {
         let size_filter = self.size_filter;
         let binary_filter = self.binary_filter.clone();
         let stats_collector = stats.clone();
-        let progress_clone = progress.cloned();
         let follow_symlinks = self.config.follow_symlinks;
         
         // Walk the directory tree in parallel
@@ -118,7 +115,6 @@ impl DirectoryPipeline {
             let size_filter = size_filter;
             let binary_filter = binary_filter.clone();
             let stats = stats_collector.clone();
-            let progress = progress_clone.clone();
             
             Box::new(move |result| {
                 // This closure processes each file/directory entry
@@ -132,18 +128,8 @@ impl DirectoryPipeline {
                             return WalkState::Continue;
                         }
                         
-                        // Count discovered files and update progress periodically
+                        // Count discovered files
                         stats.increment_files_discovered();
-                        
-                        // Update discovery progress every 100 files (performance optimization)
-                        let files_discovered = stats.to_scan_stats(0).total_files_discovered;
-                        if files_discovered % 100 == 0
-                            && let Some(ref p) = progress {
-                            p.update_discovery_progress(
-                                files_discovered,
-                                stats.to_scan_stats(0).directories_traversed
-                            );
-                        }
                         
                         // Skip symlinks if not following them
                         if entry.file_type().is_some_and(|ft| ft.is_symlink()) 
@@ -195,7 +181,7 @@ impl DirectoryPipeline {
         Ok(files)
     }
     
-    /// Process files in parallel using rayon
+    /// Process files in parallel using ignore crate's parallel walker
     /// Get filter statistics for performance analysis
     pub fn get_filter_stats(&self) -> FilterStats {
         FilterStats {

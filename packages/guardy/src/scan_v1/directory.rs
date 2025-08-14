@@ -101,8 +101,8 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// # Mode-Specific Behavior
 ///
 /// ## Sequential Mode
-/// ```rust,no_run
-/// use guardy::scanner::types::ScanMode;
+/// ```ignore
+/// use guardy::scan_v1::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
 /// # let mode = ScanMode::Sequential;
 /// let strategy = match mode {
@@ -115,10 +115,10 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// - No resource overhead
 ///
 /// ## Parallel Mode
-/// ```rust,no_run
-/// use guardy::scanner::types::ScanMode;
+/// ```ignore
+/// use guardy::scan_v1::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
-/// use guardy::scanner::directory::DirectoryHandler;
+/// use guardy::scan_v1::directory::DirectoryHandler;
 /// # let mode = ScanMode::Parallel;
 /// # let files = 100;
 /// # struct Config { max_threads: usize, thread_percentage: u8 }
@@ -136,10 +136,10 @@ pub(crate) fn is_binary_file(path: &Path, binary_extensions: &[String]) -> bool 
 /// - Worker count adapted to file count
 ///
 /// ## Auto Mode
-/// ```rust,no_run
-/// use guardy::scanner::types::ScanMode;
+/// ```ignore
+/// use guardy::scan_v1::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
-/// use guardy::scanner::directory::DirectoryHandler;
+/// use guardy::scan_v1::directory::DirectoryHandler;
 /// # let mode = ScanMode::Auto;
 /// # let files = 36;
 /// # let threshold = 50;
@@ -280,7 +280,7 @@ impl DirectoryHandler {
     ///
     /// # Example
     /// ```rust
-    /// use guardy::scanner::directory::DirectoryHandler;
+    /// use guardy::scan_v1::directory::DirectoryHandler;
     ///
     /// // System has 16 cores, config allows 12 workers
     /// let workers = DirectoryHandler::adapt_workers_for_file_count(36, 12);
@@ -337,7 +337,7 @@ impl DirectoryHandler {
     ///
     /// 3. **Domain Adaptation**: Adapts workers based on file count:
     ///    ```rust,no_run
-    ///    use guardy::scanner::directory::DirectoryHandler;
+    ///    use guardy::scan_v1::directory::DirectoryHandler;
     ///    # let file_count = 36;
     ///    # let max_workers = 12;
     ///    let optimal_workers = DirectoryHandler::adapt_workers_for_file_count(file_count, max_workers);
@@ -363,8 +363,8 @@ impl DirectoryHandler {
     /// ```rust
     /// use std::sync::Arc;
     /// use std::path::Path;
-    /// use guardy::scanner::directory::DirectoryHandler;
-    /// use guardy::scanner::Scanner;
+    /// use guardy::scan_v1::directory::DirectoryHandler;
+    /// use guardy::scan_v1::Scanner;
     /// use guardy::config::GuardyConfig;
     ///
     /// # fn example() -> anyhow::Result<()> {

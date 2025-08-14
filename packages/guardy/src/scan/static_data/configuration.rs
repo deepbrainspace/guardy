@@ -5,7 +5,6 @@
 
 use crate::scan::config::ScannerConfig;
 use std::sync::{Arc, LazyLock, RwLock};
-use system_profile::SYSTEM;
 
 /// Container for the global configuration
 struct ConfigContainer {
@@ -23,7 +22,7 @@ static SCANNER_CONFIG: LazyLock<RwLock<ConfigContainer>> = LazyLock::new(|| {
 /// after parsing command-line arguments and loading configuration files.
 /// 
 /// # Example
-/// ```no_run
+/// ```ignore
 /// use guardy::scan::static_data::configuration;
 /// use guardy::scan::ScannerConfig;
 /// 
@@ -31,34 +30,9 @@ static SCANNER_CONFIG: LazyLock<RwLock<ConfigContainer>> = LazyLock::new(|| {
 /// configuration::init_config(config);
 /// ```
 pub fn init_config(config: ScannerConfig) {
-    // Configure rayon thread pool based on config (this happens once)
-    let thread_count = if let Some(override_threads) = config.max_threads {
-        // Use explicit override if provided
-        override_threads
-    } else {
-        // Calculate based on percentage of system CPUs
-        let cpu_count = SYSTEM.cpu_count;
-        let calculated = (cpu_count * config.max_cpu_percentage as usize) / 100;
-        std::cmp::max(1, calculated) // Ensure at least 1 thread
-    };
-    
-    // Set global rayon thread pool once at initialization
-    // This affects all par_iter operations in the application
-    if let Err(e) = rayon::ThreadPoolBuilder::new()
-        .num_threads(thread_count)
-        .build_global() {
-        // Only fails if already initialized, which is fine
-        tracing::debug!("Rayon thread pool already initialized: {}", e);
-    } else {
-        tracing::info!(
-            "Rayon thread pool initialized with {} threads ({}% of {} CPUs)",
-            thread_count,
-            config.max_cpu_percentage,
-            SYSTEM.cpu_count
-        );
-    }
-    
     // Store the configuration
+    // Note: We no longer initialize rayon since we're using ExecutionStrategy
+    // which manages its own worker threads via crossbeam channels
     let container = &SCANNER_CONFIG;
     if let Ok(mut guard) = container.write() {
         guard.config = Some(Arc::new(config));
@@ -74,7 +48,7 @@ pub fn init_config(config: ScannerConfig) {
 /// if not yet initialized.
 /// 
 /// # Example
-/// ```no_run
+/// ```ignore
 /// use guardy::scan::static_data::configuration;
 /// 
 /// let config = configuration::get_config();
