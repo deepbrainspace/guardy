@@ -5,6 +5,7 @@
 //! composability and testability.
 
 pub mod directory;
+pub mod content;
 
 use anyhow::Result;
 use smallvec::SmallVec;

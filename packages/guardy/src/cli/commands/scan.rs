@@ -112,7 +112,7 @@ pub enum OutputFormat {
 }
 
 pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str>) -> Result<()> {
-    use crate::scan::patterns::SecretPatterns;
+    use crate::scan::static_data::patterns::get_pattern_library;
     use regex::Regex;
 
     // Load configuration (CLI overrides handled separately due to SuperConfig limitations)
@@ -120,19 +120,19 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     // cause "invalid type: sequence, expected a map" errors and prevent proper merging
     let config = GuardyConfig::load(config_path, None::<serde_json::Value>, verbose_level)?;
 
-    // Load patterns and add custom ones
-    let mut patterns = SecretPatterns::new(&config)?;
+    // Get the global pattern library
+    let pattern_lib = get_pattern_library();
 
     // Handle --list-patterns flag
     if args.list_patterns {
         output::styled!(
             "{} Available Secret Detection Patterns ({} total):",
             ("📋", "info_symbol"),
-            (patterns.pattern_count().to_string(), "property")
+            (pattern_lib.count().to_string(), "property")
         );
         println!();
 
-        for pattern in &patterns.patterns {
+        for pattern in pattern_lib.patterns() {
             if verbose_level > 0 {
                 output::styled!(
                     "📋 {} - {}",
@@ -146,33 +146,23 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         return Ok(());
     }
 
+    // Validate custom patterns (but don't add them here - they're handled by the scanner config)
     for custom_pattern in &args.custom_patterns {
-        match Regex::new(custom_pattern) {
-            Ok(regex) => {
-                patterns
-                    .patterns
-                    .push(crate::scan::patterns::SecretPattern {
-                        name: "Custom Pattern".to_string(),
-                        regex,
-                        description: "User-defined pattern".to_string(),
-                    });
-            }
-            Err(e) => {
-                output::styled!(
-                    "{} Invalid custom pattern '{}': {}",
-                    ("⚠️", "warning_symbol"),
-                    (custom_pattern, "property"),
-                    (e.to_string(), "error")
-                );
-            }
+        if let Err(e) = Regex::new(custom_pattern) {
+            output::styled!(
+                "{} Invalid custom pattern '{}': {}",
+                ("⚠️", "warning_symbol"),
+                (custom_pattern, "property"),
+                (e.to_string(), "error")
+            );
         }
     }
 
     // Extract scanner config using the proper parsing method, passing CLI args directly
     let scanner_config = Scanner::parse_scanner_config_with_cli_overrides(&config, &args)?;
 
-    // Create scanner with loaded config
-    let scanner = Scanner::with_config(patterns, scanner_config)?;
+    // Create scanner with CLI-overridden config
+    let scanner = Scanner::with_config(scanner_config)?;
 
     output::styled!("{} Starting security scan...", ("ℹ", "info_symbol"));
     let start_time = Instant::now();

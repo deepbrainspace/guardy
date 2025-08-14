@@ -35,7 +35,10 @@ where
         }
     }
 
-    /// Execute work items in parallel using a producer-consumer pattern
+    /// Execute work items in parallel using optimized chunked distribution
+    /// 
+    /// This method pre-distributes work into balanced chunks to reduce contention
+    /// and provide better load balancing compared to the simple producer-consumer pattern.
     pub fn execute<F, P>(
         &self,
         work_items: Vec<T>,

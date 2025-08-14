@@ -10,7 +10,7 @@ pub async fn execute(_args: StatusArgs, verbosity_level: u8) -> Result<()> {
     use crate::cli::output::*;
     use crate::config::GuardyConfig;
     use crate::git::GitRepo;
-    use crate::scan::patterns::SecretPatterns;
+    use crate::scan::static_data::patterns::get_pattern_library;
 
     styled!("Checking {} status...", ("guardy", "primary"));
 
@@ -33,24 +33,27 @@ pub async fn execute(_args: StatusArgs, verbosity_level: u8) -> Result<()> {
     match GuardyConfig::load(None, None::<&()>, verbosity_level) {
         Ok(config) => {
             styled!("{} Configuration loaded", ("✅", "success_symbol"));
-
-            // Check patterns
-            match SecretPatterns::new(&config) {
-                Ok(patterns) => {
-                    styled!(
-                        "{} Scanner ready with {} patterns",
-                        ("✅", "success_symbol"),
-                        (patterns.pattern_count().to_string(), "number")
-                    );
+            
+            // Show key configuration details
+            if let Ok(scanner_section) = config.get_section("scanner") {
+                if let Some(max_size) = scanner_section.get("max_file_size_mb").and_then(|v| v.as_u64()) {
+                    styled!("  Max file size: {}MB", (max_size.to_string(), "number"));
                 }
-                Err(e) => {
-                    styled!(
-                        "{} Pattern loading failed: {}",
-                        ("❌", "error_symbol"),
-                        (e.to_string(), "error")
-                    );
+                if let Some(include_binary) = scanner_section.get("include_binary").and_then(|v| v.as_bool()) {
+                    styled!("  Include binary files: {}", (include_binary.to_string(), "property"));
+                }
+                if let Some(entropy_enabled) = scanner_section.get("enable_entropy_analysis").and_then(|v| v.as_bool()) {
+                    styled!("  Entropy analysis: {}", (entropy_enabled.to_string(), "property"));
                 }
             }
+
+            // Check patterns
+            let pattern_lib = get_pattern_library();
+            styled!(
+                "{} Scanner ready with {} patterns",
+                ("✅", "success_symbol"),
+                (pattern_lib.count().to_string(), "number")
+            );
         }
         Err(e) => {
             styled!(

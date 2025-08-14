@@ -64,7 +64,7 @@ use std::time::Instant;
 ///
 /// ## Sequential Mode
 /// ```ignore
-/// use guardy::scan_v1::types::ScanMode;
+/// use guardy::scan::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
 /// # let mode = ScanMode::Sequential;
 /// let strategy = match mode {
@@ -78,9 +78,9 @@ use std::time::Instant;
 ///
 /// ## Parallel Mode
 /// ```ignore
-/// use guardy::scan_v1::types::ScanMode;
+/// use guardy::scan::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
-/// use guardy::scan_v1::directory::DirectoryHandler;
+/// use guardy::scan::directory::DirectoryHandler;
 /// # let mode = ScanMode::Parallel;
 /// # let files = 100;
 /// # struct Config { max_threads: usize, thread_percentage: u8 }
@@ -99,9 +99,9 @@ use std::time::Instant;
 ///
 /// ## Auto Mode
 /// ```ignore
-/// use guardy::scan_v1::types::ScanMode;
+/// use guardy::scan::types::ScanMode;
 /// use guardy::parallel::ExecutionStrategy;
-/// use guardy::scan_v1::directory::DirectoryHandler;
+/// use guardy::scan::directory::DirectoryHandler;
 /// # let mode = ScanMode::Auto;
 /// # let files = 36;
 /// # let threshold = 50;
@@ -181,7 +181,7 @@ impl DirectoryHandler {
     ///
     /// 3. **Domain Adaptation**: Adapts workers based on file count:
     ///    ```rust,no_run
-    ///    use guardy::scan_v1::directory::DirectoryHandler;
+    ///    use guardy::scan::directory::DirectoryHandler;
     ///    # let file_count = 36;
     ///    # let max_workers = 12;
     ///    let optimal_workers = DirectoryHandler::adapt_workers_for_file_count(file_count, max_workers);
@@ -207,8 +207,8 @@ impl DirectoryHandler {
     /// ```rust
     /// use std::sync::Arc;
     /// use std::path::Path;
-    /// use guardy::scan_v1::directory::DirectoryHandler;
-    /// use guardy::scan_v1::Scanner;
+    /// use guardy::scan::directory::DirectoryHandler;
+    /// use guardy::scan::Scanner;
     /// use guardy::config::GuardyConfig;
     ///
     /// # fn example() -> anyhow::Result<()> {
@@ -430,6 +430,16 @@ impl DirectoryHandler {
                     tracing::debug!("  {}: {}", key, value);
                 }
             }
+            
+            // Show prefilter stats for performance monitoring
+            let prefilter_stats = super::filters::content::ContextPrefilter::stats();
+            tracing::debug!("Prefilter Performance:");
+            tracing::debug!("  Total patterns: {}", prefilter_stats.total_patterns);
+            tracing::debug!("  Total keywords: {}", prefilter_stats.total_keywords);
+            tracing::debug!("  Avg patterns per keyword: {:.2}", prefilter_stats.avg_patterns_per_keyword);
+            tracing::debug!("  Filter efficiency: {:.1}% expected pattern elimination", 
+                (1.0 - (prefilter_stats.avg_patterns_per_keyword / prefilter_stats.total_patterns as f64)) * 100.0
+            );
         }
 
         // Show timing summary

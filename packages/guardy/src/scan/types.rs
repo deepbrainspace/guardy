@@ -113,10 +113,13 @@ impl Default for ScannerConfig {
 /// This keeps the type definitions modular and the implementation focused.
 #[derive(Clone)]
 pub struct Scanner {
-    pub(crate) patterns: super::patterns::SecretPatterns,
     pub(crate) config: ScannerConfig,
     /// Cached filters for performance (created once, reused everywhere)
     pub(crate) binary_filter: std::sync::Arc<super::filters::directory::BinaryFilter>,
     pub(crate) path_filter: std::sync::Arc<super::filters::directory::PathFilter>,
     pub(crate) size_filter: std::sync::Arc<super::filters::directory::SizeFilter>,
+    /// Content filters for secret detection optimization
+    pub(crate) prefilter: std::sync::Arc<super::filters::content::ContextPrefilter>,
+    pub(crate) regex_executor: std::sync::Arc<super::filters::content::RegexExecutor>,
+    pub(crate) comment_filter: std::sync::Arc<super::filters::content::CommentFilter>,
 }

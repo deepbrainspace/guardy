@@ -1,6 +1,4 @@
-use super::entropy::is_likely_secret;
 // All filtering now handled through cached filters in Scanner struct and collect_file_paths
-use super::patterns::SecretPatterns;
 use super::types::{ScanResult, ScanStats, Scanner, ScannerConfig, SecretMatch, Warning};
 use crate::config::GuardyConfig;
 use crate::parallel::ExecutionStrategy;
@@ -17,9 +15,6 @@ use std::sync::Arc;
 
 impl Scanner {
     pub fn new(config: &GuardyConfig) -> Result<Self> {
-        // Load patterns from config
-        let patterns = SecretPatterns::new(config)?;
-
         // Parse scanner-specific config
         let scanner_config = Self::parse_scanner_config(config)?;
 
@@ -27,28 +22,42 @@ impl Scanner {
         let binary_filter = std::sync::Arc::new(super::filters::directory::BinaryFilter::new(!scanner_config.include_binary));
         let path_filter = std::sync::Arc::new(super::filters::directory::PathFilter::new(scanner_config.ignore_paths.clone()));
         let size_filter = std::sync::Arc::new(super::filters::directory::SizeFilter::new(scanner_config.max_file_size_mb));
+        
+        // Initialize content filters for optimization
+        let prefilter = std::sync::Arc::new(super::filters::content::ContextPrefilter::new());
+        let regex_executor = std::sync::Arc::new(super::filters::content::RegexExecutor::new());
+        let comment_filter = std::sync::Arc::new(super::filters::content::CommentFilter::new());
 
         Ok(Scanner {
-            patterns,
             config: scanner_config,
             binary_filter,
             path_filter,
             size_filter,
+            prefilter,
+            regex_executor,
+            comment_filter,
         })
     }
 
-    pub fn with_config(patterns: SecretPatterns, config: ScannerConfig) -> Result<Self> {
+    pub fn with_config(config: ScannerConfig) -> Result<Self> {
         // Initialize filters once for reuse throughout scanning
         let binary_filter = std::sync::Arc::new(super::filters::directory::BinaryFilter::new(!config.include_binary));
         let path_filter = std::sync::Arc::new(super::filters::directory::PathFilter::new(config.ignore_paths.clone()));
         let size_filter = std::sync::Arc::new(super::filters::directory::SizeFilter::new(config.max_file_size_mb));
+        
+        // Initialize content filters for optimization
+        let prefilter = std::sync::Arc::new(super::filters::content::ContextPrefilter::new());
+        let regex_executor = std::sync::Arc::new(super::filters::content::RegexExecutor::new());
+        let comment_filter = std::sync::Arc::new(super::filters::content::CommentFilter::new());
 
         Ok(Scanner {
-            patterns,
             config,
             binary_filter,
             path_filter,
             size_filter,
+            prefilter,
+            regex_executor,
+            comment_filter,
         })
     }
 
@@ -56,39 +65,6 @@ impl Scanner {
 
 
     // Note: should_ignore_path method removed - all filtering now happens during directory walk
-
-    /// Check if content contains ignore patterns at a specific position
-    fn should_ignore_at_position(&self, content: &str, position: usize) -> bool {
-        // Find the line containing this position
-        let line_start = content[..position].rfind('\n').map(|i| i + 1).unwrap_or(0);
-        let line_end = content[position..].find('\n').map(|i| position + i).unwrap_or(content.len());
-        let line = &content[line_start..line_end];
-        
-        // Check for inline ignore comments
-        for ignore_comment in &self.config.ignore_comments {
-            if line.contains(ignore_comment) {
-                return true;
-            }
-        }
-
-        // Check for pattern-based ignores
-        for ignore_pattern in &self.config.ignore_patterns {
-            if line.contains(ignore_pattern) {
-                return true;
-            }
-        }
-        
-        // Check if previous line has ignore-next directive
-        if line_start > 0 {
-            let prev_line_start = content[..line_start-1].rfind('\n').map(|i| i + 1).unwrap_or(0);
-            let prev_line = &content[prev_line_start..line_start-1];
-            if prev_line.contains("guardy:ignore-next") {
-                return true;
-            }
-        }
-
-        false
-    }
 
     pub fn parse_scanner_config_with_cli_overrides(
         config: &GuardyConfig,
@@ -362,82 +338,92 @@ impl Scanner {
         self.scan_content(&content, path)
     }
 
-    /// Scan entire file content for secrets
+    /// Scan entire file content for secrets using optimized filter pipeline
     fn scan_content(&self, content: &str, file_path: &Path) -> Result<Vec<SecretMatch>> {
-        let mut matches = Vec::new();
-
-        // Process each pattern against the entire content
-        for pattern in &self.patterns.patterns {
-            for regex_match in pattern.regex.find_iter(content) {
-                // Skip if this position should be ignored
-                if self.should_ignore_at_position(content, regex_match.start()) {
-                    continue;
-                }
-                
-                // Calculate line number and extract line content
-                let line_number = content[..regex_match.start()].matches('\n').count() + 1;
-                
-                // Find the line containing this match
-                let line_start = content[..regex_match.start()].rfind('\n').map(|i| i + 1).unwrap_or(0);
-                let line_end = content[regex_match.start()..].find('\n')
-                    .map(|i| regex_match.start() + i)
-                    .unwrap_or(content.len());
-                let line = &content[line_start..line_end];
-                
-                if let Some(secret_match) =
-                    self.process_pattern_match(pattern, regex_match, line, file_path, line_number)
-                {
-                    matches.push(secret_match);
+        use super::filters::{Filter, content::{RegexInput, CommentFilterInput}};
+        
+        let file_path_str = file_path.to_string_lossy().to_string();
+        
+        // Step 1: Aho-Corasick prefilter - eliminates ~85% of patterns before regex execution
+        let active_patterns = self.prefilter.filter(content)
+            .context("Prefilter failed")?;
+        
+        if active_patterns.is_empty() {
+            tracing::trace!("No active patterns for file {}, skipping regex execution", file_path_str);
+            return Ok(Vec::new());
+        }
+        
+        tracing::trace!(
+            "Prefilter found {} active patterns for file {}",
+            active_patterns.len(),
+            file_path_str
+        );
+        
+        // Step 2: Regex execution on pre-filtered patterns (~15% of original)
+        let regex_input = RegexInput {
+            content: content.to_string(),
+            file_path: file_path_str.clone(),
+            active_patterns,
+        };
+        
+        let matches = self.regex_executor.filter(&regex_input)
+            .context("Regex execution failed")?;
+        
+        if matches.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        tracing::trace!(
+            "Regex executor found {} matches for file {}",
+            matches.len(),
+            file_path_str
+        );
+        
+        // Step 3: Apply entropy analysis if enabled
+        let mut filtered_matches = Vec::new();
+        if self.config.enable_entropy_analysis {
+            for secret_match in matches {
+                // Use the optimized entropy module
+                if super::entropy::is_likely_secret(
+                    secret_match.matched_text.as_bytes(),
+                    self.config.min_entropy_threshold,
+                ) {
+                    filtered_matches.push(secret_match);
+                } else {
+                    tracing::debug!(
+                        "Match '{}' failed entropy analysis in file {} at line {}",
+                        secret_match.matched_text,
+                        file_path_str,
+                        secret_match.line_number
+                    );
                 }
             }
-        }
-
-        Ok(matches)
-    }
-
-    /// Process a single pattern match (extracted for reuse between sequential and parallel)
-    fn process_pattern_match(
-        &self,
-        pattern: &super::patterns::SecretPattern,
-        regex_match: regex::Match,
-        line: &str,
-        file_path: &Path,
-        line_number: usize,
-    ) -> Option<SecretMatch> {
-        // Pattern match found
-        let matched_text = regex_match.as_str();
-
-        // Extract the actual secret from capture groups if present
-        let secret_content = if pattern.regex.captures_len() > 1 {
-            // If pattern has capture groups, use the first group
-            pattern
-                .regex
-                .captures(line)
-                .and_then(|caps| caps.get(1))
-                .map(|m| m.as_str())
-                .unwrap_or(matched_text)
         } else {
-            matched_text
-        };
-
-        // Apply entropy analysis if enabled (only on the secret content)
-        if self.config.enable_entropy_analysis
-            && !is_likely_secret(secret_content.as_bytes(), self.config.min_entropy_threshold)
-        {
-            return None; // Skip if entropy too low
+            filtered_matches = matches;
         }
-
-        Some(SecretMatch {
-            file_path: file_path.to_string_lossy().into_owned(),
-            line_number,
-            line_content: line.to_string(),
-            matched_text: matched_text.to_string(),
-            start_pos: regex_match.start(),
-            end_pos: regex_match.end(),
-            secret_type: pattern.name.clone(),
-            pattern_description: pattern.description.clone(),
-        })
+        
+        if filtered_matches.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // Step 4: Comment filter for guardy:ignore directives
+        let comment_input = CommentFilterInput {
+            matches: filtered_matches,
+            file_content: content.to_string(),
+        };
+        
+        let final_matches = self.comment_filter.filter(&comment_input)
+            .context("Comment filter failed")?;
+        
+        tracing::trace!(
+            "Final pipeline result: {} matches for file {}",
+            final_matches.len(),
+            file_path_str
+        );
+        
+        Ok(final_matches)
     }
+
 }
 
 #[cfg(test)]

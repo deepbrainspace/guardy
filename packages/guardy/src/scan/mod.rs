@@ -2,7 +2,6 @@ pub mod core;
 pub mod directory;
 pub mod entropy;
 pub mod filters;
-pub mod patterns;
 pub mod static_data;
 pub mod types;
 
