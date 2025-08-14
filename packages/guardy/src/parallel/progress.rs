@@ -181,11 +181,6 @@ impl StatisticsProgressReporter {
         self.stats.clone()
     }
 
-    /// Get the MultiProgress instance for coordinating with logging
-    pub fn multi_progress(&self) -> &MultiProgress {
-        &self.multi_progress
-    }
-
     /// Finish all progress bars properly but keep them visible
     pub fn finish(&self) {
         // Finish all worker bars and keep them visible with final state
