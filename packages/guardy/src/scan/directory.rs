@@ -574,8 +574,13 @@ impl DirectoryHandler {
             format!("{:.1}s", discovery_duration.as_secs_f64())
         };
         
+        // Calculate the actual total discovered (before path filtering)
+        // files_discovered = files after path filtering
+        // files_filtered_by_path = directories/files filtered during walk
+        let total_discovered = files_discovered + files_filtered_by_path;
+        
         let final_message = format!(
-            "Discovered {files_discovered} files in {timing_str}, selected {} for scanning (filtered: {files_filtered_by_path} path, {files_filtered_by_size} size, {files_filtered_by_binary} binary)",
+            "Discovered {total_discovered} files in {timing_str}, selected {} for scanning (filtered: {files_filtered_by_path} path, {files_filtered_by_size} size, {files_filtered_by_binary} binary)",
             file_paths.len()
         );
         
