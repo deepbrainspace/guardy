@@ -1,0 +1,30 @@
+[package]
+name = "fast-config-macros"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+authors = ["Nayeem Syed <nayeem@deepbrain.space>"]
+description = "Procedural macros for fast-config - auto-generate structs from config files"
+license = "MIT"
+repository = "https://github.com/deepbrainspace/guardy"
+keywords = ["config", "macro", "codegen", "procedural"]
+categories = ["config", "development-tools::procedural-macro-helpers"]
+
+# This is a procedural macro crate
+[lib]
+proc-macro = true
+
+[dependencies]
+# Procedural macro tools
+proc-macro2 = "1.0.97"
+quote = "1.0.40"
+syn = { version = "2.0.105", features = ["full", "parsing", "printing", "derive", "extra-traits"] }
+
+# For config file parsing and struct generation
+serde_json = "1.0.142"
+serde_yaml_bw = "2.1.1"
+typify = "0.4.2"  # Auto-generate Rust structs from JSON Schema
+schemars = "0.8.22"  # For converting to RootSchema
+
+[dev-dependencies]
+tempfile = "3.20.0"
