@@ -1,0 +1,14 @@
+app:
+  name: "YamlApp"
+  version: "1.0.0"
+server:
+  port: 3000
+  host: "0.0.0.0"
+database:
+  driver: "mysql"
+  host: "localhost"
+  port: 3306
+  name: "yamlapp_db"
+logging:
+  level: "info"
+  format: "json"

@@ -1,0 +1,118 @@
+<style>
+:root {
+    --main-background-color: #0f1419;
+    --main-color: #c5c5c5;
+    --settings-input-color: #2196f3;
+    --settings-input-border-color: #999;
+    --settings-button-color: #fff;
+    --settings-button-border-focus: #ffb44c;
+    --sidebar-background-color: #14191f;
+    --sidebar-background-color-hover: #14191f;
+    --code-block-background-color: #191f26;
+    --scrollbar-track-background-color: #717171;
+    --scrollbar-thumb-background-color: rgba(32, 34, 37, .6);
+    --scrollbar-color: rgba(32, 34, 37, .6) #24292e;
+    --headings-border-bottom-color: #5c6370;
+    --border-color: #5c6370;
+    --button-background-color: #0f1419;
+    --right-side-color: #c5c5c5;
+    --code-attribute-color: #999;
+    --toggles-color: #999;
+    --toggle-filter: invert(100%);
+    --mobile-sidebar-menu-filter: invert(100%);
+    --search-input-focused-border-color: #008dfd;
+    --copy-path-button-color: #999;
+    --copy-path-img-filter: invert(50%);
+    --copy-path-img-hover-filter: invert(65%);
+    --codeblock-error-hover-color: rgb(255, 0, 0);
+    --codeblock-error-color: rgba(255, 0, 0, .5);
+    --codeblock-ignore-hover-color: rgb(255, 142, 0);
+    --codeblock-ignore-color: rgba(255, 142, 0, .6);
+    --warning-border-color: rgb(255, 142, 0);
+    --type-link-color: #ffa0a5;
+    --trait-link-color: #39afd7;
+    --assoc-item-link-color: #39afd7;
+    --function-link-color: #fdd687;
+    --macro-link-color: #a37acc;
+    --module-link-color: #39afd7;
+    --link-color: #39afd7;
+    --sidebar-link-color: #53b1db;
+    --sidebar-current-link-background-color: #444;
+    --search-result-link-focus-background-color: #3c3c3c;
+    --search-result-border-color: #aaa3;
+    --search-color: #fff;
+    --search-error-code-background-color: #4f4c4c;
+    --search-results-alias-color: #c5c5c5;
+    --search-results-grey-color: #999;
+    --search-tab-title-count-color: #888;
+    --search-tab-button-not-selected-border-top-color: #252525;
+    --search-tab-button-not-selected-background: #252525;
+    --search-tab-button-selected-border-top-color: #0089ff;
+    --search-tab-button-selected-background: #353535;
+    --stab-background-color: #314559;
+    --stab-code-color: #e6e1cf;
+    --code-highlight-kw-color: #ff7733;
+    --code-highlight-kw-2-color: #ff7733;
+    --code-highlight-lifetime-color: #ff7733;
+    --code-highlight-prelude-color: #69f2df;
+    --code-highlight-prelude-val-color: #ff7733;
+    --code-highlight-number-color: #b8cc52;
+    --code-highlight-string-color: #b8cc52;
+    --code-highlight-literal-color: #ff7733;
+    --code-highlight-attribute-color: #e6e1cf;
+    --code-highlight-self-color: #36a3d9;
+    --code-highlight-macro-color: #a37acc;
+    --code-highlight-question-mark-color: #ff9011;
+    --code-highlight-comment-color: #788797;
+    --code-highlight-doc-comment-color: #a1ac88;
+    --src-line-numbers-span-color: #5c6370;
+    --src-line-number-highlighted-background-color: rgba(255, 236, 164, 0.06);
+    --test-arrow-color: #dedede;
+    --test-arrow-background-color: rgba(78, 139, 202, 0.2);
+    --test-arrow-hover-color: #dedede;
+    --test-arrow-hover-background-color: #4e8bca;
+    --target-background-color: #494a3d;
+    --target-border-color: #bb7a61;
+    --kbd-color: #c5c5c5;
+    --kbd-background: #314559;
+    --kbd-box-shadow-color: #5c6370;
+    --rust-logo-filter: drop-shadow(1px 0 0px #fff)
+        drop-shadow(0 1px 0 #fff)
+        drop-shadow(-1px 0 0 #fff)
+        drop-shadow(0 -1px 0 #fff);
+    --crate-search-div-filter: invert(94%) sepia(0%) saturate(721%) hue-rotate(255deg) brightness(90%) contrast(90%);
+    --crate-search-div-hover-filter: invert(69%) sepia(60%) saturate(6613%) hue-rotate(184deg) brightness(100%) contrast(91%);
+    --crate-search-hover-border: #2196f3;
+    --src-sidebar-background-selected: #333;
+    --src-sidebar-background-hover: #444;
+    --table-alt-row-background-color: #191f26;
+    --codeblock-link-background: #333;
+    --scrape-example-toggle-line-background: #999;
+    --scrape-example-toggle-line-hover-background: #c5c5c5;
+    --scrape-example-code-line-highlight: #5b7d90;
+    --scrape-example-code-line-highlight-focus: #7ba2b8;
+    --scrape-example-help-border-color: #aaa;
+    --scrape-example-help-color: #eee;
+    --scrape-example-help-hover-border-color: #fff;
+    --scrape-example-help-hover-color: #fff;
+    --scrape-example-code-wrapper-background-start: rgba(53, 53, 53, 1);
+    --scrape-example-code-wrapper-background-end: rgba(53, 53, 53, 0);
+    --sidebar-resizer-hover: hsl(207, 30%, 54%);
+    --sidebar-resizer-active: hsl(207, 90%, 54%);
+    --notecard-warning-border: hsl(38, 79%, 75%);
+    --notecard-warning-background: hsla(54, 69%, 52%, 0.1);
+    --notecard-note-border: hsl(210, 67%, 75%);
+    --notecard-note-background: hsla(210, 67%, 60%, 0.1);
+}
+
+/* Set the default theme to dark */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+}
+
+/* Force ayu theme for docs.rs */
+.ayu {
+    --main-background-color: #0f1419;
+    --main-color: #c5c5c5;
+}
+</style>
