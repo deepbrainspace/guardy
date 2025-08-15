@@ -1,0 +1,194 @@
+//! Integration tests for SCC-powered concurrent containers
+//! 
+//! These tests verify that the concurrent HashMap and HashSet work correctly
+//! and provide better performance than standard alternatives.
+
+use fast_config::concurrent::{HashMap, HashSet, PATTERN_CACHE, FILE_CACHE};
+use std::sync::Arc;
+use std::thread;
+
+#[test]
+fn test_concurrent_hashmap_basic_operations() {
+    let map: HashMap<String, i32> = HashMap::default();
+    
+    // Insert values
+    assert!(map.insert("key1".to_string(), 100).is_ok());
+    assert!(map.insert("key2".to_string(), 200).is_ok());
+    
+    // Read values
+    let value1 = map.read(&"key1".to_string(), |_, v| *v);
+    assert_eq!(value1, Some(100));
+    
+    let value2 = map.read(&"key2".to_string(), |_, v| *v);
+    assert_eq!(value2, Some(200));
+    
+    // Update values
+    assert!(map.update(&"key1".to_string(), |_, v| *v = 150));
+    let updated = map.read(&"key1".to_string(), |_, v| *v);
+    assert_eq!(updated, Some(150));
+    
+    // Remove values
+    let removed = map.remove(&"key1".to_string());
+    assert!(removed.is_some());
+    
+    let after_remove = map.read(&"key1".to_string(), |_, v| *v);
+    assert_eq!(after_remove, None);
+}
+
+#[test] 
+fn test_concurrent_hashset_basic_operations() {
+    let set: HashSet<String> = HashSet::default();
+    
+    // Insert values
+    assert!(set.insert("item1".to_string()).is_ok());
+    assert!(set.insert("item2".to_string()).is_ok());
+    
+    // Check contains
+    assert!(set.read(&"item1".to_string(), |_| true).is_some());
+    assert!(set.read(&"item2".to_string(), |_| true).is_some());
+    assert!(set.read(&"item3".to_string(), |_| true).is_none());
+    
+    // Remove values
+    let removed = set.remove(&"item1".to_string());
+    assert!(removed.is_some());
+    
+    let after_remove = set.read(&"item1".to_string(), |_| true);
+    assert_eq!(after_remove, None);
+}
+
+#[test]
+fn test_concurrent_access_under_load() {
+    let map: Arc<HashMap<i32, String>> = Arc::new(HashMap::default());
+    let num_threads = 10;
+    let operations_per_thread = 100;
+    
+    let handles: Vec<_> = (0..num_threads)
+        .map(|thread_id| {
+            let map_clone = Arc::clone(&map);
+            thread::spawn(move || {
+                for i in 0..operations_per_thread {
+                    let key = thread_id * operations_per_thread + i;
+                    let value = format!("thread_{}_value_{}", thread_id, i);
+                    
+                    // Insert
+                    map_clone.insert(key, value.clone()).unwrap();
+                    
+                    // Read
+                    let read_value = map_clone.read(&key, |_, v| v.clone());
+                    assert_eq!(read_value, Some(value));
+                    
+                    // Update
+                    let updated_value = format!("{}_updated", value);
+                    map_clone.update(&key, |_, v| *v = updated_value.clone());
+                    
+                    // Verify update
+                    let final_value = map_clone.read(&key, |_, v| v.clone());
+                    assert_eq!(final_value, Some(updated_value));
+                }
+            })
+        })
+        .collect();
+    
+    // Wait for all threads to complete
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    
+    // Verify final state
+    let total_items = num_threads * operations_per_thread;
+    let mut count = 0;
+    map.scan(|_, _| {
+        count += 1;
+    });
+    assert_eq!(count, total_items);
+}
+
+#[test]
+fn test_global_pattern_cache() {
+    // Test the global PATTERN_CACHE
+    let regex1 = regex::Regex::new(r"test_pattern_1").unwrap();
+    let regex2 = regex::Regex::new(r"test_pattern_2").unwrap();
+    
+    // Insert patterns
+    assert!(PATTERN_CACHE.insert("pattern1".to_string(), regex1).is_ok());
+    assert!(PATTERN_CACHE.insert("pattern2".to_string(), regex2).is_ok());
+    
+    // Read patterns
+    let retrieved1 = PATTERN_CACHE.read(&"pattern1".to_string(), |_, regex| regex.as_str().to_string());
+    assert_eq!(retrieved1, Some("test_pattern_1".to_string()));
+    
+    let retrieved2 = PATTERN_CACHE.read(&"pattern2".to_string(), |_, regex| regex.as_str().to_string());
+    assert_eq!(retrieved2, Some("test_pattern_2".to_string()));
+    
+    // Test pattern matching
+    let matches = PATTERN_CACHE.read(&"pattern1".to_string(), |_, regex| {
+        regex.is_match("this is a test_pattern_1 example")
+    });
+    assert_eq!(matches, Some(true));
+}
+
+#[test]
+fn test_global_file_cache() {
+    use std::path::PathBuf;
+    
+    // Test the global FILE_CACHE
+    let file1 = PathBuf::from("/path/to/file1.txt");
+    let file2 = PathBuf::from("/path/to/file2.txt");
+    
+    // Insert files
+    assert!(FILE_CACHE.insert(file1.clone()).is_ok());
+    assert!(FILE_CACHE.insert(file2.clone()).is_ok());
+    
+    // Check existence
+    assert!(FILE_CACHE.read(&file1, |_| true).is_some());
+    assert!(FILE_CACHE.read(&file2, |_| true).is_some());
+    
+    let nonexistent = PathBuf::from("/nonexistent/file.txt");
+    assert!(FILE_CACHE.read(&nonexistent, |_| true).is_none());
+    
+    // Remove file
+    let removed = FILE_CACHE.remove(&file1);
+    assert!(removed.is_some());
+    
+    // Verify removal
+    assert!(FILE_CACHE.read(&file1, |_| true).is_none());
+    assert!(FILE_CACHE.read(&file2, |_| true).is_some());
+}
+
+#[test]
+fn test_performance_comparison() {
+    use std::collections::HashMap as StdHashMap;
+    use std::sync::RwLock;
+    use std::time::Instant;
+    
+    let iterations = 10000;
+    
+    // Test SCC HashMap
+    let scc_map: HashMap<i32, String> = HashMap::default();
+    let start = Instant::now();
+    for i in 0..iterations {
+        scc_map.insert(i, format!("value_{}", i)).unwrap();
+    }
+    for i in 0..iterations {
+        scc_map.read(&i, |_, v| v.clone());
+    }
+    let scc_duration = start.elapsed();
+    
+    // Test standard HashMap with RwLock
+    let std_map: RwLock<StdHashMap<i32, String>> = RwLock::new(StdHashMap::new());
+    let start = Instant::now();
+    for i in 0..iterations {
+        std_map.write().unwrap().insert(i, format!("value_{}", i));
+    }
+    for i in 0..iterations {
+        let _value = std_map.read().unwrap().get(&i).cloned();
+    }
+    let std_duration = start.elapsed();
+    
+    println!("SCC HashMap: {:?}", scc_duration);
+    println!("Std HashMap + RwLock: {:?}", std_duration);
+    
+    // SCC should be competitive or better (this is informational, not a strict test)
+    // The exact performance depends on the specific workload and system
+    assert!(scc_duration <= std_duration * 2); // Allow some margin for test stability
+}

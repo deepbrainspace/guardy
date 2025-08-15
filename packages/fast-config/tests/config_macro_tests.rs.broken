@@ -1,0 +1,193 @@
+//! Integration tests for the config! procedural macro
+//! 
+//! These tests verify that the macro correctly:
+//! - Discovers config files in various locations
+//! - Generates appropriate Rust structs from config content
+//! - Creates LazyLock static instances for zero-copy access
+//! - Handles various config formats (JSON, YAML)
+
+use fast_config::config;
+use std::fs;
+use tempfile::TempDir;
+
+#[test]
+fn test_simple_json_config_generation() {
+    // Create a temporary config file
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("testapp.json");
+    
+    fs::write(&config_path, r#"{
+        "server": {
+            "port": 8080,
+            "host": "localhost"
+        },
+        "database": {
+            "url": "postgres://localhost/test",
+            "max_connections": 10
+        },
+        "debug": true
+    }"#).unwrap();
+    
+    // Change working directory to temp dir so macro can find the file
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+    
+    // This should generate a struct and static instance
+    config!("testapp" => TestAppConfig);
+    
+    // Test that we can access the generated config
+    let config = TestAppConfig::global();
+    assert_eq!(config.debug, true);
+    assert_eq!(config.server.port, 8080);
+    assert_eq!(config.server.host, "localhost");
+    assert_eq!(config.database.max_connections, 10);
+    
+    // Restore original directory
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_yaml_config_generation() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("yamlapp.yaml");
+    
+    fs::write(&config_path, r#"
+app:
+  name: "MyApp"
+  version: "1.0.0"
+features:
+  - "auth"
+  - "metrics" 
+  - "logging"
+settings:
+  timeout: 30
+  retries: 3
+  enabled: true
+"#).unwrap();
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+    
+    config!("yamlapp" => YamlAppConfig);
+    
+    let config = YamlAppConfig::global();
+    assert_eq!(config.app.name, "MyApp");
+    assert_eq!(config.app.version, "1.0.0");
+    assert_eq!(config.features.len(), 3);
+    assert_eq!(config.settings.timeout, 30);
+    assert_eq!(config.settings.enabled, true);
+    
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_nested_object_generation() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("nested.json");
+    
+    fs::write(&config_path, r#"{
+        "level1": {
+            "level2": {
+                "level3": {
+                    "deep_value": "found",
+                    "deep_number": 42
+                }
+            }
+        }
+    }"#).unwrap();
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+    
+    config!("nested" => NestedConfig);
+    
+    let config = NestedConfig::global();
+    assert_eq!(config.level1.level2.level3.deep_value, "found");
+    assert_eq!(config.level1.level2.level3.deep_number, 42);
+    
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_array_handling() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("arrays.yaml");
+    
+    fs::write(&config_path, r#"
+string_array:
+  - "item1"
+  - "item2"
+  - "item3"
+number_array:
+  - 1
+  - 2
+  - 3
+mixed_objects:
+  - name: "first"
+    value: 100
+  - name: "second" 
+    value: 200
+"#).unwrap();
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+    
+    config!("arrays" => ArrayConfig);
+    
+    let config = ArrayConfig::global();
+    assert_eq!(config.string_array.len(), 3);
+    assert_eq!(config.string_array[0], "item1");
+    assert_eq!(config.number_array.len(), 3);
+    assert_eq!(config.number_array[1], 2);
+    
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_cache_performance() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("perftest.json");
+    
+    fs::write(&config_path, r#"{
+        "large_config": {
+            "many_fields": "to test caching performance",
+            "field1": "value1",
+            "field2": "value2",
+            "field3": "value3"
+        }
+    }"#).unwrap();
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+    
+    config!("perftest" => PerfTestConfig);
+    
+    // First access (loads from file)
+    let start = std::time::Instant::now();
+    let _config1 = PerfTestConfig::global();
+    let first_access = start.elapsed();
+    
+    // Second access (should be sub-microsecond from LazyLock)
+    let start = std::time::Instant::now();
+    let _config2 = PerfTestConfig::global();
+    let second_access = start.elapsed();
+    
+    // Second access should be much faster (LazyLock performance)
+    assert!(second_access < first_access);
+    assert!(second_access.as_nanos() < 1000); // Sub-microsecond
+    
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "No config file found")]
+fn test_missing_config_file_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+    
+    // This should fail to compile due to missing config file
+    config!("nonexistent" => NonExistentConfig);
+    
+    std::env::set_current_dir(original_dir).unwrap();
+}

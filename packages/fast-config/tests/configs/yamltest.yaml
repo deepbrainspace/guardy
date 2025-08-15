@@ -1,0 +1,21 @@
+app:
+  name: "FastConfig Test"
+  version: "1.0.0"
+  
+server:
+  port: 3000
+  host: "0.0.0.0"
+  
+database:
+  url: "mysql://localhost/testdb"
+  pool_size: 20
+  
+settings:
+  timeout: 30
+  retries: 3
+  enabled: true
+  
+features:
+  - "caching"
+  - "monitoring"
+  - "alerts"

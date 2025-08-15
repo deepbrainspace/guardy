@@ -1,0 +1,12 @@
+{
+  "server": {
+    "port": 8080,
+    "host": "localhost"
+  },
+  "database": {
+    "url": "postgres://localhost/test",
+    "max_connections": 10
+  },
+  "features": ["auth", "metrics", "logging"],
+  "debug": true
+}
