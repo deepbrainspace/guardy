@@ -100,12 +100,10 @@
 //!
 //! ```rust,no_run
 //! use guardy::scan::Scanner;
-//! use guardy::config::GuardyConfig;
 //! use std::path::Path;
 //!
-//! // Load configuration
-//! let config = GuardyConfig::load(None, None::<&()>, 0)?;
-//! let scanner = Scanner::new(&config)?;
+//! // Create scanner with global config
+//! let scanner = Scanner::new()?;
 //!
 //! // Scan files for secrets
 //! let results = scanner.scan_directory(Path::new("src/"), None)?;

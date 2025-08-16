@@ -62,7 +62,7 @@ pub enum Commands {
 }
 
 impl Cli {
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(&self) -> Result<()> {
         // Change directory if specified
         if let Some(dir) = &self.directory {
             std::env::set_current_dir(dir)?;
@@ -71,24 +71,23 @@ impl Cli {
         // Set up logging based on verbosity
         setup_logging(self.verbose, self.quiet);
 
-        match self.command {
-            Some(Commands::Install(args)) => install::execute(args, self.verbose).await,
-            Some(Commands::Run(args)) => run::execute(args, self.verbose).await,
+        match &self.command {
+            Some(Commands::Install(args)) => install::execute(args.clone()).await,
+            Some(Commands::Run(args)) => run::execute(args.clone()).await,
             Some(Commands::Scan(args)) => {
-                tracing::debug!(config_path = ?self.config, "CLI config path");
-                scan::execute(args, self.verbose, self.config.as_deref()).await
+                scan::execute(args.clone(), self.verbose, self.config.as_deref()).await
             }
             Some(Commands::Config(args)) => {
-                config::execute(args, self.config.as_deref(), self.verbose).await
+                config::execute(args.clone(), self.config.as_deref(), self.verbose).await
             }
-            Some(Commands::Status(args)) => status::execute(args, self.verbose).await,
-            Some(Commands::Uninstall(args)) => uninstall::execute(args).await,
-            Some(Commands::Sync(args)) => sync::execute(args, self.config.as_deref()).await,
-            Some(Commands::Version(args)) => version::execute(args).await,
+            Some(Commands::Status(args)) => status::execute(args.clone()).await,
+            Some(Commands::Uninstall(args)) => uninstall::execute(args.clone()).await,
+            Some(Commands::Sync(args)) => sync::execute(args.clone()).await,
+            Some(Commands::Version(args)) => version::execute(args.clone()).await,
             None => {
                 // Default behavior - show status if in git repo, otherwise show help
                 if crate::git::GitRepo::discover().is_ok() {
-                    status::execute(status::StatusArgs::default(), self.verbose).await
+                    status::execute(status::StatusArgs::default()).await
                 } else {
                     // TODO: Implement proper help display using clap's help system
                     println!("Run 'guardy --help' for usage information");

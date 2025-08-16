@@ -1,0 +1,33 @@
+ Flow:
+  Application Startup
+  → CLI parses args and stores in static
+  → Config module LazyLock initializes once: defaults + file + CLI overrides
+  → Scanner just accesses: config::SCANNER_CONFIG.some_field
+  → No function calls, no returns, just direct static access
+
+  Implementation Plan
+
+  1. Move Pattern Library
+
+  scan/static_data/patterns.rs → config/patterns.rs as native Rust structs
+
+  2. Create Static Config - New config/static.rs:
+
+  pub static GUARDY_CONFIG: LazyLock<Arc<GuardyConfig>> = LazyLock::new(|| {
+      let defaults = GuardyConfig::default();
+      let file_config = load_config_file(); // if exists
+      let cli_overrides = get_cli_overrides(); // from static CLI args
+      Arc::new(merge_configs(defaults, file_config, cli_overrides))
+  });
+
+  3. Update CLI - Store CLI args in static, use config singleton
+
+  4. Clean Scanner - Just access config::GUARDY_CONFIG.scanner.field_name
+
+  5. CLI Overrides Module - Handle parsing CLI args into config overrides
+
+  Key Benefits:
+  - Zero-cost access after first initialization
+  - No function calls during scanning
+  - Single source of truth
+  - Thread-safe Arc sharing

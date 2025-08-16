@@ -7,7 +7,6 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
@@ -28,22 +27,6 @@ pub struct CompiledPattern {
     pub priority: u8,
 }
 
-/// YAML pattern definition for deserialization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct YamlPattern {
-    name: String,
-    regex: String,
-    description: String,
-    classification: String,
-    keywords: Vec<String>,
-    priority: u8,
-}
-
-/// YAML patterns file structure
-#[derive(Debug, Serialize, Deserialize)]
-struct PatternsConfig {
-    patterns: Vec<YamlPattern>,
-}
 
 /// The pattern library containing all compiled patterns
 pub struct PatternLibrary {
@@ -61,43 +44,26 @@ impl PatternLibrary {
     fn new() -> Result<Self> {
         let start = std::time::Instant::now();
         
-        // Step 1: Load base patterns from embedded YAML
-        let base_patterns = Self::load_embedded_patterns()?;
-        tracing::info!("Loaded {} base patterns", base_patterns.len());
-        
-        // Step 2: Try to load custom patterns (optional)
-        let custom_patterns = Self::load_custom_patterns().unwrap_or_else(|e| {
-            tracing::warn!("Failed to load custom patterns: {}", e);
-            Vec::new()
-        });
-        if !custom_patterns.is_empty() {
-            tracing::info!("Loaded {} custom patterns", custom_patterns.len());
-        }
-        
-        // Step 3: Merge and compile all patterns
+        // Step 1: Compile base patterns directly from native Rust data
         let mut all_patterns = Vec::new();
         let mut keywords = Vec::new();
         let mut pattern_map = HashMap::new();
         
-        // Process base patterns
-        for (index, yaml_pattern) in base_patterns.into_iter().enumerate() {
-            let compiled = Self::compile_pattern(index, yaml_pattern)?;
+        use super::base_patterns::BASE_PATTERNS;
+        
+        // Process base patterns directly (no YAML conversion)
+        for (index, base_pattern) in BASE_PATTERNS.iter().enumerate() {
+            let compiled = Self::compile_base_pattern(index, base_pattern)?;
             keywords.extend(compiled.keywords.clone());
             let arc_pattern = Arc::new(compiled.clone());
             pattern_map.insert(index, arc_pattern);
             all_patterns.push(compiled);
         }
         
-        // Process custom patterns (continue numbering)
-        let base_count = all_patterns.len();
-        for (offset, yaml_pattern) in custom_patterns.into_iter().enumerate() {
-            let index = base_count + offset;
-            let compiled = Self::compile_pattern(index, yaml_pattern)?;
-            keywords.extend(compiled.keywords.clone());
-            let arc_pattern = Arc::new(compiled.clone());
-            pattern_map.insert(index, arc_pattern);
-            all_patterns.push(compiled);
-        }
+        tracing::info!("Compiled {} base patterns", BASE_PATTERNS.len());
+        
+        // Step 2: Process custom patterns (if any) - for future config integration
+        // TODO: Load custom patterns from config system when needed
         
         // Sort patterns by priority (higher first)
         all_patterns.sort_by(|a, b| b.priority.cmp(&a.priority));
@@ -119,37 +85,21 @@ impl PatternLibrary {
         })
     }
     
-    /// Load embedded patterns from YAML
-    fn load_embedded_patterns() -> Result<Vec<YamlPattern>> {
-        const EMBEDDED_PATTERNS: &str = include_str!("../../../assets/patterns.yaml");
-        
-        let config: PatternsConfig = serde_yaml_bw::from_str(EMBEDDED_PATTERNS)
-            .context("Failed to parse embedded patterns YAML")?;
-        
-        Ok(config.patterns)
-    }
-    
-    /// Load custom patterns from scanner configuration
-    fn load_custom_patterns() -> Result<Vec<YamlPattern>> {
-        // For now return empty - patterns can be added via config later
-        // TODO: Integrate with GuardyConfig when custom patterns are needed
-        Ok(Vec::new())
-    }
-    
-    /// Compile a YAML pattern into a CompiledPattern
-    fn compile_pattern(index: usize, yaml: YamlPattern) -> Result<CompiledPattern> {
-        let regex = Regex::new(&yaml.regex)
-            .with_context(|| format!("Failed to compile regex for pattern '{}'", yaml.name))?;
+    /// Compile a base pattern directly into a CompiledPattern (zero YAML overhead)
+    fn compile_base_pattern(index: usize, base: &super::base_patterns::BasePattern) -> Result<CompiledPattern> {
+        let regex = Regex::new(base.regex)
+            .with_context(|| format!("Failed to compile regex for pattern '{}'", base.name))?;
         
         Ok(CompiledPattern {
             index,
-            name: Arc::from(yaml.name.as_str()),
+            name: Arc::from(base.name),
             regex,
-            description: Arc::from(yaml.description.as_str()),
-            keywords: yaml.keywords,
-            priority: yaml.priority,
+            description: Arc::from(base.description),
+            keywords: base.keywords.iter().map(|&s| s.to_string()).collect(),
+            priority: base.priority,
         })
     }
+    
     
     /// Get all patterns
     pub fn patterns(&self) -> &[CompiledPattern] {

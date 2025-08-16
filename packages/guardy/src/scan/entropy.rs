@@ -34,7 +34,7 @@ static BIGRAMS_SET: LazyLock<Arc<HashSet<&'static [u8]>>> = LazyLock::new(|| {
 /// 3. Bigram frequency analysis
 ///
 /// Returns true if the string appears to be randomly generated (likely a secret)
-pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
+pub fn is_likely_secret(data: &[u8], min_threshold: f32) -> bool {
     let probability = calculate_randomness_probability(data);
 
     // Use tracing for debug output instead of loading config every time
@@ -45,7 +45,7 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
         min_threshold
     );
 
-    if probability < min_threshold {
+    if probability < min_threshold as f64 {
         tracing::trace!("Failed basic threshold check");
         return false;
     }
@@ -59,10 +59,10 @@ pub fn is_likely_secret(data: &[u8], min_threshold: f64) -> bool {
         }
     }
 
-    if !contains_number && probability < min_threshold * 10.0 {
+    if !contains_number && probability < (min_threshold as f64) * 10.0 {
         tracing::trace!(
             "Failed no-numbers threshold check (needs {:.2e})",
-            min_threshold * 10.0
+            (min_threshold as f64) * 10.0
         );
         return false;
     }

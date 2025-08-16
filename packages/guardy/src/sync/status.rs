@@ -1,5 +1,6 @@
 use super::{SyncStatus, manager::SyncManager};
 use crate::cli::output;
+use crate::config::CONFIG;
 use anyhow::Result;
 
 pub struct StatusDisplay<'a> {
@@ -13,7 +14,7 @@ impl<'a> StatusDisplay<'a> {
 
     pub fn show_detailed_status(&self) -> Result<()> {
         // Show configured repositories
-        if self.manager.config.repos.is_empty() {
+        if CONFIG.sync.repos.is_empty() {
             output::styled!(
                 "{} No sync repositories configured",
                 ("⚠️", "warning_symbol")
@@ -29,7 +30,7 @@ impl<'a> StatusDisplay<'a> {
         }
 
         output::styled!("{} Sync Configuration", ("📋", "info_symbol"));
-        println!("  Repositories: {}", self.manager.config.repos.len());
+        println!("  Repositories: {}", CONFIG.sync.repos.len());
         println!(
             "  Cache Directory: {}",
             self.manager.get_cache_dir().display()
@@ -37,7 +38,7 @@ impl<'a> StatusDisplay<'a> {
         println!();
 
         // Show each repository configuration
-        for repo in &self.manager.config.repos {
+        for repo in &*CONFIG.sync.repos {
             output::styled!("  {} {}", ("📦", "info_symbol"), (&repo.name, "property"));
             println!("      Repository: {}", output::file_path(repo.repo.clone()));
             println!(

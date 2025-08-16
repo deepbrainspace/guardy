@@ -317,7 +317,7 @@ impl ExecutionStrategy {
     /// - Application logic
     ///
     /// Domain-specific adaptations should be handled by the calling module.
-    pub fn calculate_optimal_workers(max_threads_config: usize, thread_percentage: u8) -> usize {
+    pub fn calculate_optimal_workers(max_threads_config: u16, thread_percentage: u8) -> usize {
         let available_cores = num_cpus::get();
 
         // Calculate workers based on percentage of available cores
@@ -326,7 +326,7 @@ impl ExecutionStrategy {
 
         // Apply config limit if specified (0 means use percentage calculation only)
         if max_threads_config > 0 {
-            std::cmp::min(max_threads_config, workers_by_percentage)
+            std::cmp::min(max_threads_config as usize, workers_by_percentage)
         } else {
             workers_by_percentage
         }

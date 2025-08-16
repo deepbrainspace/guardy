@@ -45,7 +45,7 @@ pub struct ScanResult {
 
 /// Scanning mode for determining parallelization strategy
 #[derive(
-    Debug, Clone, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default,
+    Debug, Clone, Copy, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default,
 )]
 pub enum ScanMode {
     /// Always use sequential processing
@@ -57,65 +57,16 @@ pub enum ScanMode {
     Auto,
 }
 
-/// Configuration for the scanner
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(default)]
-pub struct ScannerConfig {
-    pub enable_entropy_analysis: bool,
-    pub min_entropy_threshold: f64,
-    pub follow_symlinks: bool,
-    pub max_file_size_mb: usize,
-    pub include_binary: bool,
-    pub ignore_paths: Vec<String>,
-    pub ignore_patterns: Vec<String>,
-    pub ignore_comments: Vec<String>,
-    pub custom_patterns: Vec<String>,
-    // Processing mode settings
-    pub mode: ScanMode,
-    pub max_threads: usize,
-    pub thread_percentage: u8,
-    pub min_files_for_parallel: usize,
-}
-
-impl Default for ScannerConfig {
-    fn default() -> Self {
-        Self {
-            enable_entropy_analysis: true,
-            min_entropy_threshold: 1.0 / 1e5,
-            follow_symlinks: false,
-            max_file_size_mb: 50,
-            include_binary: false, // Skip binary files by default
-            ignore_paths: vec![
-                // File-specific patterns only - directories are handled by DirectoryHandler
-                // Users can add custom patterns via config
-            ],
-            ignore_patterns: vec![
-                "# TEST_SECRET:".to_string(),
-                "DEMO_KEY_".to_string(),
-                "FAKE_".to_string(),
-            ],
-            ignore_comments: vec![
-                "guardy:ignore".to_string(),
-                "guardy:ignore-line".to_string(),
-                "guardy:ignore-next".to_string(),
-            ],
-            custom_patterns: vec![],
-            // Processing mode defaults
-            mode: ScanMode::Auto,
-            max_threads: 0, // 0 = auto-detect
-            thread_percentage: 75,
-            min_files_for_parallel: 50,
-        }
-    }
-}
+// ScannerConfig removed - use config::core::ScannerConfig directly from GUARDY_CONFIG
+// This eliminates duplication and ensures single source of truth
+use std::sync::Arc;
 
 /// Main scanner struct - handles secret detection across files and directories
 ///
-/// NOTE: All scanner-related types should be defined in types.rs, not here.
-/// This keeps the type definitions modular and the implementation focused.
+/// All configuration is accessed directly from GUARDY_CONFIG for simplicity and efficiency.
+/// Filters are cached for performance (created once, reused everywhere).
 #[derive(Clone)]
 pub struct Scanner {
-    pub(crate) config: ScannerConfig,
     /// Cached filters for performance (created once, reused everywhere)
     pub(crate) binary_filter: std::sync::Arc<super::filters::directory::BinaryFilter>,
     pub(crate) path_filter: std::sync::Arc<super::filters::directory::PathFilter>,

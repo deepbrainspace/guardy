@@ -1,11 +1,19 @@
-//! Native Rust defaults for Guardy configuration
-//! 
-//! This module provides zero-cost defaults using native Rust types
-//! with cache-line optimization for hot path fields.
+//! Core configuration module for Guardy
+//!
+//! This module provides the central configuration system with:
+//! - Zero-cost static configuration via LazyLock
+//! - CLI override support baked into defaults
+//! - Direct field access for maximum performance
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use serde::{Deserialize, Serialize};
 use crate::scan::types::ScanMode;
+
+/// Global configuration - initialized once, shared everywhere
+pub static CONFIG: LazyLock<Arc<GuardyConfig>> = LazyLock::new(|| {
+    // Default::default() handles CLI overrides internally
+    Arc::new(GuardyConfig::default())
+});
 
 /// Main Guardy configuration with Arc-wrapped sub-configs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,45 +55,36 @@ pub struct HookConfig {
     pub enabled: bool,
     pub builtin: Arc<Vec<String>>,
     pub custom: Arc<Vec<CustomCommand>>,
+    #[serde(default)]
+    pub parallel: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomCommand {
     pub command: String,
+    #[serde(default)]
     pub description: String,
-    pub fail_on_error: bool,
+    #[serde(default)]
+    pub continue_on_error: bool,
+    #[serde(default)]
+    pub all_files: bool,
+    #[serde(default)]
+    pub glob: Arc<Vec<String>>,
+    #[serde(default)]
+    pub stage_fixed: bool,
 }
 
-/// Scanner configuration with hot/cold field separation
+/// Scanner configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScannerConfig {
-    /// Hot fields - accessed on every file scan (cache-line optimized)
-    #[serde(flatten)]
-    pub hot: ScannerHotConfig,
-    /// Cold fields - rarely accessed (Arc-wrapped)
-    #[serde(flatten)]
-    pub cold: Arc<ScannerColdConfig>,
-}
-
-/// Hot path scanner config - fits in single 64-byte cache line
-#[repr(C, align(64))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScannerHotConfig {
-    pub mode: ScanMode,               // 1 byte (enum)
-    pub max_threads: u16,             // 2 bytes
-    pub include_binary: bool,         // 1 byte
-    pub follow_symlinks: bool,        // 1 byte
-    pub max_file_size_mb: u32,        // 4 bytes
-    pub enable_entropy_analysis: bool, // 1 byte
-    pub entropy_threshold: f32,       // 4 bytes (f32 instead of f64)
-    pub ignore_test_code: bool,       // 1 byte
-    #[serde(skip)]
-    _padding: [u8; 49],               // Pad to exactly 64 bytes
-}
-
-/// Cold scanner config - separate allocation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScannerColdConfig {
+    pub mode: ScanMode,
+    pub max_threads: u16,
+    pub include_binary: bool,
+    pub follow_symlinks: bool,
+    pub max_file_size_mb: u32,
+    pub enable_entropy_analysis: bool,
+    pub entropy_threshold: f32,
+    pub ignore_test_code: bool,
     pub thread_percentage: u8,
     pub min_files_for_parallel: usize,
     pub ignore_paths: Arc<Vec<String>>,
@@ -153,10 +152,15 @@ pub struct RepoConfig {
     pub name: String,
     pub repo: String,
     pub version: String,
+    #[serde(default = "default_source_path")]
     pub source_path: String,
+    #[serde(default = "default_dest_path")]
     pub dest_path: String,
+    #[serde(default)]
     pub include: Arc<Vec<String>>,
+    #[serde(default)]
     pub exclude: Arc<Vec<String>>,
+    #[serde(default)]
     pub protected: bool,
 }
 
@@ -168,10 +172,17 @@ pub struct SyncProtectionConfig {
 
 impl Default for GuardyConfig {
     fn default() -> Self {
+        // Get CLI args if available
+        let cli = crate::cli::CLI.get();
+        let scan_args = cli.and_then(|c| match &c.command {
+            Some(crate::cli::commands::Commands::Scan(args)) => Some(args),
+            _ => None,
+        });
+        
         GuardyConfig {
             general: Arc::new(GeneralConfig {
-                debug: false,
-                color: true,
+                debug: cli.map_or(false, |c| c.verbose > 1),
+                color: cli.map_or(true, |c| !c.quiet),
                 interactive: true,
             }),
             
@@ -180,40 +191,42 @@ impl Default for GuardyConfig {
                     enabled: true,
                     builtin: Arc::new(vec!["scan_secrets".into()]),
                     custom: Arc::new(vec![]),
+                    parallel: true,
                 },
                 commit_msg: HookConfig {
                     enabled: false,
                     builtin: Arc::new(vec![]),
                     custom: Arc::new(vec![]),
+                    parallel: true,
                 },
                 post_checkout: HookConfig {
                     enabled: false,
                     builtin: Arc::new(vec![]),
                     custom: Arc::new(vec![]),
+                    parallel: true,
                 },
                 pre_push: HookConfig {
                     enabled: false,
                     builtin: Arc::new(vec![]),
                     custom: Arc::new(vec![]),
+                    parallel: true,
                 },
             }),
             
             scanner: Arc::new(ScannerConfig {
-                hot: ScannerHotConfig {
-                    mode: ScanMode::Auto,
-                    max_threads: 0,  // 0 = auto-detect
-                    include_binary: false,
-                    follow_symlinks: false,
-                    max_file_size_mb: 10,
-                    enable_entropy_analysis: true,
-                    entropy_threshold: 0.00001,
-                    ignore_test_code: true,
-                    _padding: [0; 49],
-                },
-                cold: Arc::new(ScannerColdConfig {
-                    thread_percentage: 75,
-                    min_files_for_parallel: 50,
-                    ignore_paths: Arc::new(vec![
+                mode: scan_args.and_then(|a| a.mode).unwrap_or(ScanMode::Auto),
+                max_threads: scan_args.map_or(0, |a| a.max_file_size as u16),  // 0 = auto-detect
+                include_binary: scan_args.map_or(false, |a| a.include_binary),
+                follow_symlinks: scan_args.map_or(false, |a| a.follow_symlinks),
+                max_file_size_mb: scan_args.map_or(10, |a| a.max_file_size as u32),
+                enable_entropy_analysis: scan_args.map_or(true, |a| !a.no_entropy),
+                entropy_threshold: scan_args.and_then(|a| a.entropy_threshold)
+                    .map_or(0.00001, |t| t as f32),
+                ignore_test_code: true,
+                thread_percentage: 75,
+                min_files_for_parallel: 50,
+                ignore_paths: Arc::new({
+                    let mut paths = vec![
                         // Test directories
                         "tests/*".into(),
                         "testdata/*".into(),
@@ -236,43 +249,65 @@ impl Default for GuardyConfig {
                         ".git/index".into(),
                         "**/.git/objects/**".into(),
                         "**/.git_disabled/**".into(),
-                    ]),
-                    ignore_patterns: Arc::new(vec![
+                    ];
+                    if let Some(args) = scan_args {
+                        paths.extend(args.ignore_paths.iter().cloned());
+                    }
+                    paths
+                }),
+                ignore_patterns: Arc::new({
+                    let mut patterns = vec![
                         "# TEST_SECRET:".into(),
                         "DEMO_KEY_".into(),
                         "FAKE_".into(),
-                    ]),
-                    ignore_comments: Arc::new(vec![
+                    ];
+                    if let Some(args) = scan_args {
+                        patterns.extend(args.ignore_patterns.iter().cloned());
+                    }
+                    patterns
+                }),
+                ignore_comments: Arc::new({
+                    let mut comments = vec![
                         "guardy:ignore".into(),
                         "guardy:ignore-line".into(),
                         "guardy:ignore-next".into(),
-                    ]),
-                    custom_patterns: Arc::new(vec![]),
-                    test_attributes: Arc::new(vec![
-                        // Rust
-                        "#[*test]".into(),
-                        "#[bench]".into(),
-                        "#[cfg(test)]".into(),
-                        // Python
-                        "def test_*".into(),
-                        "class Test*".into(),
-                        "@pytest.*".into(),
-                        // TypeScript/JavaScript
-                        "it(*".into(),
-                        "test(*".into(),
-                        "describe(*".into(),
-                    ]),
-                    test_modules: Arc::new(vec![
-                        // Rust
-                        "mod tests {".into(),
-                        "mod test {".into(),
-                        // Python
-                        "class Test".into(),
-                        // TypeScript/JavaScript
-                        "describe(".into(),
-                        "__tests__".into(),
-                    ]),
+                    ];
+                    if let Some(args) = scan_args {
+                        comments.extend(args.ignore_comments.iter().cloned());
+                    }
+                    comments
                 }),
+                custom_patterns: Arc::new({
+                    let mut patterns = vec![];
+                    if let Some(args) = scan_args {
+                        patterns.extend(args.custom_patterns.iter().cloned());
+                    }
+                    patterns
+                }),
+                test_attributes: Arc::new(vec![
+                    // Rust
+                    "#[*test]".into(),
+                    "#[bench]".into(),
+                    "#[cfg(test)]".into(),
+                    // Python
+                    "def test_*".into(),
+                    "class Test*".into(),
+                    "@pytest.*".into(),
+                    // TypeScript/JavaScript
+                    "it(*".into(),
+                    "test(*".into(),
+                    "describe(*".into(),
+                ]),
+                test_modules: Arc::new(vec![
+                    // Rust
+                    "mod tests {".into(),
+                    "mod test {".into(),
+                    // Python
+                    "class Test".into(),
+                    // TypeScript/JavaScript
+                    "describe(".into(),
+                    "__tests__".into(),
+                ]),
             }),
             
             security: Arc::new(SecurityConfig {
@@ -342,23 +377,25 @@ impl Default for GuardyConfig {
     }
 }
 
+// Default functions for serde
+fn default_source_path() -> String {
+    ".".to_string()
+}
+
+fn default_dest_path() -> String {
+    ".".to_string()
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem;
-    
-    #[test]
-    fn test_hot_config_cache_line_size() {
-        // Ensure hot config fits in exactly 64 bytes
-        assert_eq!(mem::size_of::<ScannerHotConfig>(), 64);
-        assert_eq!(mem::align_of::<ScannerHotConfig>(), 64);
-    }
     
     #[test]
     fn test_default_config_loads() {
         let config = GuardyConfig::default();
-        assert_eq!(config.scanner.hot.mode, ScanMode::Auto);
-        assert_eq!(config.scanner.cold.thread_percentage, 75);
+        assert_eq!(config.scanner.mode, ScanMode::Auto);
+        assert_eq!(config.scanner.thread_percentage, 75);
         assert!(config.hooks.pre_commit.enabled);
     }
     
@@ -370,5 +407,20 @@ mod tests {
         let duration = start.elapsed();
         // Should be <100ns (Arc increment only)
         assert!(duration.as_nanos() < 100);
+    }
+    
+    #[test]
+    fn test_global_config_loads() {
+        let config = CONFIG.clone();
+        assert_eq!(config.scanner.mode, ScanMode::Auto);
+        assert!(config.hooks.pre_commit.enabled);
+    }
+    
+    #[test]
+    fn test_config_is_singleton() {
+        let config1 = CONFIG.clone();
+        let config2 = CONFIG.clone();
+        // Should be the same Arc instance
+        assert!(Arc::ptr_eq(&config1, &config2));
     }
 }

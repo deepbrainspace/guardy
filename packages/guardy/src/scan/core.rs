@@ -1,6 +1,6 @@
 // All filtering now handled through cached filters in Scanner struct and collect_file_paths
-use super::types::{ScanResult, ScanStats, Scanner, ScannerConfig, SecretMatch, Warning, ScanMode};
-use crate::config::GuardyConfig;
+use super::types::{ScanResult, ScanStats, Scanner, SecretMatch, Warning};
+use crate::config::CONFIG;
 use crate::parallel::ExecutionStrategy;
 use anyhow::{Context, Result};
 use ignore::WalkBuilder;
@@ -14,11 +14,9 @@ use std::sync::Arc;
 // ============================================================================
 
 impl Scanner {
-    pub fn new(config: &GuardyConfig) -> Result<Self> {
-        // Parse scanner-specific config
-        let scanner_config = Self::parse_scanner_config(config)?;
-
-        // Initialize filters once for reuse throughout scanning
+    pub fn new() -> Result<Self> {
+        // Initialize filters once from CONFIG for reuse throughout scanning
+        let scanner_config = &CONFIG.scanner;
         let binary_filter = std::sync::Arc::new(super::filters::directory::BinaryFilter::new(!scanner_config.include_binary));
         let path_filter = std::sync::Arc::new(super::filters::directory::PathFilter::new(scanner_config.ignore_paths.clone()));
         let size_filter = std::sync::Arc::new(super::filters::directory::SizeFilter::new(scanner_config.max_file_size_mb));
@@ -29,7 +27,6 @@ impl Scanner {
         let comment_filter = std::sync::Arc::new(super::filters::content::CommentFilter::new());
 
         Ok(Scanner {
-            config: scanner_config,
             binary_filter,
             path_filter,
             size_filter,
@@ -39,199 +36,10 @@ impl Scanner {
         })
     }
 
-    pub fn with_config(config: ScannerConfig) -> Result<Self> {
-        // Initialize filters once for reuse throughout scanning
-        let binary_filter = std::sync::Arc::new(super::filters::directory::BinaryFilter::new(!config.include_binary));
-        let path_filter = std::sync::Arc::new(super::filters::directory::PathFilter::new(config.ignore_paths.clone()));
-        let size_filter = std::sync::Arc::new(super::filters::directory::SizeFilter::new(config.max_file_size_mb));
-        
-        // Initialize content filters for optimization
-        let prefilter = std::sync::Arc::new(super::filters::content::ContextPrefilter::new());
-        let regex_executor = std::sync::Arc::new(super::filters::content::RegexExecutor::new());
-        let comment_filter = std::sync::Arc::new(super::filters::content::CommentFilter::new());
+    // All filters are initialized from GUARDY_CONFIG and cached for performance
+    // These Arc-wrapped filters are reused throughout the scanning process
 
-        Ok(Scanner {
-            config,
-            binary_filter,
-            path_filter,
-            size_filter,
-            prefilter,
-            regex_executor,
-            comment_filter,
-        })
-    }
-
-    // fast_count_files() method removed - no longer needed since we always use parallel execution
-
-
-    // Note: should_ignore_path method removed - all filtering now happens during directory walk
-
-    pub fn from_fast_config_with_cli_overrides(
-        config: &crate::config::FastConfig,
-        args: &crate::cli::commands::scan::ScanArgs,
-    ) -> Result<ScannerConfig> {
-        super::config::from_fast_config_with_cli_overrides(config, args)
-    }
-    
-    pub fn parse_scanner_config_with_cli_overrides(
-        config: &GuardyConfig,
-        args: &crate::cli::commands::scan::ScanArgs,
-    ) -> Result<ScannerConfig> {
-        let mut scanner_config = Self::parse_scanner_config(config)?;
-
-        // Apply CLI overrides directly (bypassing SuperConfig issues)
-        scanner_config.enable_entropy_analysis = !args.no_entropy;
-        if let Some(threshold) = args.entropy_threshold {
-            scanner_config.min_entropy_threshold = threshold;
-        }
-        scanner_config.include_binary = args.include_binary;
-        scanner_config.follow_symlinks = args.follow_symlinks;
-        scanner_config.max_file_size_mb = args.max_file_size;
-
-        // Extend ignore lists with CLI values
-        scanner_config
-            .ignore_patterns
-            .extend(args.ignore_patterns.clone());
-        scanner_config
-            .ignore_paths
-            .extend(args.ignore_paths.clone());
-        scanner_config
-            .ignore_comments
-            .extend(args.ignore_comments.clone());
-
-        if let Some(mode) = &args.mode {
-            scanner_config.mode = mode.clone();
-        }
-
-        tracing::debug!(
-            "CLI OVERRIDE: Final enable_entropy_analysis = {}",
-            scanner_config.enable_entropy_analysis
-        );
-        Ok(scanner_config)
-    }
-
-    pub fn parse_scanner_config(config: &GuardyConfig) -> Result<ScannerConfig> {
-        let mut scanner_config = ScannerConfig::default();
-
-        // Now using flattened keys, so scanner section won't exist as nested object
-
-        // Override defaults with config values if present
-        if let Ok(entropy_enabled) = config.get_section("scanner.entropy_analysis")
-            && let Some(enabled) = entropy_enabled.as_bool()
-        {
-            tracing::debug!(
-                "ENTROPY CONFIG: Found scanner.entropy_analysis = {}",
-                enabled
-            );
-            scanner_config.enable_entropy_analysis = enabled;
-        }
-
-        // Support CLI override key name - direct access due to SuperConfig limitation with arrays
-        if let Ok(full_config) = config.get_full_config() {
-            tracing::debug!(
-                "ENTROPY CONFIG: Full config keys: {:?}",
-                full_config
-                    .as_object()
-                    .map(|o| o.keys().collect::<Vec<_>>())
-            );
-
-            if let Some(val) = full_config.get("scanner.enable_entropy_analysis") {
-                tracing::debug!("ENTROPY CONFIG: Found value: {:?}", val);
-                if let Some(enabled) = val.as_bool() {
-                    tracing::debug!(
-                        "ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (direct access)",
-                        enabled
-                    );
-                    scanner_config.enable_entropy_analysis = enabled;
-                }
-            } else {
-                tracing::debug!(
-                    "ENTROPY CONFIG: scanner.enable_entropy_analysis not found in full config"
-                );
-            }
-        }
-
-        // Fallback to standard get_section for traditional config files
-        if let Ok(entropy_enabled) = config.get_section("scanner.enable_entropy_analysis")
-            && let Some(enabled) = entropy_enabled.as_bool()
-        {
-            tracing::debug!(
-                "ENTROPY CONFIG: Found scanner.enable_entropy_analysis = {} (get_section)",
-                enabled
-            );
-            scanner_config.enable_entropy_analysis = enabled;
-        }
-
-        if let Ok(threshold) = config.get_section("scanner.entropy_threshold")
-            && let Some(thresh) = threshold.as_f64()
-        {
-            scanner_config.min_entropy_threshold = thresh;
-        }
-
-        if let Ok(include_binary) = config.get_section("scanner.include_binary")
-            && let Some(enabled) = include_binary.as_bool()
-        {
-            scanner_config.include_binary = enabled;
-        }
-
-        // Load ignore patterns from config
-        if let Ok(ignore_paths) = config.get_vec("scanner.ignore_paths") {
-            tracing::debug!("Loaded {} ignore paths from config: {:?}", ignore_paths.len(), ignore_paths);
-            scanner_config.ignore_paths = ignore_paths;
-        } else {
-            crate::cli::output::styled!(
-                "{}: No ignore_paths found in config, using defaults: {}",
-                ("DEBUG", "debug"),
-                (format!("{:?}", scanner_config.ignore_paths), "muted")
-            );
-        }
-
-        if let Ok(ignore_patterns) = config.get_vec("scanner.ignore_patterns") {
-            scanner_config.ignore_patterns = ignore_patterns;
-        }
-
-        if let Ok(ignore_comments) = config.get_vec("scanner.ignore_comments") {
-            scanner_config.ignore_comments = ignore_comments;
-        }
-
-        // Parse processing mode settings
-        if let Ok(mode_str) = config.get_section("scanner.mode")
-            && let Some(mode) = mode_str.as_str()
-        {
-            tracing::trace!("SCANNER CONFIG: Parsing mode from config: '{}'", mode);
-            scanner_config.mode = match mode.to_lowercase().as_str() {
-                "sequential" => super::types::ScanMode::Sequential,
-                "parallel" => super::types::ScanMode::Parallel,
-                "auto" => super::types::ScanMode::Auto,
-                _ => super::types::ScanMode::Auto, // Default fallback
-            };
-            tracing::trace!("SCANNER CONFIG: Set mode to: {:?}", scanner_config.mode);
-        }
-
-        if let Ok(max_threads) = config.get_section("scanner.max_threads")
-            && let Some(threads) = max_threads.as_u64()
-        {
-            scanner_config.max_threads = threads as usize;
-        }
-
-        if let Ok(thread_percentage) = config.get_section("scanner.thread_percentage")
-            && let Some(percentage) = thread_percentage.as_u64()
-        {
-            scanner_config.thread_percentage = percentage as u8;
-        }
-
-        if let Ok(min_files) = config.get_section("scanner.min_files_for_parallel")
-            && let Some(files) = min_files.as_u64()
-        {
-            scanner_config.min_files_for_parallel = files as usize;
-        }
-
-        tracing::debug!(
-            "ENTROPY CONFIG: Final enable_entropy_analysis = {}",
-            scanner_config.enable_entropy_analysis
-        );
-        Ok(scanner_config)
-    }
+    // Config parsing functions removed - now using GUARDY_CONFIG directly
 
     /// Scan specific paths
     pub fn scan_paths(&self, paths: &[PathBuf]) -> Result<ScanResult> {
@@ -269,7 +77,7 @@ impl Scanner {
     pub(crate) fn build_directory_walker(&self, path: &Path, path_filter_counter: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> WalkBuilder {
         let mut builder = WalkBuilder::new(path);
         builder
-            .follow_links(self.config.follow_symlinks)
+            .follow_links(CONFIG.scanner.follow_symlinks)
             .git_ignore(true) // Respect .gitignore files
             .git_global(true) // Respect global gitignore
             .git_exclude(true) // Respect .git/info/exclude
@@ -388,12 +196,12 @@ impl Scanner {
         
         // Step 3: Apply entropy analysis if enabled
         let mut filtered_matches = Vec::new();
-        if self.config.enable_entropy_analysis {
+        if CONFIG.scanner.enable_entropy_analysis {
             for secret_match in matches {
                 // Use the optimized entropy module
                 if super::entropy::is_likely_secret(
                     secret_match.matched_text.as_bytes(),
-                    self.config.min_entropy_threshold,
+                    CONFIG.scanner.entropy_threshold,
                 ) {
                     filtered_matches.push(secret_match);
                 } else {
@@ -436,18 +244,12 @@ impl Scanner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::GuardyConfig;
     use std::fs;
     use tempfile::TempDir;
 
-    fn create_test_config() -> GuardyConfig {
-        GuardyConfig::load(None, None::<&()>, 0).unwrap()
-    }
-
     #[test]
     fn test_scanner_creation() {
-        let config = create_test_config();
-        let scanner = Scanner::new(&config);
+        let scanner = Scanner::new();
         assert!(scanner.is_ok());
     }
 
@@ -470,8 +272,7 @@ FAKE_API_KEY = "test_key_not_real"
 
         fs::write(&test_file, test_content).unwrap();
 
-        let config = create_test_config();
-        let scanner = Scanner::new(&config).unwrap();
+        let scanner = Scanner::new().unwrap();
         let result = scanner.scan_file(&test_file).unwrap();
 
         // Should find some secrets but filter out obvious fake ones with entropy analysis

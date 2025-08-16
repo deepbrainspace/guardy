@@ -42,8 +42,8 @@ pub use crate::{
     config,          // Procedural macro for auto-generation
 };
 
-/// Re-export builder and partial config support
-pub use crate::{ConfigBuilder, PartialConfig, PartialConfigurable};
+/// Re-export builder support
+pub use crate::ConfigBuilder;
 
 /// Re-export concurrent utilities
 pub use crate::concurrent::{HashMap, HashSet, PATTERN_CACHE, FILE_CACHE};

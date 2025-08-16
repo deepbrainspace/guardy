@@ -263,14 +263,11 @@ mod paths;
 /// Prelude module for convenient glob imports
 pub mod prelude;
 
-/// Partial configuration support for layered overrides
-pub mod partial;
 pub mod builder;
 
 pub use anyhow::{Error, Result};
 pub use formats::ConfigFormat;
 pub use paths::ConfigPaths;
-pub use partial::{PartialConfig, PartialConfigurable};
 pub use builder::ConfigBuilder;
 
 // Re-export the procedural macro from superconfig-macros

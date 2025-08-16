@@ -21,11 +21,11 @@ pub struct PathFilter {
 
 impl PathFilter {
     /// Create a new path filter with the given ignore patterns
-    pub fn new(ignore_patterns: Vec<String>) -> Self {
+    pub fn new(ignore_patterns: Arc<Vec<String>>) -> Self {
         let mut builder = GlobSetBuilder::new();
         
         // Add each pattern to the glob set
-        for pattern in &ignore_patterns {
+        for pattern in ignore_patterns.iter() {
             // Handle both glob patterns and simple directory names
             let glob_pattern = if pattern.contains('*') || pattern.contains('?') {
                 pattern.clone()
@@ -55,7 +55,7 @@ impl PathFilter {
         
         Self {
             ignore_set: Arc::new(ignore_set),
-            patterns: Arc::new(ignore_patterns),
+            patterns: ignore_patterns,
             pattern_usage: Arc::new(pattern_usage),
         }
     }

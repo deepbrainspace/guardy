@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 pub struct InstallArgs {
     /// Specify which hooks to install (default: all)
     #[arg(long, value_delimiter = ',')]
@@ -12,9 +12,8 @@ pub struct InstallArgs {
     pub force: bool,
 }
 
-pub async fn execute(args: InstallArgs, verbosity_level: u8) -> Result<()> {
+pub async fn execute(args: InstallArgs) -> Result<()> {
     use crate::cli::output::*;
-    use crate::config::GuardyConfig;
     use crate::git::GitRepo;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -38,8 +37,7 @@ pub async fn execute(args: InstallArgs, verbosity_level: u8) -> Result<()> {
         info!("Created .git/hooks directory");
     }
 
-    // Parse guardy.toml configuration
-    let _config = GuardyConfig::load(None, None::<&()>, verbosity_level)?;
+    // CONFIG is automatically loaded and validated via static initialization
 
     if args.force {
         warning!("Force mode enabled - will overwrite existing hooks");

@@ -11,12 +11,10 @@ pub enum ConfigFormat {
 impl GuardyConfig {
     /// Export configuration in specified format
     pub fn export_config(&self, format: ConfigFormat) -> Result<String> {
-        let config: serde_json::Value = self.get_full_config()?;
-
         let output = match format {
-            ConfigFormat::Json => serde_json::to_string_pretty(&config)?,
-            ConfigFormat::Toml => toml::to_string_pretty(&config)?,
-            ConfigFormat::Yaml => serde_yml::to_string(&config)?,
+            ConfigFormat::Json => serde_json::to_string_pretty(self)?,
+            ConfigFormat::Toml => toml::to_string_pretty(self)?,
+            ConfigFormat::Yaml => serde_yml::to_string(self)?,
         };
 
         Ok(output)

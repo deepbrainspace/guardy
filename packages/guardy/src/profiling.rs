@@ -122,7 +122,7 @@ impl WorkloadProfiler {
     {
         // Calculate maximum workers based on system resources
         let max_workers = ExecutionStrategy::calculate_optimal_workers(
-            config.max_threads,
+            config.max_threads as u16,
             config.thread_percentage,
         );
 

@@ -2,6 +2,7 @@ use super::filters::directory::BinaryFilter;
 use super::static_data::directory_patterns::{get_analyzable_directories, SKIP_DIRECTORIES_SET};
 use super::types::{ScanFileResult, ScanResult, ScanStats, Scanner, Warning};
 use crate::cli::output;
+use crate::config::CONFIG;
 use crate::parallel::{ExecutionStrategy, progress::factories};
 use anyhow::Result;
 use std::path::{Path, PathBuf};
@@ -174,8 +175,8 @@ impl DirectoryHandler {
     ///    # struct Scanner { config: Config }
     ///    # let scanner = Scanner { config: Config { max_threads: 0, thread_percentage: 75 } };
     ///    let max_workers = ExecutionStrategy::calculate_optimal_workers(
-    ///        scanner.config.max_threads,      // User limit
-    ///        scanner.config.thread_percentage // CPU percentage
+    ///        CONFIG.scanner.max_threads,      // User limit
+    ///        CONFIG.scanner.thread_percentage // CPU percentage
     ///    );
     ///    ```
     ///
@@ -213,7 +214,7 @@ impl DirectoryHandler {
     ///
     /// # fn example() -> anyhow::Result<()> {
     /// let config = GuardyConfig::load(None, None::<&()>, 0)?;
-    /// let scanner = Scanner::new(&config)?;
+    /// let scanner = Scanner::new()?;
     /// let directory_handler = DirectoryHandler::new();
     /// let result = directory_handler.scan(
     ///     Arc::new(scanner),
@@ -235,14 +236,14 @@ impl DirectoryHandler {
         // Determine execution strategy - always use parallel for best performance
         // (parallel executor automatically adapts to file count)
         let execution_strategy = strategy.unwrap_or_else(|| {
-            match &scanner.config.mode {
+            match CONFIG.scanner.mode {
                 super::types::ScanMode::Sequential => ExecutionStrategy::Sequential,
                 
                 super::types::ScanMode::Parallel | super::types::ScanMode::Auto => {
                     // Calculate optimal workers based on available system resources
                     let optimal_workers = ExecutionStrategy::calculate_optimal_workers(
-                        scanner.config.max_threads,
-                        scanner.config.thread_percentage,
+                        CONFIG.scanner.max_threads,
+                        CONFIG.scanner.thread_percentage,
                     );
 
                     ExecutionStrategy::Parallel {
@@ -274,7 +275,7 @@ impl DirectoryHandler {
                 };
                 
                 // For very small file counts, consider switching to sequential
-                if file_paths.len() <= 3 && scanner.config.mode == super::types::ScanMode::Auto {
+                if file_paths.len() <= 3 && CONFIG.scanner.mode == super::types::ScanMode::Auto {
                     ExecutionStrategy::Sequential
                 } else {
                     ExecutionStrategy::Parallel { workers: adapted_workers }
@@ -408,8 +409,8 @@ impl DirectoryHandler {
 
         // Show detailed filter statistics if in debug mode
         if tracing::enabled!(tracing::Level::DEBUG) {
-            let binary_filter = BinaryFilter::new(!scanner.config.include_binary);
-            let path_filter = super::filters::directory::PathFilter::new(scanner.config.ignore_paths.clone());
+            let binary_filter = BinaryFilter::new(!CONFIG.scanner.include_binary);
+            let path_filter = super::filters::directory::PathFilter::new(CONFIG.scanner.ignore_paths.clone());
             
             // Get detailed statistics
             let binary_detailed_stats = binary_filter.get_statistics();
@@ -443,7 +444,7 @@ impl DirectoryHandler {
             
             // Show size filter stats using trait method
             use super::filters::Filter;
-            let size_filter = super::filters::directory::SizeFilter::new(scanner.config.max_file_size_mb);
+            let size_filter = super::filters::directory::SizeFilter::new(CONFIG.scanner.max_file_size_mb);
             let size_stats = size_filter.get_stats();
             if !size_stats.is_empty() {
                 tracing::debug!("Size Filter Configuration:");

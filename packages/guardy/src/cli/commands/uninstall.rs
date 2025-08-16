@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 pub struct UninstallArgs {
     /// Skip confirmation prompt
     #[arg(short, long)]

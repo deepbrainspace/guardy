@@ -1,5 +1,4 @@
 pub mod core;
-pub mod config;
 pub mod directory;
 pub mod entropy;
 pub mod filters;

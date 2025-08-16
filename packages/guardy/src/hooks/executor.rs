@@ -2,31 +2,35 @@ use anyhow::{Context, Result, anyhow};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 
 use crate::cli::output;
-use crate::config::GuardyConfig;
+use crate::config::{CONFIG};
+use crate::config::core::CustomCommand;
 use crate::git::GitRepo;
 use crate::scan::Scanner;
 
-use super::config::{CustomCommand, HookConfig};
-
-pub struct HookExecutor {
-    config: GuardyConfig,
-}
+pub struct HookExecutor;
 
 impl HookExecutor {
-    pub fn new(config: GuardyConfig) -> Self {
-        Self { config }
+    pub fn new() -> Self {
+        Self
     }
 
     pub async fn execute(&self, hook_name: &str, args: &[String]) -> Result<()> {
-        let hook_config_value = self.config.get_section("hooks")?;
-        let hook_config: HookConfig = serde_json::from_value(hook_config_value)?;
+        use crate::config::CONFIG;
+        
+        // Access hooks config directly from CONFIG
+        let hooks_config = &CONFIG.hooks;
 
-        let hook = hook_config
-            .hooks
-            .get(hook_name)
-            .ok_or_else(|| anyhow!("Hook '{}' not found in configuration", hook_name))?;
+        // Get the specific hook config based on hook name
+        let hook = match hook_name {
+            "pre-commit" => &hooks_config.pre_commit,
+            "commit-msg" => &hooks_config.commit_msg,
+            "post-checkout" => &hooks_config.post_checkout,
+            "pre-push" => &hooks_config.pre_push,
+            _ => return Err(anyhow!("Hook '{}' not found in configuration", hook_name)),
+        };
 
         if !hook.enabled {
             output::info!(&format!("Hook '{hook_name}' is disabled"));
@@ -36,16 +40,16 @@ impl HookExecutor {
         output::info!(&format!("Executing {hook_name} hook..."));
 
         // Execute builtin commands
-        for builtin in &hook.builtin {
+        for builtin in &**hook.builtin {
             self.execute_builtin(builtin, hook_name, args).await?;
         }
 
         // Execute custom commands - either in parallel or sequentially
         if hook.parallel {
-            self.execute_custom_parallel(&hook.custom, hook_name)
+            self.execute_custom_parallel(&**hook.custom, hook_name)
                 .await?;
         } else {
-            self.execute_custom_sequential(&hook.custom, hook_name)
+            self.execute_custom_sequential(&**hook.custom, hook_name)
                 .await?;
         }
 
@@ -85,7 +89,7 @@ impl HookExecutor {
             return Ok(());
         }
 
-        let scanner = Scanner::new(&self.config)?;
+        let scanner = Scanner::new()?;
         let scan_result = scanner.scan_paths(&staged_files)?;
 
         if scan_result.stats.total_matches > 0 {
@@ -308,7 +312,7 @@ impl HookExecutor {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if cmd.fail_on_error {
+            if !cmd.continue_on_error {
                 output::error!(&format!("✗ {}", cmd.description));
                 return Err(anyhow!("Command failed: {}", stderr));
             } else {
@@ -353,7 +357,7 @@ impl HookExecutor {
         Ok(files)
     }
 
-    fn get_all_files_matching_globs(&self, globs: &[String]) -> Result<Vec<PathBuf>> {
+    fn get_all_files_matching_globs(&self, globs: &Arc<Vec<String>>) -> Result<Vec<PathBuf>> {
         let glob_set = self.build_glob_set(globs)?;
         let mut matching_files = Vec::new();
 
@@ -372,7 +376,7 @@ impl HookExecutor {
         Ok(matching_files)
     }
 
-    fn filter_by_globs(&self, files: &[PathBuf], globs: &[String]) -> Result<Vec<PathBuf>> {
+    fn filter_by_globs(&self, files: &[PathBuf], globs: &Arc<Vec<String>>) -> Result<Vec<PathBuf>> {
         let glob_set = self.build_glob_set(globs)?;
 
         Ok(files
@@ -382,9 +386,9 @@ impl HookExecutor {
             .collect())
     }
 
-    fn build_glob_set(&self, globs: &[String]) -> Result<GlobSet> {
+    fn build_glob_set(&self, globs: &Arc<Vec<String>>) -> Result<GlobSet> {
         let mut builder = GlobSetBuilder::new();
-        for pattern in globs {
+        for pattern in globs.iter() {
             builder.add(Glob::new(pattern)?);
         }
         Ok(builder.build()?)
@@ -479,7 +483,7 @@ async fn execute_single_command(cmd: &CustomCommand, hook_name: &str) -> Result<
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if cmd.fail_on_error {
+        if !cmd.continue_on_error {
             output::error!(&format!("✗ {}", &cmd.description));
             return Err(anyhow!("Command failed: {}", stderr));
         } else {
@@ -497,7 +501,7 @@ async fn execute_single_command(cmd: &CustomCommand, hook_name: &str) -> Result<
     Ok(())
 }
 
-fn get_all_files_matching_globs(globs: &[String]) -> Result<Vec<PathBuf>> {
+fn get_all_files_matching_globs(globs: &Arc<Vec<String>>) -> Result<Vec<PathBuf>> {
     let glob_set = build_glob_set(globs)?;
     let mut matching_files = Vec::new();
 
@@ -515,7 +519,7 @@ fn get_all_files_matching_globs(globs: &[String]) -> Result<Vec<PathBuf>> {
     Ok(matching_files)
 }
 
-fn filter_by_globs(files: &[PathBuf], globs: &[String]) -> Result<Vec<PathBuf>> {
+fn filter_by_globs(files: &[PathBuf], globs: &Arc<Vec<String>>) -> Result<Vec<PathBuf>> {
     let glob_set = build_glob_set(globs)?;
 
     Ok(files
@@ -525,9 +529,9 @@ fn filter_by_globs(files: &[PathBuf], globs: &[String]) -> Result<Vec<PathBuf>> 
         .collect())
 }
 
-fn build_glob_set(globs: &[String]) -> Result<GlobSet> {
+fn build_glob_set(globs: &Arc<Vec<String>>) -> Result<GlobSet> {
     let mut builder = GlobSetBuilder::new();
-    for pattern in globs {
+    for pattern in globs.iter() {
         builder.add(Glob::new(pattern)?);
     }
     Ok(builder.build()?)

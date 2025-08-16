@@ -1,14 +1,14 @@
 use anyhow::Result;
 use clap::Args;
 
-#[derive(Args, Default)]
+#[derive(Args, Clone, Default)]
 pub struct StatusArgs {
     // Add status-specific options here
 }
 
-pub async fn execute(_args: StatusArgs, verbosity_level: u8) -> Result<()> {
+pub async fn execute(_args: StatusArgs) -> Result<()> {
     use crate::cli::output::*;
-    use crate::config::GuardyConfig;
+    use crate::config::CONFIG;
     use crate::git::GitRepo;
     use crate::scan::static_data::patterns::get_pattern_library;
 
@@ -29,40 +29,21 @@ pub async fn execute(_args: StatusArgs, verbosity_level: u8) -> Result<()> {
         }
     };
 
-    // Check configuration
-    match GuardyConfig::load(None, None::<&()>, verbosity_level) {
-        Ok(config) => {
-            styled!("{} Configuration loaded", ("✅", "success_symbol"));
-            
-            // Show key configuration details
-            if let Ok(scanner_section) = config.get_section("scanner") {
-                if let Some(max_size) = scanner_section.get("max_file_size_mb").and_then(|v| v.as_u64()) {
-                    styled!("  Max file size: {}MB", (max_size.to_string(), "number"));
-                }
-                if let Some(include_binary) = scanner_section.get("include_binary").and_then(|v| v.as_bool()) {
-                    styled!("  Include binary files: {}", (include_binary.to_string(), "property"));
-                }
-                if let Some(entropy_enabled) = scanner_section.get("enable_entropy_analysis").and_then(|v| v.as_bool()) {
-                    styled!("  Entropy analysis: {}", (entropy_enabled.to_string(), "property"));
-                }
-            }
+    // Show configuration details (CONFIG is always valid)
+    styled!("{} Configuration loaded", ("✅", "success_symbol"));
+    
+    // Show key configuration details using direct field access
+    styled!("  Max file size: {}MB", (CONFIG.scanner.max_file_size_mb.to_string(), "number"));
+    styled!("  Include binary files: {}", (CONFIG.scanner.include_binary.to_string(), "property"));
+    styled!("  Entropy analysis: {}", (CONFIG.scanner.enable_entropy_analysis.to_string(), "property"));
 
-            // Check patterns
-            let pattern_lib = get_pattern_library();
-            styled!(
-                "{} Scanner ready with {} patterns",
-                ("✅", "success_symbol"),
-                (pattern_lib.count().to_string(), "number")
-            );
-        }
-        Err(e) => {
-            styled!(
-                "{} Configuration issues: {}",
-                ("⚠️", "warning_symbol"),
-                (e.to_string(), "warning")
-            );
-        }
-    }
+    // Check patterns
+    let pattern_lib = get_pattern_library();
+    styled!(
+        "{} Scanner ready with {} patterns",
+        ("✅", "success_symbol"),
+        (pattern_lib.count().to_string(), "number")
+    );
 
     // Check hook installation
     let hooks_dir = repo.git_dir().join("hooks");

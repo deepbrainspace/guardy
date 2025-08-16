@@ -1,5 +1,4 @@
 use anyhow::Result;
-use clap::Parser;
 
 mod cli;
 mod config;
@@ -13,10 +12,7 @@ mod scan;
 mod shared;
 mod sync;
 
-use cli::commands::Cli;
-
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
-    cli.run().await
+    cli::init().run().await
 }

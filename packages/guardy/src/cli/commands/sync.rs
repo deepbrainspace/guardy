@@ -2,10 +2,10 @@ use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 
 use crate::cli::output;
-use crate::config::GuardyConfig;
+use crate::config::CONFIG;
 use crate::sync::{manager::SyncManager, status::StatusDisplay};
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(about = "File synchronization from remote repositories")]
 pub struct SyncArgs {
     #[command(subcommand)]
@@ -24,7 +24,7 @@ pub struct SyncArgs {
     pub version: Option<String>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum SyncSubcommand {
     /// Show sync status and configuration
     Status,
@@ -48,9 +48,9 @@ pub enum SyncSubcommand {
     Diff,
 }
 
-pub async fn execute(args: SyncArgs, config_path: Option<&str>) -> Result<()> {
+pub async fn execute(args: SyncArgs) -> Result<()> {
     match args.command {
-        Some(SyncSubcommand::Status) => execute_status(config_path).await,
+        Some(SyncSubcommand::Status) => execute_status().await,
         Some(SyncSubcommand::Update {
             force,
             repo,
@@ -60,25 +60,25 @@ pub async fn execute(args: SyncArgs, config_path: Option<&str>) -> Result<()> {
             let final_force = force || args.force;
             let final_repo = repo.or(args.repo);
             let final_version = version.or(args.version);
-            execute_update(final_force, final_repo, final_version, config_path).await
+            execute_update(final_force, final_repo, final_version).await
         }
-        Some(SyncSubcommand::Diff) => execute_diff(config_path).await,
+        Some(SyncSubcommand::Diff) => execute_diff().await,
         // Default to update behavior when no subcommand is provided, using main args
-        None => execute_update(args.force, args.repo, args.version, config_path).await,
+        None => execute_update(args.force, args.repo, args.version).await,
     }
 }
 
-async fn execute_status(config_path: Option<&str>) -> Result<()> {
-    let manager = create_sync_manager(config_path)?;
+async fn execute_status() -> Result<()> {
+    let manager = SyncManager::new()?;
     let status_display = StatusDisplay::new(&manager);
     status_display.show_detailed_status()
 }
 
-async fn execute_diff(config_path: Option<&str>) -> Result<()> {
-    let mut manager = create_sync_manager(config_path)?;
+async fn execute_diff() -> Result<()> {
+    let mut manager = SyncManager::new()?;
 
     // Check if we have any configuration
-    if manager.config.repos.is_empty() {
+    if CONFIG.sync.repos.is_empty() {
         output::styled!("{} No sync configuration found", ("⚠️", "warning_symbol"));
         return Ok(());
     }
@@ -95,7 +95,6 @@ async fn execute_update(
     force: bool,
     repo: Option<String>,
     version: Option<String>,
-    config_path: Option<&str>,
 ) -> Result<()> {
     // Handle bootstrap case
     if let (Some(repo_url), Some(version_str)) = (repo, version) {
@@ -124,10 +123,10 @@ async fn execute_update(
     }
 
     // Regular update case
-    let mut manager = create_sync_manager(config_path)?;
+    let mut manager = SyncManager::new()?;
 
     // Check if we have any configuration (without doing full status check)
-    if manager.config.repos.is_empty() {
+    if CONFIG.sync.repos.is_empty() {
         output::styled!("{} No sync configuration found", ("⚠️", "warning_symbol"));
         output::styled!(
             "Run {} to bootstrap",
@@ -165,13 +164,3 @@ async fn execute_update(
     Ok(())
 }
 
-fn create_sync_manager(config_path: Option<&str>) -> Result<SyncManager> {
-    let config = GuardyConfig::load::<()>(config_path, None, 0)
-        .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
-
-    // Extract sync config using the proper parsing method
-    let sync_config = SyncManager::parse_sync_config(&config)?;
-
-    // Create sync manager with parsed config
-    SyncManager::with_config(sync_config)
-}

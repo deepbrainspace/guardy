@@ -16,7 +16,7 @@ pub struct SizeFilter {
 
 impl SizeFilter {
     /// Create a new size filter with max size in megabytes
-    pub fn new(max_size_mb: usize) -> Self {
+    pub fn new(max_size_mb: u32) -> Self {
         tracing::debug!("[SizeFilter] Initialized: max_size={}MB", max_size_mb);
         
         Self {

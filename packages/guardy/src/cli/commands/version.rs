@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 pub struct VersionArgs {
     /// Show detailed version information
     #[arg(short = 'v', long = "verbose")]

@@ -258,9 +258,8 @@ use guardy::scanner::directory::DirectoryHandler;
 use guardy::scanner::Scanner;
 use std::sync::Arc;
 
-// Primary scanning workflow
-let config = GuardyConfig::load(None, None::<&()>)?;
-let scanner = Arc::new(Scanner::new(&config)?);
+// Primary scanning workflow - uses global GUARDY_CONFIG
+let scanner = Arc::new(Scanner::new()?);
 let directory_handler = DirectoryHandler::default();
 
 // Automatic strategy selection
@@ -408,9 +407,8 @@ The scanner includes 40+ built-in patterns for comprehensive secret detection:
 use crate::scanner::{Scanner, SecretPatterns};
 use crate::config::GuardyConfig;
 
-// Create scanner
-let config = GuardyConfig::load()?;
-let scanner = Scanner::new(&config)?;
+// Create scanner with global config
+let scanner = Scanner::new()?;
 
 // Scan individual file
 let matches = scanner.scan_file(&path)?;

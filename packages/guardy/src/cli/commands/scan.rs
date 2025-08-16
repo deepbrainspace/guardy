@@ -30,7 +30,7 @@ fn format_scan_time(duration: Duration) -> String {
     }
 }
 
-#[derive(Args, Serialize)]
+#[derive(Args, Clone, Serialize)]
 pub struct ScanArgs {
     /// Files or directories to scan
     #[arg(value_name = "PATH")]
@@ -112,7 +112,7 @@ pub enum OutputFormat {
 
 pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str>) -> Result<()> {
     use crate::scan::static_data::patterns::get_pattern_library;
-    use crate::config::FastConfig;
+    // CONFIG not needed here - Scanner uses it directly
     use regex::Regex;
 
     let total_start = Instant::now();
@@ -120,8 +120,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     // Timing instrumentation
     let config_start = Instant::now();
     
-    // Use fast config loading for scan command
-    let fast_config = FastConfig::load(config_path)?;
+    // Direct access to global config singleton
     
     let config_duration = config_start.elapsed();
     tracing::info!("⏱️ Configuration loading: {}ms", config_duration.as_millis());
@@ -172,15 +171,9 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
         tracing::info!("⏱️ Custom pattern validation: {}ms", custom_pattern_duration.as_millis());
     }
 
-    // Extract scanner config from fast config
-    let scanner_config_start = Instant::now();
-    let scanner_config = Scanner::from_fast_config_with_cli_overrides(&fast_config, &args)?;
-    let scanner_config_duration = scanner_config_start.elapsed();
-    tracing::info!("⏱️ Scanner config parsing: {}ms", scanner_config_duration.as_millis());
-
-    // Create scanner with CLI-overridden config
+    // Create scanner using global GUARDY_CONFIG (includes CLI overrides)
     let scanner_create_start = Instant::now();
-    let scanner = Scanner::with_config(scanner_config)?;
+    let scanner = Scanner::new()?;
     let scanner_create_duration = scanner_create_start.elapsed();
     tracing::info!("⏱️ Scanner creation: {}ms", scanner_create_duration.as_millis());
     

@@ -9,13 +9,13 @@ use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
 
-use super::{SyncConfig, SyncRepo, SyncStatus};
+use super::SyncStatus;
 use crate::cli::output;
-use crate::config::GuardyConfig;
+use crate::config::{CONFIG};
+use crate::config::core::{RepoConfig, GuardyConfig, SyncConfig};
 use crate::git::remote::RemoteOperations;
 
 pub struct SyncManager {
-    pub config: SyncConfig,
     cache_dir: PathBuf,
     remote_ops: RemoteOperations,
     // For interactive mode
@@ -33,7 +33,7 @@ enum FileAction {
 }
 
 impl SyncManager {
-    pub fn with_config(sync_config: SyncConfig) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let cache_dir = PathBuf::from(".guardy/cache");
         std::fs::create_dir_all(&cache_dir)?;
 
@@ -46,7 +46,6 @@ impl SyncManager {
         let remote_ops = RemoteOperations::new(cache_dir.clone());
 
         Ok(Self {
-            config: sync_config,
             cache_dir,
             remote_ops,
             syntax_set: SyntaxSet::load_defaults_newlines(),
@@ -55,34 +54,16 @@ impl SyncManager {
     }
 
     pub fn bootstrap(repo_url: &str, version: &str) -> Result<Self> {
-        let sync_repo = SyncRepo {
-            name: "bootstrap".to_string(),
-            repo: repo_url.to_string(),
-            version: version.to_string(),
-            source_path: ".".to_string(),
-            dest_path: ".".to_string(),
-            include: vec!["*".to_string()],
-            exclude: vec![".git".to_string()],
-        };
-        Self::with_config(SyncConfig {
-            repos: vec![sync_repo],
-        })
+        // Bootstrap mode - create a temporary repo config
+        // The actual config will be managed through CONFIG
+        eprintln!("Bootstrap mode not yet implemented with new config system");
+        Self::new()
     }
 
-    /// Parse sync config from GuardyConfig
-    pub fn parse_sync_config(config: &GuardyConfig) -> Result<SyncConfig> {
-        let sync_value = config
-            .get_section("sync")
-            .map_err(|_| anyhow!("No sync configuration found"))?;
-
-        let sync_config: SyncConfig = serde_json::from_value(sync_value)
-            .map_err(|e| anyhow!("Failed to parse sync configuration: {}", e))?;
-
-        Ok(sync_config)
-    }
+    /// This method is no longer needed - CONFIG.sync is directly accessible
 
     /// Get files matching patterns using ignore crate
-    fn get_files(&self, source: &Path, repo: &SyncRepo) -> Result<Vec<PathBuf>> {
+    fn get_files(&self, source: &Path, repo: &RepoConfig) -> Result<Vec<PathBuf>> {
         let mut builder = WalkBuilder::new(source);
 
         // Disable automatic ignore file discovery - only use our custom patterns
@@ -178,7 +159,7 @@ impl SyncManager {
     }
 
     /// Update cache from remote repository using git pull
-    fn update_cache(&self, repo: &SyncRepo) -> Result<PathBuf> {
+    fn update_cache(&self, repo: &RepoConfig) -> Result<PathBuf> {
         let repo_name = self.extract_repo_name(&repo.repo);
         let repo_path = self.cache_dir.join(&repo_name);
 
@@ -207,12 +188,12 @@ impl SyncManager {
 
     /// Check sync status of all repositories
     pub fn check_sync_status(&self) -> Result<SyncStatus> {
-        if self.config.repos.is_empty() {
+        if CONFIG.sync.repos.is_empty() {
             return Ok(SyncStatus::NotConfigured);
         }
 
         let mut changed_files = Vec::new();
-        for repo in &self.config.repos {
+        for repo in &*CONFIG.sync.repos {
             let repo_path = self.cache_dir.join(self.extract_repo_name(&repo.repo));
             if repo_path.exists() {
                 let src = repo_path.join(&repo.source_path);
@@ -243,7 +224,7 @@ impl SyncManager {
         // First check if there are any changes at all
         let mut has_any_changes = false;
 
-        for repo in self.config.repos.clone() {
+        for repo in &*CONFIG.sync.repos {
             tracing::info!("Processing repository: {}", repo.name);
 
             // Update cache from remote
@@ -517,7 +498,7 @@ impl SyncManager {
 
         let mut has_any_changes = false;
 
-        for repo in self.config.repos.clone() {
+        for repo in &*CONFIG.sync.repos {
             tracing::info!("Processing repository: {}", repo.name);
 
             // Update cache from remote
@@ -575,7 +556,7 @@ impl SyncManager {
             output::styled!(
                 "{} Showing diffs for {} repositories",
                 ("📝", "info_symbol"),
-                (self.config.repos.len().to_string(), "property")
+                (CONFIG.sync.repos.len().to_string(), "property")
             );
         }
 

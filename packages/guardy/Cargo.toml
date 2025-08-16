@@ -25,8 +25,7 @@ name = "realistic_benchmarks"
 harness = false
 
 [dependencies]
-# Configuration  
-superconfig = { path = "../superconfig" }
+# Configuration removed - using native config module
 
 # CLI and utilities
 clap = { version = "4.5.41", features = ["derive", "env", "color"] }
