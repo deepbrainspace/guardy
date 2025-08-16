@@ -28,10 +28,7 @@ impl ConfigPaths {
         // Current directory (highest priority)
         self.add_current_dir_paths();
 
-        // Git repository root
-        self.add_git_repo_paths();
-
-        // User config directory (lowest priority)
+        // User config directory (~/.config/{name}.{json,yaml,yml})
         self.add_user_config_paths();
     }
 
@@ -47,46 +44,21 @@ impl ConfigPaths {
             .push(PathBuf::from(format!("{}.yml", self.config_name)));
     }
 
-    fn add_git_repo_paths(&mut self) {
-        if let Ok(repo_root) = self.find_git_root() {
-            // Repository root
-            self.search_paths
-                .push(repo_root.join(format!("{}.json", self.config_name)));
-            self.search_paths
-                .push(repo_root.join(format!("{}.yaml", self.config_name)));
-            self.search_paths
-                .push(repo_root.join(format!("{}.yml", self.config_name)));
-
-            // .config subdirectory
-            let config_dir = repo_root.join(".config").join(&self.config_name);
-            self.search_paths.push(config_dir.join("config.json"));
-            self.search_paths.push(config_dir.join("config.yaml"));
-            self.search_paths.push(config_dir.join("config.yml"));
-        }
-    }
-
     fn add_user_config_paths(&mut self) {
+        // Always check user config directory, not just with cache feature
         if let Some(config_dir) = dirs::config_dir() {
+            // Check both ~/.config/{name}.{json,yaml,yml} and ~/.config/{name}/config.{json,yaml,yml}
+            
+            // Direct files in ~/.config/
+            self.search_paths.push(config_dir.join(format!("{}.json", self.config_name)));
+            self.search_paths.push(config_dir.join(format!("{}.yaml", self.config_name)));
+            self.search_paths.push(config_dir.join(format!("{}.yml", self.config_name)));
+            
+            // Files in app-specific directory
             let app_config_dir = config_dir.join(&self.config_name);
             self.search_paths.push(app_config_dir.join("config.json"));
             self.search_paths.push(app_config_dir.join("config.yaml"));
             self.search_paths.push(app_config_dir.join("config.yml"));
-        }
-    }
-
-    fn find_git_root(&self) -> Result<PathBuf, std::io::Error> {
-        let output = std::process::Command::new("git")
-            .args(["rev-parse", "--show-toplevel"])
-            .output()?;
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            Ok(PathBuf::from(stdout.trim()))
-        } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Not in a git repository",
-            ))
         }
     }
 }

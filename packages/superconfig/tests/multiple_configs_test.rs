@@ -1,6 +1,6 @@
 //! Test multiple config macros in the same file
 
-use fast_config::config;
+use superconfig::config;
 
 // First config
 config!("sample" => FirstConfig);

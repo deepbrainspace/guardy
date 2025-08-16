@@ -1,6 +1,6 @@
 //! Minimal test to see what the macro actually generates
 
-use fast_config::config;
+use superconfig::config;
 
 // This should generate the SampleConfig struct and impl from sample.json
 config!("sample" => SampleConfig);

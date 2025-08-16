@@ -1,5 +1,5 @@
 // All filtering now handled through cached filters in Scanner struct and collect_file_paths
-use super::types::{ScanResult, ScanStats, Scanner, ScannerConfig, SecretMatch, Warning};
+use super::types::{ScanResult, ScanStats, Scanner, ScannerConfig, SecretMatch, Warning, ScanMode};
 use crate::config::GuardyConfig;
 use crate::parallel::ExecutionStrategy;
 use anyhow::{Context, Result};
@@ -66,6 +66,13 @@ impl Scanner {
 
     // Note: should_ignore_path method removed - all filtering now happens during directory walk
 
+    pub fn from_fast_config_with_cli_overrides(
+        config: &crate::config::FastConfig,
+        args: &crate::cli::commands::scan::ScanArgs,
+    ) -> Result<ScannerConfig> {
+        super::config::from_fast_config_with_cli_overrides(config, args)
+    }
+    
     pub fn parse_scanner_config_with_cli_overrides(
         config: &GuardyConfig,
         args: &crate::cli::commands::scan::ScanArgs,

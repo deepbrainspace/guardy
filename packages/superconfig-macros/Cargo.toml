@@ -1,10 +1,10 @@
 [package]
-name = "fast-config-macros"
-version = "0.1.0"
+name = "superconfig-macros"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 authors = ["Nayeem Syed <nayeem@deepbrain.space>"]
-description = "Procedural macros for fast-config - auto-generate structs from config files"
+description = "Procedural macros for superconfig - auto-generate structs from config files"
 license = "MIT"
 repository = "https://github.com/deepbrainspace/guardy"
 keywords = ["config", "macro", "codegen", "procedural"]

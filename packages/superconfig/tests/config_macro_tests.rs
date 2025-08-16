@@ -6,7 +6,7 @@
 //! - Creates LazyLock static instances for zero-copy access
 //! - Handles various config formats (JSON, YAML)
 
-use fast_config::config;
+use superconfig::config;
 
 fn setup_config_environment() {
     // Change to tests/configs directory if we're not already there

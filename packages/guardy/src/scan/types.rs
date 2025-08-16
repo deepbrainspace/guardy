@@ -69,6 +69,7 @@ pub struct ScannerConfig {
     pub ignore_paths: Vec<String>,
     pub ignore_patterns: Vec<String>,
     pub ignore_comments: Vec<String>,
+    pub custom_patterns: Vec<String>,
     // Processing mode settings
     pub mode: ScanMode,
     pub max_threads: usize,
@@ -98,6 +99,7 @@ impl Default for ScannerConfig {
                 "guardy:ignore-line".to_string(),
                 "guardy:ignore-next".to_string(),
             ],
+            custom_patterns: vec![],
             // Processing mode defaults
             mode: ScanMode::Auto,
             max_threads: 0, // 0 = auto-detect

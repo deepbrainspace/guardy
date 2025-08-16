@@ -1,6 +1,6 @@
-//! # Fast-Config Procedural Macros
+//! # SuperConfig Procedural Macros
 //! 
-//! This crate provides procedural macros for the [`fast-config`] library that automatically
+//! This crate provides procedural macros for the [`superconfig`] library that automatically
 //! generate Rust configuration structs from existing configuration files using [Typify].
 //! 
 //! ## Key Features
@@ -84,7 +84,7 @@
 //! }
 //! ```
 //! 
-//! [`fast-config`]: https://docs.rs/fast-config
+//! [`superconfig`]: https://docs.rs/superconfig
 //! [Typify]: https://docs.rs/typify
 
 use proc_macro::TokenStream;
@@ -161,7 +161,7 @@ pub fn config(input: TokenStream) -> TokenStream {
         
         /// Auto-generated LazyLock static instance for zero-copy configuration access
         pub static #static_ident: ::std::sync::LazyLock<#struct_name> = ::std::sync::LazyLock::new(|| {
-            ::fast_config::FastConfig::<#struct_name>::load(#config_name)
+            ::superconfig::FastConfig::<#struct_name>::load(#config_name)
                 .map(|config| config.clone_config())
                 .unwrap_or_else(|e| {
                     ::tracing::warn!("Failed to load config {}: {}, using default", #config_name, e);
@@ -364,14 +364,14 @@ fn find_config_file(config_name: &str) -> Option<PathBuf> {
         format!("tests/configs/{}.yml", config_name),
         
         // Package-relative tests directory (when running from workspace root)
-        format!("packages/fast-config/tests/{}.json", config_name),
-        format!("packages/fast-config/tests/{}.yaml", config_name),
-        format!("packages/fast-config/tests/{}.yml", config_name),
+        format!("packages/superconfig/tests/{}.json", config_name),
+        format!("packages/superconfig/tests/{}.yaml", config_name),
+        format!("packages/superconfig/tests/{}.yml", config_name),
         
         // Package-relative tests configs subdirectory
-        format!("packages/fast-config/tests/configs/{}.json", config_name),
-        format!("packages/fast-config/tests/configs/{}.yaml", config_name),
-        format!("packages/fast-config/tests/configs/{}.yml", config_name),
+        format!("packages/superconfig/tests/configs/{}.json", config_name),
+        format!("packages/superconfig/tests/configs/{}.yaml", config_name),
+        format!("packages/superconfig/tests/configs/{}.yml", config_name),
         
         // .config subdirectory
         format!(".config/{}/config.json", config_name),

@@ -3,7 +3,7 @@
 //! These tests verify that the concurrent HashMap and HashSet work correctly
 //! and provide better performance than standard alternatives.
 
-use fast_config::concurrent::{HashMap, HashSet, PATTERN_CACHE, FILE_CACHE};
+use superconfig::concurrent::{HashMap, HashSet, PATTERN_CACHE, FILE_CACHE};
 use std::sync::Arc;
 use std::thread;
 

@@ -1,31 +1,34 @@
-//! # Fast-Config: High-Performance Configuration Library
+//! # SuperConfig: High-Performance Configuration Library
 //!
-//! [![Crates.io](https://img.shields.io/crates/v/fast-config.svg)](https://crates.io/crates/fast-config)
-//! [![Documentation](https://docs.rs/fast-config/badge.svg)](https://docs.rs/fast-config)
+//! [![Crates.io](https://img.shields.io/crates/v/superconfig.svg)](https://crates.io/crates/superconfig)
+//! [![Documentation](https://docs.rs/superconfig/badge.svg)](https://docs.rs/superconfig)
 //! [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 //!
-//! A blazing-fast configuration library for Rust applications featuring intelligent caching,
-//! zero-copy access, and support for multiple configuration formats.
+//! A blazing-fast configuration library for Rust applications featuring zero-copy access
+//! and support for multiple configuration formats.
 //!
 //! ## Key Features
 //!
 //! - 🚀 **Sub-microsecond access** via [`LazyLock`] static instances after first load
-//! - 💾 **Intelligent caching** with [bincode] serialization (~1-3ms cached loads vs ~10-30ms parsing)
-//! - 🔄 **Automatic cache invalidation** based on file timestamps and version changes
+//! - ⚡ **Direct file parsing** for best performance (~10ms JSON, ~30ms YAML)
+//! - 💾 **Optional caching** with [bincode] serialization (enable with `cache` feature)
 //! - 📄 **Multi-format support** for JSON and YAML configuration files
 //! - 🏗️ **Procedural macros** for zero-boilerplate configuration setup
-//! - ⚡ **SCC-powered concurrent containers** for high-performance multi-threaded access
 //! - 🛡️ **Type-safe** configuration with full [serde] integration
-//! - 🔧 **Flexible search paths** (current dir, git repo root, user config dirs)
+//! - 🔧 **Flexible search paths** (current dir, user config dirs)
+//! - 📁 **Direct path loading** with `load_from_path()` for custom locations
 //!
 //! ## Performance Comparison
 //!
 //! | Access Method | Performance | Use Case |
 //! |---------------|-------------|----------|
-//! | **Static LazyLock** | `< 1μs` | Production (after first load) |
-//! | **Bincode cache** | `1-3ms` | First load after restart |
-//! | **JSON parsing** | `~10ms` | Cold load from JSON |
-//! | **YAML parsing** | `~30ms` | Cold load from YAML |
+//! | **Static LazyLock** | `0.57 ns` | Production (after first load) |
+//! | **Direct load (no cache)** | `5.28 μs` | Default mode - best overall performance |
+//! | **Cached load** | `26.39 μs` | When `cache` feature enabled |
+//! | **Cold start (with cache)** | `40.57 μs` | First load with cache overhead |
+//!
+//! **Note**: Cache is disabled by default as direct parsing (`5.28 μs`) performs 5x better 
+//! than cached loads (`26.39 μs`). The cache feature adds overhead that rarely pays off.
 //!
 //! ## Quick Start
 //!
@@ -33,16 +36,16 @@
 //!
 //! ```toml
 //! [dependencies]
-//! fast-config = "0.1"
+//! superconfig = "0.2"
 //! serde = { version = "1.0", features = ["derive"] }
 //! ```
 //!
 //! ### Method 1: Static Configuration (Recommended)
 //!
-//! The fastest approach using the [`static_config!`] macro:
+//! The fastest approach using the [`static_config!`] macro with prelude:
 //!
 //! ```rust
-//! use fast_config::static_config;
+//! use superconfig::prelude::*;
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,11 +58,9 @@
 //! // Generate static LazyLock instance for zero-copy access
 //! static_config!(CONFIG, AppConfig, "myapp");
 //!
-//! fn main() {
-//!     // Sub-microsecond access after first load
-//!     println!("Server starting on port {}", CONFIG.port);
-//!     println!("Database: {}", CONFIG.database_url);
-//! }
+//! // Sub-microsecond access after first load
+//! println!("Server starting on port {}", CONFIG.port);
+//! println!("Database: {}", CONFIG.database_url);
 //! ```
 //!
 //! Create `myapp.json` in your project root:
@@ -77,7 +78,7 @@
 //! For more control over error handling:
 //!
 //! ```rust
-//! use fast_config::FastConfig;
+//! use superconfig::FastConfig;
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -111,7 +112,7 @@
 //! Automatically generate configuration structs from existing config files:
 //!
 //! ```rust,ignore
-//! use fast_config::config;
+//! use superconfig::prelude::*;  // Convenient glob import
 //!
 //! // Auto-generates struct from myapp.json/yaml and creates LazyLock instance
 //! config!("myapp" => MyAppConfig);
@@ -125,21 +126,42 @@
 //!
 //! ## Configuration File Search Order
 //!
-//! Fast-config searches for configuration files in the following order:
+//! SuperConfig searches for configuration files in the following order:
 //!
 //! 1. **Current directory**: `{name}.json`, `{name}.yaml`, `{name}.yml`
-//! 2. **Git repository root**: `{name}.json`, `{name}.yaml`, `{name}.yml`
-//! 3. **Git config directory**: `.config/{name}/config.{json,yaml,yml}`
-//! 4. **User config directory**: `~/.config/{name}/config.{json,yaml,yml}`
+//! 2. **User config directory**: `~/.config/{name}.json`, `~/.config/{name}.yaml`, `~/.config/{name}.yml`
+//! 3. **App config directory**: `~/.config/{name}/config.json`, `~/.config/{name}/config.yaml`, `~/.config/{name}/config.yml`
+//!
+//! You can also load from a specific path using `FastConfig::load_from_path("/path/to/config.yaml")`
+//!
+//! ## Import Styles
+//!
+//! SuperConfig supports two import styles for maximum convenience:
+//!
+//! ### Explicit Imports (Explicit Control)
+//! ```rust
+//! use superconfig::{FastConfig, static_config, config, Error, Result};
+//! use serde::{Deserialize, Serialize};
+//! ```
+//!
+//! ### Prelude Glob Import (Convenience)
+//! ```rust
+//! use superconfig::prelude::*;  // Imports all commonly used items
+//! use serde::{Deserialize, Serialize};
+//! ```
+//!
+//! Both styles give you access to the same functionality. Choose based on your preference:
+//! - **Explicit imports**: Clear about what's being imported, better for large codebases
+//! - **Prelude glob**: Convenient for quick prototyping and small projects
 //!
 //! ## Advanced Usage
 //!
 //! ### Concurrent Access with SCC
 //!
-//! Fast-config includes high-performance concurrent containers:
+//! SuperConfig includes high-performance concurrent containers:
 //!
 //! ```rust
-//! use fast_config::concurrent::{HashMap, HashSet, PATTERN_CACHE};
+//! use superconfig::concurrent::{HashMap, HashSet, PATTERN_CACHE};
 //! use regex::Regex;
 //!
 //! // Global concurrent pattern cache
@@ -152,12 +174,15 @@
 //! });
 //! ```
 //!
-//! ### Cache Management
+//! ### Cache Management (Optional)
+//!
+//! Only available when the `cache` feature is enabled:
 //!
 //! ```rust,no_run
-//! use fast_config::CacheManager;
-//!
+//! #[cfg(feature = "cache")]
 //! fn manage_cache() -> Result<(), Box<dyn std::error::Error>> {
+//!     use superconfig::CacheManager;
+//!     
 //!     let cache = CacheManager::new("myapp")?;
 //!
 //!     // Manually clear cache
@@ -175,7 +200,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! fast-config = { version = "0.1", features = ["runtime-reload"] }
+//! superconfig = { version = "0.2", features = ["runtime-reload"] }
 //! ```
 //!
 //! **Note**: Runtime reloading adds `RwLock` overhead. For maximum performance,
@@ -185,6 +210,7 @@
 //!
 //! - **`json`**: JSON format support (enabled by default)
 //! - **`yaml`**: YAML format support (enabled by default)
+//! - **`cache`**: Enable bincode caching (disabled by default, adds overhead)
 //! - **`runtime-reload`**: Enable runtime configuration reloading
 //!
 //! ## Error Handling
@@ -192,7 +218,7 @@
 //! Fast-config provides comprehensive error handling:
 //!
 //! ```rust,no_run
-//! use fast_config::{FastConfig, Error};
+//! use superconfig::{FastConfig, Error};
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -226,18 +252,27 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::path::PathBuf;
 
-mod cache;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cache")] {
+        mod cache;
+        pub use cache::CacheManager;
+    }
+}
+
 mod formats;
 mod paths;
 
+/// Prelude module for convenient glob imports
+pub mod prelude;
+
 pub use anyhow::{Error, Result};
-pub use cache::CacheManager;
 pub use formats::ConfigFormat;
 pub use paths::ConfigPaths;
 
-// Re-export the procedural macro from fast-config-macros
-pub use fast_config_macros::config;
+// Re-export the procedural macro from superconfig-macros
+pub use superconfig_macros::config;
 
 /// Create a static LazyLock configuration instance
 ///
@@ -251,7 +286,7 @@ pub use fast_config_macros::config;
 ///
 /// # Example
 /// ```rust
-/// use fast_config::{static_config, FastConfig};
+/// use superconfig::{static_config, FastConfig};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -307,7 +342,7 @@ where
     ///
     /// # Example
     /// ```rust
-    /// use fast_config::FastConfig;
+    /// use superconfig::FastConfig;
     /// use serde::{Deserialize, Serialize};
     ///
     /// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -333,10 +368,46 @@ where
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn load(config_name: &str) -> Result<Self> {
-        let config = Self::load_internal(config_name)?;
+        let config = Self::load_internal(config_name, None)?;
         Ok(Self {
             config,
             config_name: config_name.to_string(),
+        })
+    }
+    
+    /// Load configuration from a specific file path
+    ///
+    /// This bypasses the normal search paths and loads directly from the given file.
+    ///
+    /// # Arguments
+    /// * `path` - Direct path to the configuration file
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use superconfig::FastConfig;
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+    /// struct MyAppConfig {
+    ///     debug: bool,
+    /// }
+    ///
+    /// // Load from a specific path
+    /// let config = FastConfig::<MyAppConfig>::load_from_path("/etc/myapp/production.yaml")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn load_from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+        let path_ref = path.as_ref();
+        let config_name = path_ref
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("config")
+            .to_string();
+        
+        let config = Self::load_internal(&config_name, Some(path_ref))?;
+        Ok(Self {
+            config,
+            config_name,
         })
     }
 
@@ -356,31 +427,99 @@ where
     }
 
     /// Reload configuration from disk (bypasses cache)
+    #[cfg(not(feature = "runtime-reload"))]
     pub fn reload(&mut self) -> Result<()> {
-        self.config = Self::load_internal(&self.config_name)?;
+        self.config = Self::load_internal(&self.config_name, None)?;
         Ok(())
     }
 
-    /// Load configuration with intelligent caching
-    fn load_internal(name: &str) -> Result<T> {
-        let cache_manager = CacheManager::new(name)?;
-        let config_paths = ConfigPaths::new(name);
+    /// Load configuration with optional caching
+    fn load_internal(name: &str, direct_path: Option<&std::path::Path>) -> Result<T> {
+        let start_time = std::time::Instant::now();
+        tracing::debug!("⏱️  TIMING: load_internal start for '{}'", name);
 
-        // Try cache first (~1-3ms if cache hit)
-        if let Ok(cached_config) = cache_manager.load_cached() {
-            tracing::debug!("Loaded {} config from cache (~1-3ms)", name);
-            return Ok(cached_config);
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cache")] {
+                let cache_manager = {
+                    let cache_manager = CacheManager::new(name)?;
+                    let cache_manager_time = start_time.elapsed();
+                    tracing::debug!("⏱️  TIMING: CacheManager::new took {:?}", cache_manager_time);
+                    cache_manager
+                };
+            }
         }
 
-        // Load from files (~10ms JSON, ~30ms YAML)
-        for path in config_paths.search_paths() {
-            if path.exists() {
-                let format = ConfigFormat::from_path(path)?;
-                let config: T = format.parse(path)?;
+        // If direct path provided, use only that path
+        let search_paths: Vec<PathBuf> = if let Some(path) = direct_path {
+            vec![path.to_path_buf()]
+        } else {
+            let config_paths_start = std::time::Instant::now();
+            let config_paths = ConfigPaths::new(name);
+            let config_paths_time = config_paths_start.elapsed();
+            let total_time = start_time.elapsed();
+            tracing::debug!("⏱️  TIMING: ConfigPaths::new took {:?} (total: {:?})", 
+                           config_paths_time, total_time);
+            config_paths.search_paths().cloned().collect()
+        };
 
-                // Cache for future loads
-                if let Err(e) = cache_manager.save_to_cache(&config, Some(path)) {
-                    tracing::warn!("Failed to cache config: {}", e);
+        // Try cache first (~1-3ms if cache hit) - skip for direct paths
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cache")] {
+                if direct_path.is_none() {
+                    let cache_check_start = std::time::Instant::now();
+                    if let Ok(cached_config) = cache_manager.load_cached() {
+                        let cache_hit_time = cache_check_start.elapsed();
+                        tracing::debug!("⏱️  TIMING: Cache HIT - loaded in {:?} (total: {:?})", 
+                                       cache_hit_time, start_time.elapsed());
+                        return Ok(cached_config);
+                    }
+                    let cache_miss_time = cache_check_start.elapsed();
+                    tracing::debug!("⏱️  TIMING: Cache MISS - check took {:?}", cache_miss_time);
+                }
+            }
+        }
+
+        // Load from files (~2μs JSON, ~30ms YAML)
+        let file_search_start = std::time::Instant::now();
+        for path in &search_paths {
+            if path.exists() {
+                let file_found_time = file_search_start.elapsed();
+                tracing::debug!("⏱️  TIMING: Found config file {:?} after {:?}", path, file_found_time);
+
+                let format_start = std::time::Instant::now();
+                let format = ConfigFormat::from_path(path)?;
+                let format_time = format_start.elapsed();
+                tracing::debug!("⏱️  TIMING: ConfigFormat::from_path took {:?}", format_time);
+
+                let parse_start = std::time::Instant::now();
+                let config: T = format.parse(path)?;
+                let parse_time = parse_start.elapsed();
+                tracing::debug!("⏱️  TIMING: format.parse took {:?} (JSON deserialization)", parse_time);
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "cache")] {
+                        let clone_start = std::time::Instant::now();
+                        let config_clone = config.clone();
+                        let clone_time = clone_start.elapsed();
+                        tracing::debug!("⏱️  TIMING: config.clone() took {:?}", clone_time);
+
+                        // Cache in background using channel-based worker (fastest approach: 194µs)
+                        let spawn_start = std::time::Instant::now();
+                        Self::spawn_background_cache_task(cache_manager, config_clone, path.to_path_buf());
+                        let spawn_time = spawn_start.elapsed();
+                        tracing::debug!("⏱️  TIMING: spawn_background_cache_task took {:?}", spawn_time);
+                    } else {
+                        tracing::debug!("⏱️  TIMING: No caching (cache feature disabled)");
+                    }
+                }
+
+                let total_time = start_time.elapsed();
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "cache")] {
+                        tracing::debug!("⏱️  TIMING: load_internal COMPLETE in {:?} (with caching)", total_time);
+                    } else {
+                        tracing::debug!("⏱️  TIMING: load_internal COMPLETE in {:?} (no caching)", total_time);
+                    }
                 }
 
                 return Ok(config);
@@ -394,6 +533,42 @@ where
             name,
             name
         ))
+    }
+
+    /// Execute background cache task using channel-based worker thread (fastest: 194µs)
+    #[cfg(feature = "cache")]
+    fn spawn_background_cache_task(cache_manager: CacheManager, config: T, config_path: std::path::PathBuf) {
+        use std::sync::LazyLock;
+        use std::sync::mpsc;
+        use std::thread;
+        
+        // Use closure approach for type-erased caching
+        type CacheTaskSender = mpsc::Sender<Box<dyn FnOnce() + Send>>;
+        
+        // Global channel-based worker for background caching
+        static CACHE_WORKER: LazyLock<CacheTaskSender> = LazyLock::new(|| {
+            let (tx, rx) = mpsc::channel::<Box<dyn FnOnce() + Send>>();
+            
+            thread::spawn(move || {
+                while let Ok(task) = rx.recv() {
+                    task(); // Execute the cache task
+                }
+            });
+            
+            tx
+        });
+        
+        let cache_task = Box::new(move || {
+            if let Err(e) = cache_manager.save_to_cache(&config, Some(&config_path)) {
+                tracing::warn!("Background cache write failed: {}", e);
+            } else {
+                tracing::debug!("Background cache write completed for {:?}", config_path);
+            }
+        });
+        
+        if let Err(_) = CACHE_WORKER.send(cache_task) {
+            tracing::warn!("Failed to send cache task to worker thread");
+        }
     }
 }
 
@@ -446,7 +621,7 @@ pub mod concurrent {
     ///
     /// # Example
     /// ```rust
-    /// use fast_config::concurrent::PATTERN_CACHE;
+    /// use superconfig::concurrent::PATTERN_CACHE;
     /// use regex::Regex;
     ///
     /// // Cache a compiled pattern

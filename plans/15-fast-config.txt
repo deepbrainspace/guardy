@@ -1,0 +1,23 @@
+
+  1. Lazy Static Thread Pool (Fastest)
+
+  Use a pre-created thread pool instead of spawning new threads:
+  static CACHE_POOL: LazyLock<ThreadPool> = LazyLock::new(|| ThreadPool::new(1));
+  CACHE_POOL.execute(|| { /* cache work */ });
+
+  2. Channel-Based Worker Thread (Fast)
+
+  Single worker thread that processes cache requests via channel:
+  static CACHE_WORKER: LazyLock<Sender<CacheTask>> = LazyLock::new(|| {
+      let (tx, rx) = channel();
+      thread::spawn(|| { /* worker loop */ });
+      tx
+  });
+
+  3. Deferred Caching (Very Fast)
+
+  Don't cache immediately - just collect cache tasks and execute them later:
+  // Just return immediately, cache on next load or explicit call
+  fn defer_cache_task(...) {
+      // Store task, don't execute
+  }

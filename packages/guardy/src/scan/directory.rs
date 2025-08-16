@@ -260,6 +260,27 @@ impl DirectoryHandler {
 
         // Collect all file paths using unified walker logic
         let file_paths = self.collect_file_paths(&scanner, path, &mut warnings)?;
+        
+        // Adapt execution strategy based on actual file count
+        let execution_strategy = match execution_strategy {
+            ExecutionStrategy::Sequential => ExecutionStrategy::Sequential,
+            ExecutionStrategy::Parallel { workers } => {
+                // Never use more workers than files - this is critical for performance!
+                // For small file counts, excess workers just add overhead
+                let adapted_workers = if file_paths.len() == 0 {
+                    1
+                } else {
+                    workers.min(file_paths.len()).max(1)
+                };
+                
+                // For very small file counts, consider switching to sequential
+                if file_paths.len() <= 3 && scanner.config.mode == super::types::ScanMode::Auto {
+                    ExecutionStrategy::Sequential
+                } else {
+                    ExecutionStrategy::Parallel { workers: adapted_workers }
+                }
+            }
+        };
 
         // Now show scanning strategy message with worker count
         match &execution_strategy {

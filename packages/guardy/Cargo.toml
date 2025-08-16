@@ -25,14 +25,15 @@ name = "realistic_benchmarks"
 harness = false
 
 [dependencies]
-# Configuration
-superconfig = "0.1.0"
+# Configuration  
+superconfig = { path = "../superconfig" }
 
 # CLI and utilities
 clap = { version = "4.5.41", features = ["derive", "env", "color"] }
 dialoguer = "0.11.0"
 similar = "2.7.0"
 regex = "1.11.1"
+dirs = "5.0"
 globset = "0.4.16"
 aho-corasick = "1.1.3"
 fs_extra = "1.3.0"
@@ -48,7 +49,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 serde_yml = { workspace = true }
-serde_yaml_bw = "2.1.1"
+serde_yaml_bw = { workspace = true }  # Latest version with panic-free parsing
+bincode = "2.0"           # Internal cache (fastest) - latest version
 anyhow = { workspace = true }
 
 # Git and validation

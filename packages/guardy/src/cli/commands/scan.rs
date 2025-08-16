@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::cli::output;
-use crate::config::GuardyConfig;
 use crate::scan::Scanner;
 use crate::scan::types::{ScanMode, ScanResult, ScanStats, SecretMatch, Warning};
 
@@ -113,15 +112,25 @@ pub enum OutputFormat {
 
 pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str>) -> Result<()> {
     use crate::scan::static_data::patterns::get_pattern_library;
+    use crate::config::FastConfig;
     use regex::Regex;
 
-    // Load configuration (CLI overrides handled separately due to SuperConfig limitations)
-    // TODO: Fix SuperConfig bug where nested JSON objects and arrays in CLI overrides
-    // cause "invalid type: sequence, expected a map" errors and prevent proper merging
-    let config = GuardyConfig::load(config_path, None::<serde_json::Value>, verbose_level)?;
+    let total_start = Instant::now();
+    
+    // Timing instrumentation
+    let config_start = Instant::now();
+    
+    // Use fast config loading for scan command
+    let fast_config = FastConfig::load(config_path)?;
+    
+    let config_duration = config_start.elapsed();
+    tracing::info!("⏱️ Configuration loading: {}ms", config_duration.as_millis());
 
     // Get the global pattern library
+    let pattern_lib_start = Instant::now();
     let pattern_lib = get_pattern_library();
+    let pattern_lib_duration = pattern_lib_start.elapsed();
+    tracing::info!("⏱️ Pattern library initialization: {}ms", pattern_lib_duration.as_millis());
 
     // Handle --list-patterns flag
     if args.list_patterns {
@@ -147,6 +156,7 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
     }
 
     // Validate custom patterns (but don't add them here - they're handled by the scanner config)
+    let custom_pattern_start = Instant::now();
     for custom_pattern in &args.custom_patterns {
         if let Err(e) = Regex::new(custom_pattern) {
             output::styled!(
@@ -157,12 +167,25 @@ pub async fn execute(args: ScanArgs, verbose_level: u8, config_path: Option<&str
             );
         }
     }
+    let custom_pattern_duration = custom_pattern_start.elapsed();
+    if !args.custom_patterns.is_empty() {
+        tracing::info!("⏱️ Custom pattern validation: {}ms", custom_pattern_duration.as_millis());
+    }
 
-    // Extract scanner config using the proper parsing method, passing CLI args directly
-    let scanner_config = Scanner::parse_scanner_config_with_cli_overrides(&config, &args)?;
+    // Extract scanner config from fast config
+    let scanner_config_start = Instant::now();
+    let scanner_config = Scanner::from_fast_config_with_cli_overrides(&fast_config, &args)?;
+    let scanner_config_duration = scanner_config_start.elapsed();
+    tracing::info!("⏱️ Scanner config parsing: {}ms", scanner_config_duration.as_millis());
 
     // Create scanner with CLI-overridden config
+    let scanner_create_start = Instant::now();
     let scanner = Scanner::with_config(scanner_config)?;
+    let scanner_create_duration = scanner_create_start.elapsed();
+    tracing::info!("⏱️ Scanner creation: {}ms", scanner_create_duration.as_millis());
+    
+    let total_startup_duration = total_start.elapsed();
+    tracing::info!("⏱️ Total startup time: {}ms", total_startup_duration.as_millis());
 
     output::styled!("{} Starting security scan...", ("ℹ", "info_symbol"));
     let start_time = Instant::now();
