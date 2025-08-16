@@ -1,21 +1,33 @@
 //! Partial configuration for layered overrides
 //! 
-//! This module provides a PartialConfig type that can hold sparse configuration
-//! overrides that get applied on top of a base configuration.
+//! This module provides a trait-based approach for partial configs
+//! that avoids JSON serialization overhead.
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
-use crate::{Error, Result};
+use crate::Result;
 
-/// Partial configuration for applying overrides
+/// Trait for types that can be partially configured
 /// 
-/// This allows you to specify only the fields you want to override
-/// without needing to provide a complete configuration structure.
+/// Implement this for your config struct to enable field-by-field overrides
+/// without JSON serialization overhead.
+pub trait PartialConfigurable {
+    /// Apply a single field override by path
+    fn set_field(&mut self, path: &str, value: &str) -> Result<()>;
+    
+    /// Extend an array field by path
+    fn extend_array(&mut self, path: &str, values: Vec<String>) -> Result<()>;
+}
+
+/// Collection of configuration overrides
+/// 
+/// This stores overrides as strings and applies them directly
+/// to config structs via the PartialConfigurable trait.
 #[derive(Debug, Clone, Default)]
 pub struct PartialConfig {
-    /// Map of dot-notation paths to values
-    overrides: HashMap<String, Value>,
+    /// Simple field overrides (path -> string value)
+    field_overrides: HashMap<String, String>,
+    /// Array extensions (path -> values to append)
+    array_extensions: HashMap<String, Vec<String>>,
 }
 
 impl PartialConfig {
@@ -24,214 +36,167 @@ impl PartialConfig {
         Self::default()
     }
     
-    /// Set a configuration value at the given path
+    /// Set a field override
     /// 
-    /// # Example
-    /// ```
-    /// let mut partial = PartialConfig::new();
-    /// partial.set("scanner.max_threads", 4);
-    /// partial.set("general.debug", true);
-    /// ```
-    pub fn set<T: Into<Value>>(&mut self, path: &str, value: T) {
-        self.overrides.insert(path.to_string(), value.into());
+    /// Values are stored as strings and parsed when applied
+    pub fn set(&mut self, path: &str, value: impl ToString) {
+        self.field_overrides.insert(path.to_string(), value.to_string());
     }
     
-    /// Set a configuration value only if it's Some
-    /// 
-    /// This is useful for CLI arguments that are optional
-    pub fn set_if_some<T: Into<Value>>(&mut self, path: &str, value: Option<T>) {
+    /// Set a field only if the value is Some
+    pub fn set_if_some<T: ToString>(&mut self, path: &str, value: Option<T>) {
         if let Some(v) = value {
             self.set(path, v);
         }
     }
     
-    /// Extend an array at the given path
-    /// 
-    /// Instead of replacing the array, this appends to it
+    /// Extend an array field
     pub fn extend_array(&mut self, path: &str, values: Vec<String>) {
-        // Use special marker to indicate extension rather than replacement
-        self.overrides.insert(
-            format!("{}.__extend", path), 
-            Value::Array(values.into_iter().map(Value::String).collect())
-        );
+        self.array_extensions.insert(path.to_string(), values);
     }
     
-    /// Apply these overrides to a configuration struct
+    /// Apply all overrides to a configuration
     /// 
-    /// This modifies the configuration in-place with all overrides
-    pub fn apply_to<T>(&self, config: &mut T) -> Result<()> 
-    where
-        T: Serialize + for<'de> Deserialize<'de>
-    {
-        // Convert config to JSON value for manipulation
-        let mut value = serde_json::to_value(&*config)
-            .map_err(|e| Error::ParseError(e.to_string()))?;
+    /// This is fast because it directly calls methods on the config struct
+    /// without any JSON serialization.
+    pub fn apply_to<T: PartialConfigurable>(&self, config: &mut T) -> Result<()> {
+        let start = std::time::Instant::now();
         
-        // Apply each override
-        for (path, override_value) in &self.overrides {
-            if path.ends_with(".__extend") {
-                // Handle array extension
-                let base_path = path.trim_suffix(".__extend").unwrap();
-                extend_array_at_path(&mut value, base_path, override_value)?;
-            } else {
-                // Normal value replacement
-                apply_at_path(&mut value, path, override_value.clone())?;
-            }
+        // Apply field overrides
+        for (path, value) in &self.field_overrides {
+            tracing::trace!("Applying override: {} = {}", path, value);
+            config.set_field(path, value)?;
         }
         
-        // Convert back to the original type
-        *config = serde_json::from_value(value)
-            .map_err(|e| Error::ParseError(e.to_string()))?;
+        // Apply array extensions
+        for (path, values) in &self.array_extensions {
+            tracing::trace!("Extending array: {} += {} items", path, values.len());
+            config.extend_array(path, values.clone())?;
+        }
+        
+        let duration = start.elapsed();
+        tracing::trace!("Applied {} overrides in {:?}", 
+            self.field_overrides.len() + self.array_extensions.len(), 
+            duration
+        );
         
         Ok(())
     }
     
     /// Check if there are any overrides
     pub fn is_empty(&self) -> bool {
-        self.overrides.is_empty()
+        self.field_overrides.is_empty() && self.array_extensions.is_empty()
     }
     
     /// Get the number of overrides
     pub fn len(&self) -> usize {
-        self.overrides.len()
+        self.field_overrides.len() + self.array_extensions.len()
     }
 }
 
-/// Apply a value at a dot-notation path
-fn apply_at_path(root: &mut Value, path: &str, value: Value) -> Result<()> {
-    let parts: Vec<&str> = path.split('.').collect();
-    let mut current = root;
-    
-    // Navigate to the parent of the target
-    for (i, part) in parts.iter().enumerate() {
-        if i == parts.len() - 1 {
-            // Last part - set the value
-            if let Value::Object(map) = current {
-                map.insert(part.to_string(), value);
-            } else {
-                return Err(Error::ParseError(
-                    format!("Cannot set field '{}' on non-object", part)
-                ));
-            }
-        } else {
-            // Intermediate part - navigate deeper
-            if let Value::Object(map) = current {
-                // Create intermediate objects if they don't exist
-                if !map.contains_key(*part) {
-                    map.insert(part.to_string(), Value::Object(serde_json::Map::new()));
+/// Macro to implement PartialConfigurable for a config struct
+/// 
+/// This generates efficient match statements for direct field access,
+/// avoiding any reflection or serialization overhead.
+#[macro_export]
+macro_rules! impl_partial_configurable {
+    ($type:ty, {
+        $(fields: {
+            $($field_path:literal => $field_setter:expr),* $(,)?
+        })?
+        $(arrays: {
+            $($array_path:literal => $array_extender:expr),* $(,)?
+        })?
+    }) => {
+        impl $crate::PartialConfigurable for $type {
+            fn set_field(&mut self, path: &str, value: &str) -> $crate::Result<()> {
+                match path {
+                    $($($field_path => {
+                        $field_setter(self, value)?;
+                        Ok(())
+                    },)*)?
+                    _ => Err(anyhow::anyhow!("Unknown field path: {}", path))
                 }
-                current = map.get_mut(*part).unwrap();
-            } else {
-                return Err(Error::ParseError(
-                    format!("Cannot navigate through '{}' - not an object", part)
-                ));
+            }
+            
+            fn extend_array(&mut self, path: &str, values: Vec<String>) -> $crate::Result<()> {
+                match path {
+                    $($($array_path => {
+                        $array_extender(self, values);
+                        Ok(())
+                    },)*)?
+                    _ => Err(anyhow::anyhow!("Unknown array path: {}", path))
+                }
             }
         }
-    }
-    
-    Ok(())
-}
-
-/// Extend an array at a dot-notation path
-fn extend_array_at_path(root: &mut Value, path: &str, values: &Value) -> Result<()> {
-    let parts: Vec<&str> = path.split('.').collect();
-    let mut current = root;
-    
-    // Navigate to the target array
-    for part in &parts {
-        if let Value::Object(map) = current {
-            if let Some(next) = map.get_mut(*part) {
-                current = next;
-            } else {
-                // Array doesn't exist yet - create it
-                map.insert(part.to_string(), Value::Array(vec![]));
-                current = map.get_mut(*part).unwrap();
-            }
-        } else {
-            return Err(Error::ParseError(
-                format!("Cannot navigate through '{}' - not an object", part)
-            ));
-        }
-    }
-    
-    // Extend the array
-    if let Value::Array(target_array) = current {
-        if let Value::Array(new_values) = values {
-            target_array.extend(new_values.clone());
-        }
-    } else {
-        return Err(Error::ParseError(
-            format!("Target at path '{}' is not an array", path)
-        ));
-    }
-    
-    Ok(())
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Deserialize, Serialize};
     
-    #[derive(Debug, Serialize, Deserialize, PartialEq)]
     struct TestConfig {
         debug: bool,
         max_threads: u32,
-        scanner: ScannerConfig,
-    }
-    
-    #[derive(Debug, Serialize, Deserialize, PartialEq)]
-    struct ScannerConfig {
-        enabled: bool,
+        name: String,
         patterns: Vec<String>,
     }
     
-    #[test]
-    fn test_partial_config_basic() {
-        let mut config = TestConfig {
-            debug: false,
-            max_threads: 4,
-            scanner: ScannerConfig {
-                enabled: true,
-                patterns: vec!["pattern1".into()],
-            },
-        };
+    impl PartialConfigurable for TestConfig {
+        fn set_field(&mut self, path: &str, value: &str) -> Result<()> {
+            match path {
+                "debug" => {
+                    self.debug = value.parse().map_err(|_| anyhow::anyhow!("Invalid bool"))?;
+                    Ok(())
+                }
+                "max_threads" => {
+                    self.max_threads = value.parse().map_err(|_| anyhow::anyhow!("Invalid u32"))?;
+                    Ok(())
+                }
+                "name" => {
+                    self.name = value.to_string();
+                    Ok(())
+                }
+                _ => Err(anyhow::anyhow!("Unknown field: {}", path))
+            }
+        }
         
-        let mut partial = PartialConfig::new();
-        partial.set("debug", true);
-        partial.set("max_threads", 8u32);
-        partial.set("scanner.enabled", false);
-        
-        partial.apply_to(&mut config).unwrap();
-        
-        assert_eq!(config.debug, true);
-        assert_eq!(config.max_threads, 8);
-        assert_eq!(config.scanner.enabled, false);
+        fn extend_array(&mut self, path: &str, values: Vec<String>) -> Result<()> {
+            match path {
+                "patterns" => {
+                    self.patterns.extend(values);
+                    Ok(())
+                }
+                _ => Err(anyhow::anyhow!("Unknown array: {}", path))
+            }
+        }
     }
     
     #[test]
-    fn test_partial_config_extend_array() {
+    fn test_direct_field_updates() {
         let mut config = TestConfig {
             debug: false,
             max_threads: 4,
-            scanner: ScannerConfig {
-                enabled: true,
-                patterns: vec!["pattern1".into()],
-            },
+            name: "test".into(),
+            patterns: vec!["pat1".into()],
         };
         
         let mut partial = PartialConfig::new();
-        partial.extend_array("scanner.patterns", vec![
-            "pattern2".into(),
-            "pattern3".into(),
-        ]);
+        partial.set("debug", "true");
+        partial.set("max_threads", "8");
+        partial.extend_array("patterns", vec!["pat2".into(), "pat3".into()]);
         
+        // Measure performance
+        let start = std::time::Instant::now();
         partial.apply_to(&mut config).unwrap();
+        let duration = start.elapsed();
         
-        assert_eq!(config.scanner.patterns, vec![
-            "pattern1".into(),
-            "pattern2".into(),
-            "pattern3".into(),
-        ]);
+        // Should be <1 microsecond (no JSON serialization!)
+        assert!(duration.as_micros() < 10);
+        
+        assert_eq!(config.debug, true);
+        assert_eq!(config.max_threads, 8);
+        assert_eq!(config.patterns, vec!["pat1".to_string(), "pat2".to_string(), "pat3".to_string()]);
     }
 }

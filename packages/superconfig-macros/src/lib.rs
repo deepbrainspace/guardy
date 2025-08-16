@@ -69,7 +69,7 @@
 //! }
 //! 
 //! static MY_APP_CONFIG: LazyLock<MyAppConfig> = LazyLock::new(|| {
-//!     FastConfig::<MyAppConfig>::load("myapp")
+//!     Config::<MyAppConfig>::load("myapp")
 //!         .map(|config| config.clone_config())
 //!         .unwrap_or_else(|e| {
 //!             tracing::warn!("Failed to load config myapp: {}, using default", e);
@@ -161,7 +161,7 @@ pub fn config(input: TokenStream) -> TokenStream {
         
         /// Auto-generated LazyLock static instance for zero-copy configuration access
         pub static #static_ident: ::std::sync::LazyLock<#struct_name> = ::std::sync::LazyLock::new(|| {
-            ::superconfig::FastConfig::<#struct_name>::load(#config_name)
+            ::superconfig::Config::<#struct_name>::load(#config_name)
                 .map(|config| config.clone_config())
                 .unwrap_or_else(|e| {
                     ::tracing::warn!("Failed to load config {}: {}, using default", #config_name, e);

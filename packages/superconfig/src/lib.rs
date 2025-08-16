@@ -10,8 +10,7 @@
 //! ## Key Features
 //!
 //! - 🚀 **Sub-microsecond access** via [`LazyLock`] static instances after first load
-//! - ⚡ **Direct file parsing** for best performance (~10ms JSON, ~30ms YAML)
-//! - 💾 **Optional caching** with [bincode] serialization (enable with `cache` feature)
+//! - ⚡ **Direct file parsing** for best performance (~5μs JSON, ~30ms YAML)
 //! - 📄 **Multi-format support** for JSON and YAML configuration files
 //! - 🏗️ **Procedural macros** for zero-boilerplate configuration setup
 //! - 🛡️ **Type-safe** configuration with full [serde] integration
@@ -23,12 +22,10 @@
 //! | Access Method | Performance | Use Case |
 //! |---------------|-------------|----------|
 //! | **Static LazyLock** | `0.57 ns` | Production (after first load) |
-//! | **Direct load (no cache)** | `5.28 μs` | Default mode - best overall performance |
-//! | **Cached load** | `26.39 μs` | When `cache` feature enabled |
-//! | **Cold start (with cache)** | `40.57 μs` | First load with cache overhead |
+//! | **Direct load** | `5.28 μs` | Default mode - best overall performance |
 //!
-//! **Note**: Cache is disabled by default as direct parsing (`5.28 μs`) performs 5x better 
-//! than cached loads (`26.39 μs`). The cache feature adds overhead that rarely pays off.
+//! **Note**: Cache feature was removed as direct parsing (`5.28 μs`) performs 5x better 
+//! than cached loads (`26.39 μs`).
 //!
 //! ## Quick Start
 //!
@@ -58,7 +55,7 @@
 //! // Generate static LazyLock instance for zero-copy access
 //! static_config!(CONFIG, AppConfig, "myapp");
 //!
-//! // Sub-microsecond access after first load
+//! // Sub-nanosecond access after first load
 //! println!("Server starting on port {}", CONFIG.port);
 //! println!("Database: {}", CONFIG.database_url);
 //! ```
@@ -78,7 +75,7 @@
 //! For more control over error handling:
 //!
 //! ```rust
-//! use superconfig::FastConfig;
+//! use superconfig::Config;
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -90,7 +87,7 @@
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Explicit loading with comprehensive error handling
-//!     match FastConfig::<AppConfig>::load("myapp") {
+//!     match Config::<AppConfig>::load("myapp") {
 //!         Ok(config) => {
 //!             println!("Loaded config: {}", config.name());
 //!             println!("Server port: {}", config.get().port);
@@ -132,7 +129,7 @@
 //! 2. **User config directory**: `~/.config/{name}.json`, `~/.config/{name}.yaml`, `~/.config/{name}.yml`
 //! 3. **App config directory**: `~/.config/{name}/config.json`, `~/.config/{name}/config.yaml`, `~/.config/{name}/config.yml`
 //!
-//! You can also load from a specific path using `FastConfig::load_from_path("/path/to/config.yaml")`
+//! You can also load from a specific path using `Config::load_from_path("/path/to/config.yaml")`
 //!
 //! ## Import Styles
 //!
@@ -140,7 +137,7 @@
 //!
 //! ### Explicit Imports (Explicit Control)
 //! ```rust
-//! use superconfig::{FastConfig, static_config, config, Error, Result};
+//! use superconfig::{Config, static_config, config, Error, Result};
 //! use serde::{Deserialize, Serialize};
 //! ```
 //!
@@ -218,7 +215,7 @@
 //! Fast-config provides comprehensive error handling:
 //!
 //! ```rust,no_run
-//! use superconfig::{FastConfig, Error};
+//! use superconfig::{Config, Error};
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -228,7 +225,7 @@
 //! }
 //!
 //! fn load_with_fallback() -> AppConfig {
-//!     FastConfig::<AppConfig>::load("myapp")
+//!     Config::<AppConfig>::load("myapp")
 //!         .map(|config| config.clone_config())
 //!         .unwrap_or_else(|e| {
 //!             eprintln!("Failed to load config: {}", e);
@@ -254,12 +251,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "cache")] {
-        mod cache;
-        pub use cache::CacheManager;
-    }
-}
+// Cache feature removed for better performance
+// Direct parsing is 5x faster than cached loads
 
 mod formats;
 mod paths;
@@ -267,9 +260,15 @@ mod paths;
 /// Prelude module for convenient glob imports
 pub mod prelude;
 
+/// Partial configuration support for layered overrides
+pub mod partial;
+pub mod builder;
+
 pub use anyhow::{Error, Result};
 pub use formats::ConfigFormat;
 pub use paths::ConfigPaths;
+pub use partial::{PartialConfig, PartialConfigurable};
+pub use builder::ConfigBuilder;
 
 // Re-export the procedural macro from superconfig-macros
 pub use superconfig_macros::config;
@@ -286,7 +285,7 @@ pub use superconfig_macros::config;
 ///
 /// # Example
 /// ```rust
-/// use superconfig::{static_config, FastConfig};
+/// use superconfig::{static_config, Config};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -305,7 +304,7 @@ pub use superconfig_macros::config;
 macro_rules! static_config {
     ($name:ident, $type:ty, $config_name:expr) => {
         static $name: ::std::sync::LazyLock<$type> = ::std::sync::LazyLock::new(|| {
-            $crate::FastConfig::<$type>::load($config_name)
+            $crate::Config::<$type>::load($config_name)
                 .map(|config| config.clone_config())
                 .unwrap_or_else(|e| {
                     ::tracing::warn!(
@@ -319,11 +318,11 @@ macro_rules! static_config {
     };
 }
 
-/// High-performance configuration loader with SCC-powered caching
+/// High-performance configuration loader
 ///
 /// Generic over your config struct type. Supports both Typify-generated
 /// structs and manually defined structs.
-pub struct FastConfig<T>
+pub struct Config<T>
 where
     T: for<'de> Deserialize<'de> + Serialize + Clone + Default + Send + Sync + 'static,
 {
@@ -331,7 +330,7 @@ where
     config_name: String,
 }
 
-impl<T> FastConfig<T>
+impl<T> Config<T>
 where
     T: for<'de> Deserialize<'de> + Serialize + Clone + Default + Send + Sync + 'static,
 {
@@ -342,7 +341,7 @@ where
     ///
     /// # Example
     /// ```rust
-    /// use superconfig::FastConfig;
+    /// use superconfig::Config;
     /// use serde::{Deserialize, Serialize};
     ///
     /// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -358,7 +357,7 @@ where
     /// }
     ///
     /// // Load existing config file and show error handling
-    /// match FastConfig::<MyAppConfig>::load("sample") {
+    /// match Config::<MyAppConfig>::load("sample") {
     ///     Ok(config) => {
     ///         println!("Config loaded: {}", config.name());
     ///         println!("Server port: {}", config.get().server.port);
@@ -384,7 +383,7 @@ where
     ///
     /// # Example
     /// ```rust,no_run
-    /// use superconfig::FastConfig;
+    /// use superconfig::Config;
     /// use serde::{Deserialize, Serialize};
     ///
     /// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -393,7 +392,7 @@ where
     /// }
     ///
     /// // Load from a specific path
-    /// let config = FastConfig::<MyAppConfig>::load_from_path("/etc/myapp/production.yaml")?;
+    /// let config = Config::<MyAppConfig>::load_from_path("/etc/myapp/production.yaml")?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn load_from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
@@ -433,21 +432,10 @@ where
         Ok(())
     }
 
-    /// Load configuration with optional caching
+    /// Load configuration directly from file
     fn load_internal(name: &str, direct_path: Option<&std::path::Path>) -> Result<T> {
         let start_time = std::time::Instant::now();
         tracing::debug!("⏱️  TIMING: load_internal start for '{}'", name);
-
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "cache")] {
-                let cache_manager = {
-                    let cache_manager = CacheManager::new(name)?;
-                    let cache_manager_time = start_time.elapsed();
-                    tracing::debug!("⏱️  TIMING: CacheManager::new took {:?}", cache_manager_time);
-                    cache_manager
-                };
-            }
-        }
 
         // If direct path provided, use only that path
         let search_paths: Vec<PathBuf> = if let Some(path) = direct_path {
@@ -462,24 +450,7 @@ where
             config_paths.search_paths().cloned().collect()
         };
 
-        // Try cache first (~1-3ms if cache hit) - skip for direct paths
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "cache")] {
-                if direct_path.is_none() {
-                    let cache_check_start = std::time::Instant::now();
-                    if let Ok(cached_config) = cache_manager.load_cached() {
-                        let cache_hit_time = cache_check_start.elapsed();
-                        tracing::debug!("⏱️  TIMING: Cache HIT - loaded in {:?} (total: {:?})", 
-                                       cache_hit_time, start_time.elapsed());
-                        return Ok(cached_config);
-                    }
-                    let cache_miss_time = cache_check_start.elapsed();
-                    tracing::debug!("⏱️  TIMING: Cache MISS - check took {:?}", cache_miss_time);
-                }
-            }
-        }
-
-        // Load from files (~2μs JSON, ~30ms YAML)
+        // Load from files (~5μs JSON, ~30ms YAML)
         let file_search_start = std::time::Instant::now();
         for path in &search_paths {
             if path.exists() {
@@ -494,33 +465,10 @@ where
                 let parse_start = std::time::Instant::now();
                 let config: T = format.parse(path)?;
                 let parse_time = parse_start.elapsed();
-                tracing::debug!("⏱️  TIMING: format.parse took {:?} (JSON deserialization)", parse_time);
-
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "cache")] {
-                        let clone_start = std::time::Instant::now();
-                        let config_clone = config.clone();
-                        let clone_time = clone_start.elapsed();
-                        tracing::debug!("⏱️  TIMING: config.clone() took {:?}", clone_time);
-
-                        // Cache in background using channel-based worker (fastest approach: 194µs)
-                        let spawn_start = std::time::Instant::now();
-                        Self::spawn_background_cache_task(cache_manager, config_clone, path.to_path_buf());
-                        let spawn_time = spawn_start.elapsed();
-                        tracing::debug!("⏱️  TIMING: spawn_background_cache_task took {:?}", spawn_time);
-                    } else {
-                        tracing::debug!("⏱️  TIMING: No caching (cache feature disabled)");
-                    }
-                }
+                tracing::debug!("⏱️  TIMING: format.parse took {:?}", parse_time);
 
                 let total_time = start_time.elapsed();
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "cache")] {
-                        tracing::debug!("⏱️  TIMING: load_internal COMPLETE in {:?} (with caching)", total_time);
-                    } else {
-                        tracing::debug!("⏱️  TIMING: load_internal COMPLETE in {:?} (no caching)", total_time);
-                    }
-                }
+                tracing::debug!("⏱️  TIMING: load_internal COMPLETE in {:?}", total_time);
 
                 return Ok(config);
             }
@@ -535,55 +483,20 @@ where
         ))
     }
 
-    /// Execute background cache task using channel-based worker thread (fastest: 194µs)
-    #[cfg(feature = "cache")]
-    fn spawn_background_cache_task(cache_manager: CacheManager, config: T, config_path: std::path::PathBuf) {
-        use std::sync::LazyLock;
-        use std::sync::mpsc;
-        use std::thread;
-        
-        // Use closure approach for type-erased caching
-        type CacheTaskSender = mpsc::Sender<Box<dyn FnOnce() + Send>>;
-        
-        // Global channel-based worker for background caching
-        static CACHE_WORKER: LazyLock<CacheTaskSender> = LazyLock::new(|| {
-            let (tx, rx) = mpsc::channel::<Box<dyn FnOnce() + Send>>();
-            
-            thread::spawn(move || {
-                while let Ok(task) = rx.recv() {
-                    task(); // Execute the cache task
-                }
-            });
-            
-            tx
-        });
-        
-        let cache_task = Box::new(move || {
-            if let Err(e) = cache_manager.save_to_cache(&config, Some(&config_path)) {
-                tracing::warn!("Background cache write failed: {}", e);
-            } else {
-                tracing::debug!("Background cache write completed for {:?}", config_path);
-            }
-        });
-        
-        if let Err(_) = CACHE_WORKER.send(cache_task) {
-            tracing::warn!("Failed to send cache task to worker thread");
-        }
-    }
 }
 
-impl<T> fmt::Display for FastConfig<T>
+impl<T> fmt::Display for Config<T>
 where
     T: for<'de> Deserialize<'de> + Serialize + Clone + Default + Send + Sync + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FastConfig({})", self.config_name)
+        write!(f, "Config({})", self.config_name)
     }
 }
 
 /// Runtime-reloadable configuration (optional feature)
 #[cfg(feature = "runtime-reload")]
-impl<T> FastConfig<T>
+impl<T> Config<T>
 where
     T: for<'de> Deserialize<'de> + Serialize + Clone + Default + Send + Sync + 'static,
 {

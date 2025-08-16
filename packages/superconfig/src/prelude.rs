@@ -18,11 +18,11 @@
 //! // All core functionality is now available:
 //! static_config!(CONFIG, MyAppConfig, "myapp");
 //! 
-//! let config = FastConfig::<MyAppConfig>::load("myapp");
+//! let config = Config::<MyAppConfig>::load("myapp");
 //! ```
 //! 
 //! This brings in the most commonly used types and macros:
-//! - [`FastConfig`] - Main configuration loader
+//! - [`Config`] - Main configuration loader
 //! - [`config!`] - Procedural macro for auto-generating structs
 //! - [`static_config!`] - Macro for creating static instances
 //! - [`Error`] and [`Result`] - Error handling types
@@ -31,7 +31,7 @@
 
 /// Re-export core types for convenient access
 pub use crate::{
-    FastConfig,      // Main configuration struct
+    Config,          // Main configuration struct
     Error,           // Error type
     Result,          // Result type alias
     ConfigFormat,    // Format handling
@@ -44,9 +44,8 @@ pub use crate::{
     static_config,   // Macro for static instances
 };
 
-/// Re-export cache management when available
-#[cfg(feature = "cache")]
-pub use crate::CacheManager;
+/// Re-export builder and partial config support
+pub use crate::{ConfigBuilder, PartialConfig, PartialConfigurable};
 
 /// Re-export concurrent utilities
 pub use crate::concurrent::{HashMap, HashSet, PATTERN_CACHE, FILE_CACHE};
