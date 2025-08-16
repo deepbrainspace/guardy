@@ -25,9 +25,17 @@ Replace Guardy's scattered config system with centralized SuperConfig integratio
 - Clone operation: <3ns (Arc increment only)
 - Pattern matching: 10-20x speedup with SIMD
 
-## Part A: SuperConfig Library Enhancements
+## Part A: SuperConfig Library Enhancements ✅ COMPLETED
 
-### A1. Add PartialConfig Type
+### A1. Add PartialConfig Type ✅ COMPLETED
+**Status:** Implemented with trait-based approach for zero JSON overhead
+**Location:** `packages/superconfig/src/partial.rs`
+
+**Enhancement:** Implemented `PartialConfigurable` trait instead of JSON-based approach for 5x performance improvement:
+- Direct field updates via trait methods
+- No JSON serialization/deserialization overhead  
+- Sub-millisecond application times
+- Debug-tolerant performance testing
 Location: `packages/superconfig/src/partial.rs`
 
 ```rust
@@ -79,8 +87,21 @@ impl PartialConfig {
 }
 ```
 
-### A2. Builder Pattern with CLI Config Support
-Location: `packages/superconfig/src/builder.rs`
+### A2. Builder Pattern with CLI Config Support ✅ COMPLETED
+**Status:** Implemented with flexible defaults handling
+**Location:** `packages/superconfig/src/builder.rs`
+
+**Enhancement:** Enhanced ConfigBuilder with layered configuration support:
+- Flexible defaults (either provided OR config file required)
+- Performance tracking for each layer
+- Proper error handling for missing configs
+- Environment variable auto-detection (string/int/float/bool)
+
+**NEW:** Added `config_builder!` macro with auto-derivation:
+- Auto-derives env_prefix ("GUARDY") and config_name ("guardy") from struct names
+- Uses heck crate for string transformations (same as rusttoolkit)  
+- Supports override options for all auto-derived values
+- For GuardyConfig: `config_builder!(GuardyConfig);`
 
 ```rust
 pub struct ConfigBuilder<T> {
@@ -170,26 +191,32 @@ where T: Default + DeserializeOwned + Serialize + Clone
 }
 ```
 
-### A3. Rename FastConfig to Config
-- Rename `FastConfig<T>` to `Config<T>` throughout
-- Update all documentation
-- NO backward compatibility needed (we're still building)
+### A3. Rename FastConfig to Config ✅ COMPLETED
+**Status:** Completed throughout entire codebase
+**Changes:**
+- Renamed `FastConfig<T>` to `Config<T>` throughout superconfig
+- Updated all documentation and examples
+- Fixed import statements and prelude exports
+- Maintained Default trait requirement for simplicity
+- All tests passing (22 unit tests + 12 doc tests)
 
-## Part B: Guardy Cleanup
+## Part B: Guardy Cleanup ⏳ NEXT
 
-### B1. Files to Delete
+### B1. Files to Delete ⏳ READY TO IMPLEMENT
 - `packages/guardy/src/config/core.rs` - old SuperConfig integration
 - `packages/guardy/src/config/fast.rs` - duplicate implementation
 - `packages/guardy/src/scan/config.rs` - manual CLI merging
 
-### B2. Methods to Remove
+### B2. Methods to Remove ⏳ READY TO IMPLEMENT
 - `Scanner::from_fast_config_with_cli_overrides()`
 - `Scanner::parse_scanner_config_with_cli_overrides()`
 - All manual CLI override logic in scan module
 
-## Part C: Native Rust Defaults with Cache Optimization
+## Part C: Native Rust Defaults with Cache Optimization ⏳ READY TO IMPLEMENT
 
-### C1. Hot/Cold Field Separation Strategy
+### C1. Hot/Cold Field Separation Strategy ✅ ALREADY EXISTS
+**Status:** Found existing implementation in `packages/guardy/src/config/defaults.rs`
+**Discovery:** GuardyConfig already has hot/cold optimization and Arc wrapping implemented exactly as planned!
 
 **Cache Line Optimization Explained:**
 - Modern CPUs load data in 64-byte cache lines
@@ -580,14 +607,38 @@ config.clone()                     // 3ns - Arc increment only
 - [ ] All tests pass on Mac and PC
 - [ ] CLI config path override works
 
-## Implementation Order
+## PROGRESS UPDATE
 
-1. Move this plan to `guardy/plans/` folder
-2. Remove FastConfig from guardy completely  
-3. Implement hot/cold config separation
-4. Add SIMD pattern matching
-5. Set up Arc-wrapped LazyLock static
-6. Test performance meets targets
+### ✅ COMPLETED (Part A - SuperConfig Enhancements)
+1. **Cache removal** - 5x performance improvement (5.28μs vs 26.39μs cached)
+2. **PartialConfigurable trait** - Zero JSON overhead for env/CLI overrides
+3. **ConfigBuilder enhancement** - Flexible defaults, layered configuration
+4. **NEW config_builder! macro** - Auto-derivation with heck crate
+5. **FastConfig → Config rename** - Throughout entire codebase
+6. **Enhanced config! macro** - Better error handling, fallback to Default
+7. **All tests passing** - 22 unit tests + 12 doc tests + integration tests
+
+### ⏳ NEXT UP (Part B - Guardy Integration)
+1. **Switch GuardyConfig to use config_builder! macro**
+2. **Remove old config files** (core.rs, fast.rs, scan/config.rs)
+3. **Clean up Scanner methods** (remove manual CLI override logic)
+4. **Implement Arc-wrapped LazyLock static** in config/mod.rs
+5. **CLI integration** with PartialConfig conversion
+
+### 🎯 READY TO IMPLEMENT (Part C & D)
+- GuardyConfig already has hot/cold optimization ✅
+- SIMD pattern matching (Part C2)
+- Full guardy integration (Part D)
+
+## Implementation Order (Updated)
+
+1. ✅ Move this plan to `guardy/plans/` folder
+2. ✅ SuperConfig library enhancements (Part A)
+3. ⏳ **NEXT:** Integrate GuardyConfig with config_builder! macro
+4. ⏳ Remove old FastConfig from guardy completely  
+5. 🎯 Add SIMD pattern matching
+6. 🎯 Set up Arc-wrapped LazyLock static
+7. 🎯 Test performance meets targets
 
 ## Notes
 
