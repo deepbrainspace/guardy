@@ -1,4 +1,4 @@
-use superconfig::FastConfig;
+use superconfig::Config;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -28,19 +28,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("🚀 Starting timing test with detailed tracing...\n");
     
-    // Clear any existing cache first (only if cache feature enabled)
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "cache")] {
-            if let Ok(cache_manager) = superconfig::CacheManager::new("timing_test") {
-                let _ = cache_manager.clear_cache();
-            }
-        }
-    }
+    // No cache feature - using direct parsing for best performance
     
     // Test cold load
     println!("=== COLD LOAD TEST ===");
     let start = std::time::Instant::now();
-    let config = FastConfig::<TestConfig>::load("timing_test")?;
+    let config = Config::<TestConfig>::load("timing_test")?;
     let total_time = start.elapsed();
     
     println!("\n✅ Cold load completed in {:?}", total_time);
@@ -51,16 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::sleep(std::time::Duration::from_millis(100)); // Give background cache time if enabled
     
     let start = std::time::Instant::now();
-    let _config2 = FastConfig::<TestConfig>::load("timing_test")?;
+    let _config2 = Config::<TestConfig>::load("timing_test")?;
     let second_time = start.elapsed();
     
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "cache")] {
-            println!("\n✅ Second load completed in {:?} (cached)", second_time);
-        } else {
-            println!("\n✅ Second load completed in {:?} (direct parsing)", second_time);
-        }
-    }
+    println!("\n✅ Second load completed in {:?} (direct parsing)", second_time);
     
     // Cleanup
     std::fs::remove_file("timing_test.json").ok();

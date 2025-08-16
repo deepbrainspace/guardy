@@ -192,8 +192,13 @@ mod tests {
         partial.apply_to(&mut config).unwrap();
         let duration = start.elapsed();
         
-        // Should be <1 microsecond (no JSON serialization!)
-        assert!(duration.as_micros() < 10);
+        // Should be fast (no JSON serialization!)
+        // More tolerant for debug builds vs release builds
+        if cfg!(debug_assertions) {
+            assert!(duration.as_millis() < 5, "Debug build took {}ms", duration.as_millis());
+        } else {
+            assert!(duration.as_micros() < 10, "Release build took {}μs", duration.as_micros());
+        }
         
         assert_eq!(config.debug, true);
         assert_eq!(config.max_threads, 8);

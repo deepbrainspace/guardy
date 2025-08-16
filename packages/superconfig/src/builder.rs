@@ -25,7 +25,7 @@ pub struct ConfigBuilder<T> {
 
 impl<T> ConfigBuilder<T> 
 where 
-    T: Default + Serialize + for<'de> Deserialize<'de> + Clone + PartialConfigurable + Send + Sync + 'static
+    T: Serialize + for<'de> Deserialize<'de> + Clone + Default + PartialConfigurable + Send + Sync + 'static
 {
     /// Create a new configuration builder
     pub fn new() -> Self {
@@ -86,28 +86,60 @@ where
     pub fn build(self) -> Result<T> {
         let total_start = std::time::Instant::now();
         
-        // Layer 1: Start with defaults (0ms)
+        // Layer 1: Start with defaults OR load from file (0ms defaults, 5-20ms file)
         let defaults_start = std::time::Instant::now();
-        let mut config = self.defaults.unwrap_or_default();
-        tracing::trace!("Layer 1 (defaults): {:?}", defaults_start.elapsed());
-        
-        // Layer 2: File Config (5-20ms if exists)
-        if let Some(path) = self.file_path {
-            let file_start = std::time::Instant::now();
-            
+        let defaults_provided = self.defaults.is_some();
+        let mut config = if let Some(defaults) = self.defaults {
+            tracing::trace!("Layer 1 (provided defaults): {:?}", defaults_start.elapsed());
+            defaults
+        } else if let Some(path) = &self.file_path {
+            // Must load from file if no defaults provided
             let file_config = if path.contains('/') || path.contains('\\') {
                 // Explicit path
-                Config::<T>::load_from_path(Path::new(&path))
+                Config::<T>::load_from_path(Path::new(path))
             } else {
                 // Name-based search
-                Config::<T>::load(&path)
+                Config::<T>::load(path)
             };
             
-            if let Ok(loaded) = file_config {
-                config = loaded.clone_config();
-                tracing::debug!("Layer 2 (file): {:?} from {}", file_start.elapsed(), path);
-            } else {
-                tracing::trace!("Layer 2 (file): Not found after {:?}", file_start.elapsed());
+            match file_config {
+                Ok(loaded) => {
+                    tracing::debug!("Layer 1 (file as defaults): {:?} from {}", defaults_start.elapsed(), path);
+                    loaded.clone_config()
+                },
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "No defaults provided and config file '{}' failed to load: {}. Either provide defaults with .with_defaults() or ensure config file exists.", 
+                        path, e
+                    ));
+                }
+            }
+        } else {
+            return Err(anyhow::anyhow!(
+                "Either defaults must be provided with .with_defaults() or config_file must be specified. Cannot build config without either."
+            ));
+        };
+        
+        // Layer 2: File Config Override (5-20ms if defaults provided AND file exists)
+        // Only override with file if we started with provided defaults
+        if defaults_provided {
+            if let Some(path) = &self.file_path {
+                let file_start = std::time::Instant::now();
+                
+                let file_config = if path.contains('/') || path.contains('\\') {
+                    // Explicit path
+                    Config::<T>::load_from_path(Path::new(path))
+                } else {
+                    // Name-based search
+                    Config::<T>::load(path)
+                };
+                
+                if let Ok(loaded) = file_config {
+                    config = loaded.clone_config();
+                    tracing::debug!("Layer 2 (file override): {:?} from {}", file_start.elapsed(), path);
+                } else {
+                    tracing::trace!("Layer 2 (file override): Not found after {:?}", file_start.elapsed());
+                }
             }
         }
         
@@ -157,7 +189,7 @@ where
 
 impl<T> Default for ConfigBuilder<T>
 where 
-    T: Default + Serialize + for<'de> Deserialize<'de> + Clone + PartialConfigurable + Send + Sync + 'static
+    T: Serialize + for<'de> Deserialize<'de> + Clone + Default + PartialConfigurable + Send + Sync + 'static
 {
     fn default() -> Self {
         Self::new()
@@ -217,5 +249,24 @@ mod tests {
         assert!(duration.as_millis() < 2);
         assert_eq!(config.debug, true);
         assert_eq!(config.max_threads, 8);
+    }
+    
+    #[test]
+    fn test_builder_requires_defaults_or_file() {
+        // Should fail when neither defaults nor config file provided
+        let result = ConfigBuilder::<TestConfig>::new().build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Either defaults must be provided"));
+    }
+    
+    #[test]
+    fn test_builder_with_file_only() {
+        // Test that we can build with only a config file (no defaults)
+        // This would work if the file exists - for test we expect it to fail gracefully
+        let result = ConfigBuilder::<TestConfig>::new()
+            .with_config_file(Some("nonexistent-test-config.json"))
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("failed to load"));
     }
 }

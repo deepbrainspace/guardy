@@ -93,12 +93,29 @@ use syn::{parse_macro_input, LitStr, Ident, Token, Result as SynResult};
 use syn::parse::{Parse, ParseStream};
 use std::fs;
 use std::path::{Path, PathBuf};
+use heck::{ToSnakeCase, ToShoutySnakeCase};
 
 /// Input for the config! macro: "config_name" => StructName
 struct ConfigInput {
     config_name: LitStr,
     _arrow: Token![=>],
     struct_name: Ident,
+}
+
+/// Input for the config_builder! macro
+/// Supports: config_builder!(StructName [, defaults: fn, env_prefix: "PREFIX", config_file: path, cli_overrides: overrides])
+struct ConfigBuilderInput {
+    struct_name: Ident,
+    options: ConfigOptions,
+}
+
+/// Optional configuration parameters
+#[derive(Default)]
+struct ConfigOptions {
+    defaults_fn: Option<syn::Path>,
+    env_prefix: Option<LitStr>,
+    config_file: Option<syn::Expr>,
+    cli_overrides: Option<syn::Expr>,
 }
 
 impl Parse for ConfigInput {
@@ -111,11 +128,56 @@ impl Parse for ConfigInput {
     }
 }
 
+impl Parse for ConfigBuilderInput {
+    fn parse(input: ParseStream) -> SynResult<Self> {
+        let struct_name: Ident = input.parse()?;
+        let mut options = ConfigOptions::default();
+        
+        // Parse optional parameters
+        while !input.is_empty() {
+            let _comma: Token![,] = input.parse()?;
+            
+            if input.is_empty() {
+                break;
+            }
+            
+            let option_name: Ident = input.parse()?;
+            let _colon: Token![:] = input.parse()?;
+            
+            match option_name.to_string().as_str() {
+                "defaults" => {
+                    options.defaults_fn = Some(input.parse()?);
+                },
+                "env_prefix" => {
+                    options.env_prefix = Some(input.parse()?);
+                },
+                "config_file" => {
+                    options.config_file = Some(input.parse()?);
+                },
+                "cli_overrides" => {
+                    options.cli_overrides = Some(input.parse()?);
+                },
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        option_name,
+                        "Unknown option. Supported: defaults, env_prefix, config_file, cli_overrides"
+                    ));
+                }
+            }
+        }
+        
+        Ok(ConfigBuilderInput {
+            struct_name,
+            options,
+        })
+    }
+}
+
 /// Auto-generate configuration struct and LazyLock static from config files using Typify
 /// 
 /// # Syntax
 /// ```rust
-/// use fast_config::config;
+/// use superconfig::config;
 /// 
 /// config!("myapp" => MyAppConfig);
 /// ```
@@ -153,7 +215,7 @@ pub fn config(input: TokenStream) -> TokenStream {
     };
     
     // Generate LazyLock static instance
-    let static_name = to_screaming_snake_case(&struct_name.to_string());
+    let static_name = struct_name.to_string().to_shouty_snake_case();
     let static_ident = syn::Ident::new(&static_name, struct_name.span());
     
     let expanded = quote! {
@@ -166,6 +228,98 @@ pub fn config(input: TokenStream) -> TokenStream {
                 .unwrap_or_else(|e| {
                     ::tracing::warn!("Failed to load config {}: {}, using default", #config_name, e);
                     #struct_name::default()
+                })
+        });
+        
+        impl #struct_name {
+            /// Get reference to the global configuration instance
+            pub fn global() -> &'static #struct_name {
+                &#static_ident
+            }
+        }
+    };
+    
+    TokenStream::from(expanded)
+}
+
+/// Create LazyLock static for existing configuration structs with auto-derived settings
+/// 
+/// # Syntax
+/// ```rust
+/// use superconfig::config_builder;
+/// 
+/// // Basic usage with auto-derivation
+/// config_builder!(GuardyConfig);
+/// // Auto-derives: env_prefix: "GUARDY", config_name: "guardy"
+/// 
+/// // With overrides
+/// config_builder!(GuardyConfig, 
+///     env_prefix: "CUSTOM_PREFIX",
+///     config_file: "custom-config.yaml",
+///     cli_overrides: cli_args
+/// );
+/// ```
+/// 
+/// # Generated Code
+/// - LazyLock static instance using ConfigBuilder
+/// - `::global()` method for convenient access
+/// - Auto-derived env_prefix and config_name from struct name
+/// - Flexible defaults handling (Default trait optional)
+#[proc_macro]
+pub fn config_builder(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as ConfigBuilderInput);
+    let struct_name = &input.struct_name;
+    let options = &input.options;
+    
+    // Auto-derive values from struct name
+    let (auto_env_prefix, auto_config_name) = derive_config_values(&struct_name.to_string());
+    
+    // Use provided values or auto-derived ones
+    let env_prefix = options.env_prefix.as_ref()
+        .map(|s| s.value())
+        .unwrap_or(auto_env_prefix);
+        
+    let config_name = extract_config_name_from_options(options)
+        .unwrap_or(auto_config_name);
+    
+    // Generate LazyLock static instance
+    let static_name = struct_name.to_string().to_shouty_snake_case();
+    let static_ident = syn::Ident::new(&static_name, struct_name.span());
+    
+    // Build ConfigBuilder calls
+    let defaults_call = if let Some(defaults_fn) = &options.defaults_fn {
+        quote! { .with_defaults(#defaults_fn()) }
+    } else {
+        // Use Default trait (now required)
+        quote! { .with_defaults(#struct_name::default()) }
+    };
+    
+    let env_prefix_call = quote! { .with_env_prefix(#env_prefix) };
+    
+    let config_file_call = if let Some(config_file) = &options.config_file {
+        quote! { .with_config_file(Some(#config_file)) }
+    } else {
+        quote! { .with_config_file(Some(#config_name)) }
+    };
+    
+    let cli_overrides_call = if let Some(cli_overrides) = &options.cli_overrides {
+        quote! { .with_cli_overrides(#cli_overrides) }
+    } else {
+        quote! {}
+    };
+    
+    let expanded = quote! {
+        /// Auto-generated LazyLock static instance for existing struct
+        pub static #static_ident: ::std::sync::LazyLock<#struct_name> = ::std::sync::LazyLock::new(|| {
+            ::superconfig::ConfigBuilder::<#struct_name>::new()
+                #defaults_call
+                #env_prefix_call
+                #config_file_call
+                #cli_overrides_call
+                .build()
+                .unwrap_or_else(|e| {
+                    ::tracing::error!("Failed to build config: {}", e);
+                    panic!("Configuration failed to load and no fallback available")
                 })
         });
         
@@ -411,23 +565,45 @@ fn find_config_file(config_name: &str) -> Option<PathBuf> {
     None
 }
 
-/// Convert string to SCREAMING_SNAKE_CASE
-fn to_screaming_snake_case(s: &str) -> String {
-    let mut result = String::new();
-    let mut chars = s.chars().peekable();
+
+/// Auto-derive env_prefix and config_name from struct name
+/// 
+/// Examples:
+/// - GuardyConfig -> ("GUARDY", "guardy")
+/// - MyAppConfig -> ("MY_APP", "myapp")
+/// - DatabaseConfig -> ("DATABASE", "database")
+fn derive_config_values(struct_name: &str) -> (String, String) {
+    // Remove "Config" suffix if present
+    let base_name = if struct_name.ends_with("Config") {
+        &struct_name[..struct_name.len() - 6]
+    } else {
+        struct_name
+    };
     
-    while let Some(c) = chars.next() {
-        if c.is_uppercase() {
-            if !result.is_empty() && chars.peek().is_some_and(|next| next.is_lowercase()) {
-                result.push('_');
+    // Convert to env_prefix (SHOUTY_SNAKE_CASE)
+    let env_prefix = base_name.to_shouty_snake_case();
+    
+    // Convert to config_name (snake_case, then lowercase for file names)
+    let config_name = base_name.to_snake_case().to_lowercase();
+    
+    (env_prefix, config_name)
+}
+
+/// Extract config name from options if config_file is provided
+fn extract_config_name_from_options(options: &ConfigOptions) -> Option<String> {
+    if let Some(config_file_expr) = &options.config_file {
+        // Try to extract string literal from expression
+        if let syn::Expr::Lit(syn::ExprLit { 
+            lit: syn::Lit::Str(lit_str), .. 
+        }) = config_file_expr {
+            let path = lit_str.value();
+            // Extract base name without extension
+            if let Some(file_name) = std::path::Path::new(&path).file_stem() {
+                if let Some(name_str) = file_name.to_str() {
+                    return Some(name_str.to_string());
+                }
             }
-            result.push(c);
-        } else if c == '-' || c == ' ' {
-            result.push('_');
-        } else {
-            result.push(c.to_uppercase().next().unwrap());
         }
     }
-    
-    result
+    None
 }

@@ -39,9 +39,9 @@
 //!
 //! ### Method 1: Static Configuration (Recommended)
 //!
-//! The fastest approach using the [`static_config!`] macro with prelude:
+//! The fastest approach using procedural macros with prelude:
 //!
-//! ```rust
+//! ```rust,no_run
 //! use superconfig::prelude::*;
 //! use serde::{Deserialize, Serialize};
 //!
@@ -53,11 +53,14 @@
 //! }
 //!
 //! // Generate static LazyLock instance for zero-copy access
-//! static_config!(CONFIG, AppConfig, "myapp");
+//! // This requires myapp.json/yaml config file to exist
+//! // config!("myapp" => AppConfig);
 //!
-//! // Sub-nanosecond access after first load
-//! println!("Server starting on port {}", CONFIG.port);
-//! println!("Database: {}", CONFIG.database_url);
+//! // Alternative: Use ConfigBuilder for more control
+//! // let config = ConfigBuilder::<AppConfig>::new()
+//! //     .with_defaults(AppConfig::default())
+//! //     .with_config_file(Some("myapp"))
+//! //     .build().unwrap();
 //! ```
 //!
 //! Create `myapp.json` in your project root:
@@ -137,7 +140,7 @@
 //!
 //! ### Explicit Imports (Explicit Control)
 //! ```rust
-//! use superconfig::{Config, static_config, config, Error, Result};
+//! use superconfig::{Config, ConfigBuilder, config, Error, Result};
 //! use serde::{Deserialize, Serialize};
 //! ```
 //!
@@ -236,7 +239,7 @@
 //!
 //! ## Best Practices
 //!
-//! 1. **Use [`static_config!`] for globals**: Provides zero-copy access and maximum performance
+//! 1. **Use LazyLock statics**: Provides zero-copy access and maximum performance
 //! 2. **Prefer JSON over YAML**: JSON parsing is ~3x faster than YAML
 //! 3. **Use [`Default`] derive**: Enables graceful fallback when config files are missing
 //! 4. **Keep config structs simple**: Avoid complex nested enums for better cache performance
@@ -273,50 +276,7 @@ pub use builder::ConfigBuilder;
 // Re-export the procedural macro from superconfig-macros
 pub use superconfig_macros::config;
 
-/// Create a static LazyLock configuration instance
-///
-/// This macro generates a static configuration that is loaded once on first access
-/// and provides zero-copy access throughout the application lifetime.
-///
-/// # Arguments
-/// * `$name` - Name of the static variable (e.g., `CONFIG`)
-/// * `$type` - Configuration struct type (e.g., `MyAppConfig`)
-/// * `$config_name` - Base name for config files (e.g., "myapp")
-///
-/// # Example
-/// ```rust
-/// use superconfig::{static_config, Config};
-/// use serde::{Deserialize, Serialize};
-///
-/// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-/// pub struct MyAppConfig {
-///     pub port: u16,
-///     pub host: String,
-/// }
-///
-/// // Create static config instance
-/// static_config!(CONFIG, MyAppConfig, "myapp");
-///
-/// // Zero-copy access throughout application
-/// println!("Server running on {}:{}", CONFIG.host, CONFIG.port);
-/// ```
-#[macro_export]
-macro_rules! static_config {
-    ($name:ident, $type:ty, $config_name:expr) => {
-        static $name: ::std::sync::LazyLock<$type> = ::std::sync::LazyLock::new(|| {
-            $crate::Config::<$type>::load($config_name)
-                .map(|config| config.clone_config())
-                .unwrap_or_else(|e| {
-                    ::tracing::warn!(
-                        "Failed to load config {}: {}, using default",
-                        $config_name,
-                        e
-                    );
-                    <$type>::default()
-                })
-        });
-    };
-}
+
 
 /// High-performance configuration loader
 ///
